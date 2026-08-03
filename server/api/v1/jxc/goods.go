@@ -149,6 +149,28 @@ func (a *GoodsApi) DeleteGoods(c *gin.Context) {
 	response.OkWithMessage("删除成功", c)
 }
 
+// DeleteGoodsForever 彻底删除商品
+// @Tags     JxcGoods
+// @Summary  彻底删除商品（物理删除，不可恢复）
+// @Security ApiKeyAuth
+// @accept   application/json
+// @Produce  application/json
+// @Param    data body      request.GetById  true "商品ID"
+// @Success  200  {object}  response.Response{msg=string}  "彻底删除成功"
+// @Router   /jxc/goods/forever [delete]
+func (a *GoodsApi) DeleteGoodsForever(c *gin.Context) {
+	var req request.GetById
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	if err := goodsService.DeleteGoodsForever(c.Request.Context(), req.Uint()); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithMessage("彻底删除成功", c)
+}
+
 // SetGoodsStatus 设置商品状态（上架/下架）
 // @Tags     JxcGoods
 // @Summary  上架/下架商品
@@ -267,6 +289,28 @@ func (a *GoodsApi) DeleteSku(c *gin.Context) {
 		return
 	}
 	response.OkWithMessage("删除成功", c)
+}
+
+// DeleteSkuForever 彻底删除 SKU
+// @Tags     JxcSku
+// @Summary  彻底删除 SKU（物理删除，不可恢复）
+// @Security ApiKeyAuth
+// @accept   application/json
+// @Produce  application/json
+// @Param    data body      request.GetById  true "SKU ID"
+// @Success  200  {object}  response.Response{msg=string}  "彻底删除成功"
+// @Router   /jxc/goods/sku/forever [delete]
+func (a *GoodsApi) DeleteSkuForever(c *gin.Context) {
+	var req request.GetById
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	if err := goodsService.DeleteSkuForever(c.Request.Context(), req.Uint()); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithMessage("彻底删除成功", c)
 }
 
 // SetSkuStatus 设置 SKU 状态（启用/停用）

@@ -87,6 +87,22 @@ func (s *BasicService) DeleteCategory(ctx context.Context, id uint) error {
 	return db.Delete(&jxc.GoodsCategory{}, id).Error
 }
 
+// DeleteCategoryForever 彻底删除分类（物理删除，不可恢复；有引用仍拒绝）
+func (s *BasicService) DeleteCategoryForever(ctx context.Context, id uint) error {
+	db := global.GVA_DB.WithContext(ctx)
+	var childCount int64
+	db.Model(&jxc.GoodsCategory{}).Where("parent_id = ?", id).Count(&childCount)
+	if childCount > 0 {
+		return errors.New("该分类存在子分类，请先删除子分类")
+	}
+	var goodsCount int64
+	db.Model(&jxc.Goods{}).Where("category_id = ?", id).Count(&goodsCount)
+	if goodsCount > 0 {
+		return errors.New("该分类已被商品引用，请先删除相关商品")
+	}
+	return db.Unscoped().Delete(&jxc.GoodsCategory{}, id).Error
+}
+
 // SetCategoryStatus 启用/停用分类
 func (s *BasicService) SetCategoryStatus(ctx context.Context, id uint, status int8) error {
 	return global.GVA_DB.WithContext(ctx).Model(&jxc.GoodsCategory{}).Where("id = ?", id).Update("status", status).Error
@@ -145,6 +161,17 @@ func (s *BasicService) DeleteBrand(ctx context.Context, id uint) error {
 		return errors.New("该品牌已被商品引用，请先删除相关商品")
 	}
 	return global.GVA_DB.WithContext(ctx).Delete(&jxc.Brand{}, id).Error
+}
+
+// DeleteBrandForever 彻底删除品牌（物理删除，不可恢复；有引用仍拒绝）
+func (s *BasicService) DeleteBrandForever(ctx context.Context, id uint) error {
+	db := global.GVA_DB.WithContext(ctx)
+	var goodsCount int64
+	db.Model(&jxc.Goods{}).Where("brand_id = ?", id).Count(&goodsCount)
+	if goodsCount > 0 {
+		return errors.New("该品牌已被商品引用，请先删除相关商品")
+	}
+	return db.Unscoped().Delete(&jxc.Brand{}, id).Error
 }
 
 // SetBrandStatus 启用/停用品牌
@@ -208,6 +235,17 @@ func (s *BasicService) DeleteSupplier(ctx context.Context, id uint) error {
 	return global.GVA_DB.WithContext(ctx).Delete(&jxc.Supplier{}, id).Error
 }
 
+// DeleteSupplierForever 彻底删除供应商（物理删除，不可恢复；有引用仍拒绝）
+func (s *BasicService) DeleteSupplierForever(ctx context.Context, id uint) error {
+	db := global.GVA_DB.WithContext(ctx)
+	var orderCount int64
+	db.Model(&PurchaseOrder{}).Where("supplier_id = ?", id).Count(&orderCount)
+	if orderCount > 0 {
+		return errors.New("该供应商已被采购订单引用，无法删除")
+	}
+	return db.Unscoped().Delete(&jxc.Supplier{}, id).Error
+}
+
 // SetSupplierStatus 启用/停用供应商
 func (s *BasicService) SetSupplierStatus(ctx context.Context, id uint, status int8) error {
 	return global.GVA_DB.WithContext(ctx).Model(&jxc.Supplier{}).Where("id = ?", id).
@@ -269,6 +307,17 @@ func (s *BasicService) DeleteCustomer(ctx context.Context, id uint) error {
 	return global.GVA_DB.WithContext(ctx).Delete(&jxc.Customer{}, id).Error
 }
 
+// DeleteCustomerForever 彻底删除客户（物理删除，不可恢复；有引用仍拒绝）
+func (s *BasicService) DeleteCustomerForever(ctx context.Context, id uint) error {
+	db := global.GVA_DB.WithContext(ctx)
+	var orderCount int64
+	db.Model(&SalesOrder{}).Where("customer_id = ?", id).Count(&orderCount)
+	if orderCount > 0 {
+		return errors.New("该客户已被销售订单引用，无法删除")
+	}
+	return db.Unscoped().Delete(&jxc.Customer{}, id).Error
+}
+
 // SetCustomerStatus 启用/停用客户
 func (s *BasicService) SetCustomerStatus(ctx context.Context, id uint, status int8) error {
 	return global.GVA_DB.WithContext(ctx).Model(&jxc.Customer{}).Where("id = ?", id).
@@ -328,6 +377,17 @@ func (s *BasicService) DeleteWarehouse(ctx context.Context, id uint) error {
 		return errors.New("该仓库仍存在库存，无法删除")
 	}
 	return global.GVA_DB.WithContext(ctx).Delete(&jxc.Warehouse{}, id).Error
+}
+
+// DeleteWarehouseForever 彻底删除仓库（物理删除，不可恢复；有库存仍拒绝）
+func (s *BasicService) DeleteWarehouseForever(ctx context.Context, id uint) error {
+	db := global.GVA_DB.WithContext(ctx)
+	var stockTotal int64
+	db.Model(&Stock{}).Where("warehouse_id = ? AND quantity > 0", id).Count(&stockTotal)
+	if stockTotal > 0 {
+		return errors.New("该仓库仍存在库存，无法删除")
+	}
+	return db.Unscoped().Delete(&jxc.Warehouse{}, id).Error
 }
 
 // SetWarehouseStatus 启用/停用仓库

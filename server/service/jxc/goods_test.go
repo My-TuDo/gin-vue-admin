@@ -314,6 +314,47 @@ func TestCreateSku_AutoCode(t *testing.T) {
 	}
 }
 
+// TestDeleteGoodsForever 测试彻底删除商品（物理删除后无记录）
+func TestDeleteGoodsForever(t *testing.T) {
+	goodsTestDB(t)
+	g := newTestGoods(t, "SP001", "纯棉T恤")
+	if err := gsvc.DeleteGoodsForever(ctx, g.ID); err != nil {
+		t.Fatalf("delete forever err=%v", err)
+	}
+	var cnt int64
+	global.GVA_DB.Unscoped().Model(&jxc.Goods{}).Where("id = ?", g.ID).Count(&cnt)
+	if cnt != 0 {
+		t.Fatalf("物理删除后应无记录, cnt=%d", cnt)
+	}
+}
+
+// TestDeleteGoodsForever_HasSku 测试有 SKU 时彻底删除商品被拒绝
+func TestDeleteGoodsForever_HasSku(t *testing.T) {
+	goodsTestDB(t)
+	g := newTestGoods(t, "SP001", "纯棉T恤")
+	global.GVA_DB.Create(&jxc.GoodsSku{GoodsID: g.ID, SkuCode: "SP001-RED-M", Color: "红色", Size: "M"})
+	err := gsvc.DeleteGoodsForever(ctx, g.ID)
+	if err == nil || err.Error() != "该商品存在 SKU, 请先删除 SKU" {
+		t.Fatalf("应返回 SKU 引用拒绝, got %v", err)
+	}
+}
+
+// TestDeleteSkuForever 测试彻底删除 SKU（物理删除后无记录）
+func TestDeleteSkuForever(t *testing.T) {
+	goodsTestDB(t)
+	g := newTestGoods(t, "SP001", "纯棉T恤")
+	sku := jxc.GoodsSku{GoodsID: g.ID, SkuCode: "SP001-RED-M", Color: "红色", Size: "M"}
+	global.GVA_DB.Create(&sku)
+	if err := gsvc.DeleteSkuForever(ctx, sku.ID); err != nil {
+		t.Fatalf("delete sku forever err=%v", err)
+	}
+	var cnt int64
+	global.GVA_DB.Unscoped().Model(&jxc.GoodsSku{}).Where("id = ?", sku.ID).Count(&cnt)
+	if cnt != 0 {
+		t.Fatalf("物理删除后应无记录, cnt=%d", cnt)
+	}
+}
+
 // ========== 数据库异常错误分支 ==========
 
 // TestGoodsErrors 测试商品各方法在数据库异常时的错误分支

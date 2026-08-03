@@ -514,3 +514,62 @@ func TestBasicAutoCode(t *testing.T) {
 		t.Fatalf("仓库编码应为 W%s 前缀, got %s", prefix, w.Code)
 	}
 }
+
+// TestBasicDeleteForever 测试基础资料各实体彻底删除（物理删除后无记录）
+func TestBasicDeleteForever(t *testing.T) {
+	testDB(t)
+	// 分类
+	cat := &jxc.GoodsCategory{Code: "C001", Name: "男装", Status: 1}
+	if err := svc.CreateCategory(ctx, cat); err != nil {
+		t.Fatalf("create category err=%v", err)
+	}
+	if err := svc.DeleteCategoryForever(ctx, cat.ID); err != nil {
+		t.Fatalf("delete category forever err=%v", err)
+	}
+	var cnt int64
+	global.GVA_DB.Unscoped().Model(&jxc.GoodsCategory{}).Where("id = ?", cat.ID).Count(&cnt)
+	if cnt != 0 {
+		t.Fatalf("物理删除后应无记录, cnt=%d", cnt)
+	}
+	// 品牌
+	b := &jxc.Brand{Code: "B001", Name: "耐克", Status: 1}
+	svc.CreateBrand(ctx, b)
+	if err := svc.DeleteBrandForever(ctx, b.ID); err != nil {
+		t.Fatalf("delete brand forever err=%v", err)
+	}
+	global.GVA_DB.Unscoped().Model(&jxc.Brand{}).Where("id = ?", b.ID).Count(&cnt)
+	if cnt != 0 {
+		t.Fatalf("品牌物理删除失败, cnt=%d", cnt)
+	}
+	// 供应商
+	s := &jxc.Supplier{Code: "S001", Name: "布行", Status: 1}
+	svc.CreateSupplier(ctx, s)
+	if err := svc.DeleteSupplierForever(ctx, s.ID); err != nil {
+		t.Fatalf("delete supplier forever err=%v", err)
+	}
+	// 客户
+	c := &jxc.Customer{Code: "K001", Name: "张三", Status: 1}
+	svc.CreateCustomer(ctx, c)
+	if err := svc.DeleteCustomerForever(ctx, c.ID); err != nil {
+		t.Fatalf("delete customer forever err=%v", err)
+	}
+	// 仓库
+	w := &jxc.Warehouse{Code: "W001", Name: "总仓", Status: 1}
+	svc.CreateWarehouse(ctx, w)
+	if err := svc.DeleteWarehouseForever(ctx, w.ID); err != nil {
+		t.Fatalf("delete warehouse forever err=%v", err)
+	}
+}
+
+// TestDeleteCategoryForever_Referenced 测试分类被引用时彻底删除被拒绝
+func TestDeleteCategoryForever_Referenced(t *testing.T) {
+	testDB(t)
+	cat := &jxc.GoodsCategory{Code: "C001", Name: "男装", Status: 1}
+	svc.CreateCategory(ctx, cat)
+	ensureRefTable(t, "CREATE TABLE goods (category_id int, deleted_at datetime)")
+	global.GVA_DB.Exec("INSERT INTO goods (category_id) VALUES (?)", cat.ID)
+	err := svc.DeleteCategoryForever(ctx, cat.ID)
+	if err == nil || err.Error() != "该分类已被商品引用，请先删除相关商品" {
+		t.Fatalf("应返回引用拒绝, got %v", err)
+	}
+}

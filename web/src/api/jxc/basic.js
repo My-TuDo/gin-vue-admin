@@ -16,6 +16,9 @@ export const updateCategory = (data) =>
 export const deleteCategory = (data) =>
   request({ url: '/jxc/category', method: 'delete', data })
 
+export const deleteCategoryForever = (data) =>
+  request({ url: '/jxc/category/forever', method: 'delete', data })
+
 export const setCategoryStatus = (data) =>
   request({ url: '/jxc/category/status', method: 'put', data })
 
@@ -34,6 +37,9 @@ export const updateBrand = (data) =>
 
 export const deleteBrand = (data) =>
   request({ url: '/jxc/brand', method: 'delete', data })
+
+export const deleteBrandForever = (data) =>
+  request({ url: '/jxc/brand/forever', method: 'delete', data })
 
 export const setBrandStatus = (data) =>
   request({ url: '/jxc/brand/status', method: 'put', data })
@@ -54,6 +60,9 @@ export const updateSupplier = (data) =>
 export const deleteSupplier = (data) =>
   request({ url: '/jxc/supplier', method: 'delete', data })
 
+export const deleteSupplierForever = (data) =>
+  request({ url: '/jxc/supplier/forever', method: 'delete', data })
+
 export const setSupplierStatus = (data) =>
   request({ url: '/jxc/supplier/status', method: 'put', data })
 
@@ -73,6 +82,9 @@ export const updateCustomer = (data) =>
 export const deleteCustomer = (data) =>
   request({ url: '/jxc/customer', method: 'delete', data })
 
+export const deleteCustomerForever = (data) =>
+  request({ url: '/jxc/customer/forever', method: 'delete', data })
+
 export const setCustomerStatus = (data) =>
   request({ url: '/jxc/customer/status', method: 'put', data })
 
@@ -91,6 +103,9 @@ export const updateWarehouse = (data) =>
 
 export const deleteWarehouse = (data) =>
   request({ url: '/jxc/warehouse', method: 'delete', data })
+
+export const deleteWarehouseForever = (data) =>
+  request({ url: '/jxc/warehouse/forever', method: 'delete', data })
 
 export const setWarehouseStatus = (data) =>
   request({ url: '/jxc/warehouse/status', method: 'put', data })

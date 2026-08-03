@@ -24,13 +24,18 @@
         <el-table-column label="创建时间" width="170">
           <template #default="{ row }"> {{ dayjs(row.CreatedAt).format('YYYY-MM-DD HH:mm') }} </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="openDialog(row.ID)">编辑</el-button>
             <el-button type="primary" link @click="openDialog(row.ID, 'child')">添加子分类</el-button>
             <el-popconfirm title="确认删除该分类?" @confirm="handleDelete(row.ID)">
               <template #reference>
                 <el-button type="danger" link>删除</el-button>
+              </template>
+            </el-popconfirm>
+            <el-popconfirm title="彻底删除不可恢复，确认?" @confirm="handleDeleteForever(row.ID)">
+              <template #reference>
+                <el-button type="danger" link>彻底删除</el-button>
               </template>
             </el-popconfirm>
           </template>
@@ -68,7 +73,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
-import { getCategoryTree, createCategory, updateCategory, deleteCategory, setCategoryStatus } from '@/api/jxc/basic'
+import { getCategoryTree, createCategory, updateCategory, deleteCategory, deleteCategoryForever, setCategoryStatus } from '@/api/jxc/basic'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -150,6 +155,12 @@ async function submitForm() {
 async function handleDelete(id) {
   await deleteCategory({ id })
   ElMessage.success('删除成功')
+  await fetchData()
+}
+
+async function handleDeleteForever(id) {
+  await deleteCategoryForever({ id })
+  ElMessage.success('已彻底删除')
   await fetchData()
 }
 

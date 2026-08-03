@@ -19,6 +19,7 @@ func (r *BasicRouter) InitBasicRouter(Router *gin.RouterGroup) {
 	recordGroup.POST("category", basicApi.CreateCategory)
 	recordGroup.PUT("category", basicApi.UpdateCategory)
 	recordGroup.DELETE("category", basicApi.DeleteCategory)
+	recordGroup.DELETE("category/forever", basicApi.DeleteCategoryForever)
 	recordGroup.PUT("category/status", basicApi.SetCategoryStatus)
 
 	// ====== 品牌 ======
@@ -27,6 +28,7 @@ func (r *BasicRouter) InitBasicRouter(Router *gin.RouterGroup) {
 	recordGroup.POST("brand", basicApi.CreateBrand)
 	recordGroup.PUT("brand", basicApi.UpdateBrand)
 	recordGroup.DELETE("brand", basicApi.DeleteBrand)
+	recordGroup.DELETE("brand/forever", basicApi.DeleteBrandForever)
 	recordGroup.PUT("brand/status", basicApi.SetBrandStatus)
 
 	// ===== 供应商 ======
@@ -35,6 +37,7 @@ func (r *BasicRouter) InitBasicRouter(Router *gin.RouterGroup) {
 	recordGroup.POST("supplier", basicApi.CreateSupplier)
 	recordGroup.PUT("supplier", basicApi.UpdateSupplier)
 	recordGroup.DELETE("supplier", basicApi.DeleteSupplier)
+	recordGroup.DELETE("supplier/forever", basicApi.DeleteSupplierForever)
 	recordGroup.PUT("supplier/status", basicApi.SetSupplierStatus)
 
 	// ===== 客户 =====
@@ -43,6 +46,7 @@ func (r *BasicRouter) InitBasicRouter(Router *gin.RouterGroup) {
 	recordGroup.POST("customer", basicApi.CreateCustomer)
 	recordGroup.PUT("customer", basicApi.UpdateCustomer)
 	recordGroup.DELETE("customer", basicApi.DeleteCustomer)
+	recordGroup.DELETE("customer/forever", basicApi.DeleteCustomerForever)
 	recordGroup.PUT("customer/status", basicApi.SetCustomerStatus)
 
 	// ====== 仓库 =====
@@ -51,5 +55,6 @@ func (r *BasicRouter) InitBasicRouter(Router *gin.RouterGroup) {
 	recordGroup.POST("warehouse", basicApi.CreateWarehouse)
 	recordGroup.PUT("warehouse", basicApi.UpdateWarehouse)
 	recordGroup.DELETE("warehouse", basicApi.DeleteWarehouse)
+	recordGroup.DELETE("warehouse/forever", basicApi.DeleteWarehouseForever)
 	recordGroup.PUT("warehouse/status", basicApi.SetWarehouseStatus)
 }
