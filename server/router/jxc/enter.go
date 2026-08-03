@@ -6,6 +6,10 @@ import (
 
 type RouterGroup struct {
 	BasicRouter
+	GoodsRouter
 }
 
-var basicApi = api.ApiGroupApp.JxcApiGroup.BasicApi
+var (
+	basicApi = api.ApiGroupApp.JxcApiGroup.BasicApi
+	goodsApi = api.ApiGroupApp.JxcApiGroup.GoodsApi
+)
