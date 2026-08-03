@@ -140,7 +140,7 @@ func TestDeleteCategory_Ref(t *testing.T) {
 	testDB(t)
 	c := &jxc.GoodsCategory{Code: "C001", Name: "男装", Status: 1}
 	global.GVA_DB.Create(&c)
-	ensureRefTable(t, "CREATE TABLE goods (category_id int)")
+	ensureRefTable(t, "CREATE TABLE goods (category_id int, deleted_at datetime)")
 	global.GVA_DB.Exec("INSERT INTO goods (category_id) VALUES (?)", c.ID)
 	err := svc.DeleteCategory(ctx, c.ID)
 	if err == nil || err.Error() != "该分类已被商品引用，请先删除相关商品" {
@@ -197,7 +197,7 @@ func TestDeleteBrand_Referenced(t *testing.T) {
 	testDB(t)
 	b := jxc.Brand{Code: "B001", Name: "耐克", Status: 1}
 	global.GVA_DB.Create(&b)
-	ensureRefTable(t, "CREATE TABLE goods (brand_id int)")
+	ensureRefTable(t, "CREATE TABLE goods (brand_id int, deleted_at datetime)")
 	global.GVA_DB.Exec("INSERT INTO goods (brand_id) VALUES (?)", b.ID)
 	if err := svc.DeleteBrand(ctx, b.ID); err == nil || err.Error() != "该品牌已被商品引用，请先删除相关商品" {
 		t.Fatalf("应返回引用拒绝, got %v", err)
