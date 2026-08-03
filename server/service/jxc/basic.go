@@ -53,16 +53,21 @@ func (s *BasicService) GetCategoryList(ctx context.Context, info request.PageInf
 
 // CreateCategory 创建商品分类
 func (s *BasicService) CreateCategory(ctx context.Context, c *jxc.GoodsCategory) error {
-	return global.GVA_DB.WithContext(ctx).Create(c).Error
+	db := global.GVA_DB.WithContext(ctx)
+	if c.Code == "" {
+		code, err := genCode(db, &jxc.GoodsCategory{}, prefixCategory)
+		if err != nil {
+			return err
+		}
+		c.Code = code
+	}
+	return db.Create(c).Error
 }
 
 // UpdateCategory 更新分类
 func (s *BasicService) UpdateCategory(ctx context.Context, c *jxc.GoodsCategory) error {
 	return global.GVA_DB.WithContext(ctx).Omit("code", "created_at").Save(c).Error // 忽略code字段，避免更新时修改唯一约束
 }
-
-// 占位使用
-type Goods struct{}
 
 // DeleteCategory 删除分类（软删除，需嵌入 global.GVA_MODEL/Deleted_At）
 func (s *BasicService) DeleteCategory(ctx context.Context, id uint) error {
@@ -75,7 +80,7 @@ func (s *BasicService) DeleteCategory(ctx context.Context, id uint) error {
 	}
 	// 检查商品引用
 	var goodsCount int64
-	db.Model(&Goods{}).Where("category_id = ?", id).Count(&goodsCount) // Goods 商品表暂未实现
+	db.Model(&jxc.Goods{}).Where("category_id = ?", id).Count(&goodsCount)
 	if goodsCount > 0 {
 		return errors.New("该分类已被商品引用，请先删除相关商品")
 	}
@@ -116,7 +121,15 @@ func (s *BasicService) GetAllBrands(ctx context.Context) (list []jxc.Brand, err 
 // 以下三种也可以优化提取为通用的函数方法:Create、Update、Delete
 // CreateBrand 创建品牌
 func (s *BasicService) CreateBrand(ctx context.Context, b *jxc.Brand) error {
-	return global.GVA_DB.WithContext(ctx).Create(b).Error
+	db := global.GVA_DB.WithContext(ctx)
+	if b.Code == "" {
+		code, err := genCode(db, &jxc.Brand{}, prefixBrand)
+		if err != nil {
+			return err
+		}
+		b.Code = code
+	}
+	return db.Create(b).Error
 }
 
 // UpdateBrand 更新品牌
@@ -127,7 +140,7 @@ func (s *BasicService) UpdateBrand(ctx context.Context, b *jxc.Brand) error {
 // DeleteBrand 删除品牌（软删除，需嵌入 global.GVA_MODEL/Deleted_At）
 func (s *BasicService) DeleteBrand(ctx context.Context, id uint) error {
 	var goodsCount int64
-	global.GVA_DB.WithContext(ctx).Model(&Goods{}).Where("brand_id = ?", id).Count(&goodsCount)
+	global.GVA_DB.WithContext(ctx).Model(&jxc.Goods{}).Where("brand_id = ?", id).Count(&goodsCount)
 	if goodsCount > 0 {
 		return errors.New("该品牌已被商品引用，请先删除相关商品")
 	}
@@ -167,7 +180,15 @@ func (s *BasicService) GetAllSuppliers(ctx context.Context) (list []jxc.Supplier
 
 // CreateSupplier 创建供应商
 func (s *BasicService) CreateSupplier(ctx context.Context, spli *jxc.Supplier) error {
-	return global.GVA_DB.WithContext(ctx).Create(spli).Error
+	db := global.GVA_DB.WithContext(ctx)
+	if spli.Code == "" {
+		code, err := genCode(db, &jxc.Supplier{}, prefixSupplier)
+		if err != nil {
+			return err
+		}
+		spli.Code = code
+	}
+	return db.Create(spli).Error
 }
 
 // UpdateSupplier 更新供应商
@@ -220,7 +241,15 @@ func (s *BasicService) GetAllCustomers(ctx context.Context) (list []jxc.Customer
 
 // CreateCustomer 创建客户
 func (s *BasicService) CreateCustomer(ctx context.Context, c *jxc.Customer) error {
-	return global.GVA_DB.WithContext(ctx).Create(c).Error
+	db := global.GVA_DB.WithContext(ctx)
+	if c.Code == "" {
+		code, err := genCode(db, &jxc.Customer{}, prefixCustomer)
+		if err != nil {
+			return err
+		}
+		c.Code = code
+	}
+	return db.Create(c).Error
 }
 
 // UpdateCustomer 更新客户
@@ -273,7 +302,15 @@ func (s *BasicService) GetAllWarehouses(ctx context.Context) (list []jxc.Warehou
 
 // CreateWarehouse 创建仓库
 func (s *BasicService) CreateWarehouse(ctx context.Context, w *jxc.Warehouse) error {
-	return global.GVA_DB.WithContext(ctx).Create(w).Error
+	db := global.GVA_DB.WithContext(ctx)
+	if w.Code == "" {
+		code, err := genCode(db, &jxc.Warehouse{}, prefixWarehouse)
+		if err != nil {
+			return err
+		}
+		w.Code = code
+	}
+	return db.Create(w).Error
 }
 
 // UpdateWarehouse 更新仓库

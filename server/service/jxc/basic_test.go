@@ -2,7 +2,9 @@ package jxc
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
 	"github.com/flipped-aurora/gin-vue-admin/server/internal/testutil"
@@ -140,7 +142,7 @@ func TestDeleteCategory_Ref(t *testing.T) {
 	testDB(t)
 	c := &jxc.GoodsCategory{Code: "C001", Name: "男装", Status: 1}
 	global.GVA_DB.Create(&c)
-	ensureRefTable(t, "CREATE TABLE goods (category_id int)")
+	ensureRefTable(t, "CREATE TABLE goods (category_id int, deleted_at datetime)")
 	global.GVA_DB.Exec("INSERT INTO goods (category_id) VALUES (?)", c.ID)
 	err := svc.DeleteCategory(ctx, c.ID)
 	if err == nil || err.Error() != "该分类已被商品引用，请先删除相关商品" {
@@ -197,7 +199,7 @@ func TestDeleteBrand_Referenced(t *testing.T) {
 	testDB(t)
 	b := jxc.Brand{Code: "B001", Name: "耐克", Status: 1}
 	global.GVA_DB.Create(&b)
-	ensureRefTable(t, "CREATE TABLE goods (brand_id int)")
+	ensureRefTable(t, "CREATE TABLE goods (brand_id int, deleted_at datetime)")
 	global.GVA_DB.Exec("INSERT INTO goods (brand_id) VALUES (?)", b.ID)
 	if err := svc.DeleteBrand(ctx, b.ID); err == nil || err.Error() != "该品牌已被商品引用，请先删除相关商品" {
 		t.Fatalf("应返回引用拒绝, got %v", err)
@@ -464,5 +466,51 @@ func TestWarehouseErrors(t *testing.T) {
 	}
 	if err := svc.SetWarehouseStatus(ctx, 1, 0); err == nil {
 		t.Fatalf("SetWarehouseStatus 应报错")
+	}
+}
+
+// TestBasicAutoCode 测试基础资料各实体创建时编码自动生成（前缀+日期+序号）
+func TestBasicAutoCode(t *testing.T) {
+	testDB(t)
+	prefix := time.Now().Format("20060102")
+	// 分类
+	cat := &jxc.GoodsCategory{Name: "男装", Status: 1}
+	if err := svc.CreateCategory(ctx, cat); err != nil {
+		t.Fatalf("create category err=%v", err)
+	}
+	if !strings.HasPrefix(cat.Code, "C"+prefix) {
+		t.Fatalf("分类编码应为 C%s 前缀, got %s", prefix, cat.Code)
+	}
+	// 品牌
+	b := &jxc.Brand{Name: "耐克", Status: 1}
+	if err := svc.CreateBrand(ctx, b); err != nil {
+		t.Fatalf("create brand err=%v", err)
+	}
+	if !strings.HasPrefix(b.Code, "B"+prefix) {
+		t.Fatalf("品牌编码应为 B%s 前缀, got %s", prefix, b.Code)
+	}
+	// 供应商
+	s := &jxc.Supplier{Name: "广州布行", Status: 1}
+	if err := svc.CreateSupplier(ctx, s); err != nil {
+		t.Fatalf("create supplier err=%v", err)
+	}
+	if !strings.HasPrefix(s.Code, "S"+prefix) {
+		t.Fatalf("供应商编码应为 S%s 前缀, got %s", prefix, s.Code)
+	}
+	// 客户
+	c := &jxc.Customer{Name: "张三", Status: 1}
+	if err := svc.CreateCustomer(ctx, c); err != nil {
+		t.Fatalf("create customer err=%v", err)
+	}
+	if !strings.HasPrefix(c.Code, "K"+prefix) {
+		t.Fatalf("客户编码应为 K%s 前缀, got %s", prefix, c.Code)
+	}
+	// 仓库
+	w := &jxc.Warehouse{Name: "总仓", Status: 1}
+	if err := svc.CreateWarehouse(ctx, w); err != nil {
+		t.Fatalf("create warehouse err=%v", err)
+	}
+	if !strings.HasPrefix(w.Code, "W"+prefix) {
+		t.Fatalf("仓库编码应为 W%s 前缀, got %s", prefix, w.Code)
 	}
 }

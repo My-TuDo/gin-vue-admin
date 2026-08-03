@@ -45,7 +45,7 @@
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑客户' : '新增客户'" width="520px" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-form-item label="编码" prop="code">
-          <el-input v-model="form.code" :disabled="!!form.ID" />
+          <el-input v-model="form.code" :disabled="!!form.ID" placeholder="保存后自动生成" />
         </el-form-item>
         <el-form-item label="名称" prop="name">
           <el-input v-model="form.name" />
@@ -89,7 +89,7 @@ const tableData = ref([]), dialogVisible = ref(false), submitLoading = ref(false
 const formRef = ref(null)
 const form = reactive({ ID: 0, code: '', name: '', phone: '', address: '', level: 1, status: 1, remark: '' })
 const rules = {
-  code: [{ required: true, message: '请输入编码', trigger: 'blur' }],
+  // code: 编码由后端自动生成（前缀+日期+序号）
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
 }
 
