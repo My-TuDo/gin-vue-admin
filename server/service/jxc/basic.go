@@ -53,7 +53,15 @@ func (s *BasicService) GetCategoryList(ctx context.Context, info request.PageInf
 
 // CreateCategory 创建商品分类
 func (s *BasicService) CreateCategory(ctx context.Context, c *jxc.GoodsCategory) error {
-	return global.GVA_DB.WithContext(ctx).Create(c).Error
+	db := global.GVA_DB.WithContext(ctx)
+	if c.Code == "" {
+		code, err := genCode(db, &jxc.GoodsCategory{}, prefixCategory)
+		if err != nil {
+			return err
+		}
+		c.Code = code
+	}
+	return db.Create(c).Error
 }
 
 // UpdateCategory 更新分类
@@ -113,7 +121,15 @@ func (s *BasicService) GetAllBrands(ctx context.Context) (list []jxc.Brand, err 
 // 以下三种也可以优化提取为通用的函数方法:Create、Update、Delete
 // CreateBrand 创建品牌
 func (s *BasicService) CreateBrand(ctx context.Context, b *jxc.Brand) error {
-	return global.GVA_DB.WithContext(ctx).Create(b).Error
+	db := global.GVA_DB.WithContext(ctx)
+	if b.Code == "" {
+		code, err := genCode(db, &jxc.Brand{}, prefixBrand)
+		if err != nil {
+			return err
+		}
+		b.Code = code
+	}
+	return db.Create(b).Error
 }
 
 // UpdateBrand 更新品牌
@@ -164,7 +180,15 @@ func (s *BasicService) GetAllSuppliers(ctx context.Context) (list []jxc.Supplier
 
 // CreateSupplier 创建供应商
 func (s *BasicService) CreateSupplier(ctx context.Context, spli *jxc.Supplier) error {
-	return global.GVA_DB.WithContext(ctx).Create(spli).Error
+	db := global.GVA_DB.WithContext(ctx)
+	if spli.Code == "" {
+		code, err := genCode(db, &jxc.Supplier{}, prefixSupplier)
+		if err != nil {
+			return err
+		}
+		spli.Code = code
+	}
+	return db.Create(spli).Error
 }
 
 // UpdateSupplier 更新供应商
@@ -217,7 +241,15 @@ func (s *BasicService) GetAllCustomers(ctx context.Context) (list []jxc.Customer
 
 // CreateCustomer 创建客户
 func (s *BasicService) CreateCustomer(ctx context.Context, c *jxc.Customer) error {
-	return global.GVA_DB.WithContext(ctx).Create(c).Error
+	db := global.GVA_DB.WithContext(ctx)
+	if c.Code == "" {
+		code, err := genCode(db, &jxc.Customer{}, prefixCustomer)
+		if err != nil {
+			return err
+		}
+		c.Code = code
+	}
+	return db.Create(c).Error
 }
 
 // UpdateCustomer 更新客户
@@ -270,7 +302,15 @@ func (s *BasicService) GetAllWarehouses(ctx context.Context) (list []jxc.Warehou
 
 // CreateWarehouse 创建仓库
 func (s *BasicService) CreateWarehouse(ctx context.Context, w *jxc.Warehouse) error {
-	return global.GVA_DB.WithContext(ctx).Create(w).Error
+	db := global.GVA_DB.WithContext(ctx)
+	if w.Code == "" {
+		code, err := genCode(db, &jxc.Warehouse{}, prefixWarehouse)
+		if err != nil {
+			return err
+		}
+		w.Code = code
+	}
+	return db.Create(w).Error
 }
 
 // UpdateWarehouse 更新仓库

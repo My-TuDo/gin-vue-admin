@@ -1,7 +1,9 @@
 package jxc
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
 	"github.com/flipped-aurora/gin-vue-admin/server/internal/testutil"
@@ -264,6 +266,51 @@ func TestSetSkuStatus(t *testing.T) {
 	global.GVA_DB.First(&got, sku.ID)
 	if got.Status != 0 {
 		t.Fatalf("状态未更新: %+v", got)
+	}
+}
+
+// ========== 编码自动生成 ==========
+
+// TestCreateGoods_AutoCode 测试创建商品时编码自动生成（SP+日期+序号）
+func TestCreateGoods_AutoCode(t *testing.T) {
+	goodsTestDB(t)
+	g := &jxc.Goods{Name: "纯棉T恤", Unit: "件", Status: 1}
+	if err := gsvc.CreateGoods(ctx, g); err != nil {
+		t.Fatalf("create err=%v", err)
+	}
+	prefix := prefixGoods + time.Now().Format("20060102")
+	if !strings.HasPrefix(g.Code, prefix) {
+		t.Fatalf("编码应为 %s 前缀, got %s", prefix, g.Code)
+	}
+}
+
+// TestCreateGoods_AutoCodeSeq 测试同日前缀编码序号自增
+func TestCreateGoods_AutoCodeSeq(t *testing.T) {
+	goodsTestDB(t)
+	g1 := &jxc.Goods{Name: "A", Unit: "件", Status: 1}
+	g2 := &jxc.Goods{Name: "B", Unit: "件", Status: 1}
+	if err := gsvc.CreateGoods(ctx, g1); err != nil {
+		t.Fatalf("create g1 err=%v", err)
+	}
+	if err := gsvc.CreateGoods(ctx, g2); err != nil {
+		t.Fatalf("create g2 err=%v", err)
+	}
+	if g2.Code <= g1.Code {
+		t.Fatalf("第二个编码应大于第一个: %s vs %s", g1.Code, g2.Code)
+	}
+}
+
+// TestCreateSku_AutoCode 测试创建 SKU 时编码自动生成（商品编码-颜色-尺码）
+func TestCreateSku_AutoCode(t *testing.T) {
+	goodsTestDB(t)
+	g := newTestGoods(t, "SP001", "纯棉T恤")
+	sku := &jxc.GoodsSku{GoodsID: g.ID, Color: "红色", Size: "M"}
+	if err := gsvc.CreateSku(ctx, sku); err != nil {
+		t.Fatalf("create sku err=%v", err)
+	}
+	want := strings.ToUpper(g.Code + "-红色-M")
+	if sku.SkuCode != want {
+		t.Fatalf("skuCode 应为 %s, got %s", want, sku.SkuCode)
 	}
 }
 

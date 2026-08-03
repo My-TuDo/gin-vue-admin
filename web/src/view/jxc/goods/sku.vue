@@ -40,7 +40,7 @@
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑规格' : '新增规格'" width="480px" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-form-item label="SKU编码" prop="skuCode">
-          <el-input v-model="form.skuCode" :disabled="!!form.ID" placeholder="如 SP001-RED-M" />
+          <el-input v-model="form.skuCode" :disabled="!!form.ID" placeholder="保存后自动生成" />
         </el-form-item>
         <el-form-item label="条码" prop="barcode">
           <el-input v-model="form.barcode" placeholder="可选" />
@@ -82,7 +82,7 @@ const dialogVisible = ref(false), submitLoading = ref(false), isEdit = ref(false
 const formRef = ref(null)
 const form = reactive({ ID: 0, goodsId, skuCode: '', barcode: '', color: '', size: '', costPrice: 0, salePrice: 0 })
 const rules = {
-  skuCode: [{ required: true, message: '请输入SKU编码', trigger: 'blur' }],
+  // skuCode: 编码由后端自动生成（商品编码-颜色-尺码）
   color: [{ required: true, message: '请输入颜色', trigger: 'blur' }],
   size: [{ required: true, message: '请输入尺码', trigger: 'blur' }],
 }

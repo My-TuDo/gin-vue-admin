@@ -44,7 +44,7 @@
           <el-input :model-value="parentName" disabled />
         </el-form-item>
         <el-form-item label="编码" prop="code">
-          <el-input v-model="form.code" :disabled="!!form.ID" />
+          <el-input v-model="form.code" :disabled="!!form.ID" placeholder="保存后自动生成" />
         </el-form-item>
         <el-form-item label="分类名称" prop="name">
           <el-input v-model="form.name" />
@@ -78,7 +78,7 @@ const parentName = ref('')
 
 const form = reactive({ ID: 0, parentId: null, code: '', name: '', sort: 0, status: 1, remark: '' })
 const rules = {
-  code: [{ required: true, message: '请输入编码', trigger: 'blur' }],
+  // code: 编码由后端自动生成（前缀+日期+序号）
   name: [{ required: true, message: '请输入分类名称', trigger: 'blur' }],
 }
 

@@ -1,6 +1,7 @@
 package jxc
 
 import (
+	"strings"
 	"context"
 	"errors"
 
@@ -39,9 +40,17 @@ func (s *GoodsService) GetAllGoods(ctx context.Context) (list []jxc.Goods, err e
 	return
 }
 
-// CreateGoods 创建商品
+// CreateGoods 创建商品（编码自动生成）
 func (s *GoodsService) CreateGoods(ctx context.Context, g *jxc.Goods) error {
-	return global.GVA_DB.WithContext(ctx).Create(g).Error
+	db := global.GVA_DB.WithContext(ctx)
+	if g.Code == "" {
+		code, err := genCode(db, &jxc.Goods{}, prefixGoods)
+		if err != nil {
+			return err
+		}
+		g.Code = code
+	}
+	return db.Create(g).Error
 }
 
 // UpdateGoods 更新商品
@@ -73,9 +82,16 @@ func (s *GoodsService) GetSkuList(ctx context.Context, goodsId uint) (list []jxc
 	return
 }
 
-// CreateSku 创建 SKU (校验同商品颜色加尺码组合唯一)
+// CreateSku 创建 SKU（编码自动生成: 商品款号-颜色-尺码, 校验同商品组合唯一）
 func (s *GoodsService) CreateSku(ctx context.Context, sku *jxc.GoodsSku) error {
 	db := global.GVA_DB.WithContext(ctx)
+	if sku.SkuCode == "" {
+		var goods jxc.Goods
+		if err := db.First(&goods, sku.GoodsID).Error; err != nil {
+			return err
+		}
+		sku.SkuCode = strings.ToUpper(goods.Code + "-" + sku.Color + "-" + sku.Size)
+	}
 	var cnt int64
 	db.Model(&jxc.GoodsSku{}).Where("goods_id = ? AND color = ? AND size = ?", sku.GoodsID, sku.Color, sku.Size).Count(&cnt)
 	if cnt > 0 {
