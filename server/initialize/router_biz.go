@@ -15,6 +15,9 @@ func initBizRouter(routers ...*gin.RouterGroup) {
 	privateGroup := routers[0]
 	publicGroup := routers[1]
 
+	// jxc 基础资料路由
+	router.RouterGroupApp.Jxc.InitBasicRouter(privateGroup)
+
 	holder(publicGroup, privateGroup)
 
 }
