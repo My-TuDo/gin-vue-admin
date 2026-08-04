@@ -11,6 +11,12 @@
       <el-table :data="tableData" border v-loading="loading">
         <el-table-column label="编码" prop="code" width="120" />
         <el-table-column label="名称" prop="name" min-width="150" />
+        <el-table-column label="主图" width="70" align="center">
+          <template #default="{ row }">
+            <el-image v-if="row.image" :src="row.image" :preview-src-list="[row.image]" preview-teleported fit="cover" style="width: 40px; height: 40px; border-radius: 4px" />
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="分类" width="120">
           <template #default="{ row }">{{ row.category?.name || '未分类' }}</template>
         </el-table-column>
@@ -20,7 +26,7 @@
         <el-table-column label="单位" prop="unit" width="70" align="center" />
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
-            <el-switch :model-value="row.status === 1" active-text="上架" inactive-text="下架" @change="toggleStatus(row)" />
+            <el-switch :model-value="row.status === 1" @change="toggleStatus(row)" />
           </template>
         </el-table-column>
         <el-table-column label="备注" prop="remark" min-width="120" :show-overflow-tooltip="true" />
@@ -69,8 +75,8 @@
         <el-form-item label="单位" prop="unit">
           <el-input v-model="form.unit" placeholder="件/条/双/套" />
         </el-form-item>
-        <el-form-item label="主图URL" prop="image">
-          <el-input v-model="form.image" placeholder="可选" />
+        <el-form-item label="商品主图">
+          <upload-image :image-url="form.image" @on-success="(url) => (form.image = url)" />
         </el-form-item>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="form.remark" type="textarea" :rows="2" />
@@ -91,6 +97,7 @@ import dayjs from 'dayjs'
 import { useRouter } from 'vue-router'
 import { getGoodsPage, createGoods, updateGoods, deleteGoods, deleteGoodsForever, setGoodsStatus } from '@/api/jxc/goods'
 import { getCategoryTree, getAllBrands } from '@/api/jxc/basic'
+import UploadImage from '@/components/upload/image.vue'
 
 const router = useRouter()
 const loading = ref(false), page = ref(1), pageSize = ref(10), total = ref(0), keyword = ref('')

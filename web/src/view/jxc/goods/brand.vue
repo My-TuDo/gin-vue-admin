@@ -56,8 +56,8 @@
         <el-form-item label="品牌名称" prop="name">
           <el-input v-model="form.name" />
         </el-form-item>
-        <el-form-item label="Logo URL" prop="logo">
-          <el-input v-model="form.logo" placeholder="可选" />
+        <el-form-item label="品牌Logo">
+          <upload-image :image-url="form.logo" @on-success="(url) => (form.logo = url)" />
         </el-form-item>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="form.remark" type="textarea" :rows="2" />
@@ -76,6 +76,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import { getBrandList, createBrand, updateBrand, deleteBrand, deleteBrandForever, setBrandStatus } from '@/api/jxc/basic'
+import UploadImage from '@/components/upload/image.vue'
 
 const loading = ref(false), page = ref(1), pageSize = ref(10), total = ref(0)
 const keyword = ref('')
