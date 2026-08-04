@@ -293,12 +293,10 @@ func (s *BasicService) UpdateCustomer(ctx context.Context, c *jxc.Customer) erro
 	return global.GVA_DB.WithContext(ctx).Omit("code", "created_at").Save(c).Error // 忽略code字段，避免更新时修改唯一约束
 }
 
-type SalesOrder struct{} // 占位使用，销售订单表暂未实现
-
 // DeleteCustomer 删除客户（软删除，需嵌入 global.GVA_MODEL/Deleted_At）
 func (s *BasicService) DeleteCustomer(ctx context.Context, id uint) error {
 	var orderCount int64
-	global.GVA_DB.WithContext(ctx).Model(&SalesOrder{}).Where("customer_id = ?", id).Count(&orderCount) // SalesOrder 销售订单表暂未实现
+	global.GVA_DB.WithContext(ctx).Model(&jxc.SaleOrder{}).Where("customer_id = ?", id).Count(&orderCount)
 	if orderCount > 0 {
 		return errors.New("该客户已被销售订单引用，无法删除")
 	}
@@ -309,7 +307,7 @@ func (s *BasicService) DeleteCustomer(ctx context.Context, id uint) error {
 func (s *BasicService) DeleteCustomerForever(ctx context.Context, id uint) error {
 	db := global.GVA_DB.WithContext(ctx)
 	var orderCount int64
-	db.Model(&SalesOrder{}).Where("customer_id = ?", id).Count(&orderCount)
+	db.Model(&jxc.SaleOrder{}).Where("customer_id = ?", id).Count(&orderCount)
 	if orderCount > 0 {
 		return errors.New("该客户已被销售订单引用，无法删除")
 	}

@@ -20,6 +20,7 @@ func initBizRouter(routers ...*gin.RouterGroup) {
 	// jxc Goods 路由
 	router.RouterGroupApp.Jxc.InitGoodsRouter(publicGroup)
 	router.RouterGroupApp.Jxc.InitPurchaseRouter(publicGroup)
+	router.RouterGroupApp.Jxc.InitSaleRouter(publicGroup)
 
 	holder(publicGroup, privateGroup)
 

@@ -281,8 +281,8 @@ func TestDeleteCustomer_Referenced(t *testing.T) {
 	testDB(t)
 	c := jxc.Customer{Code: "K001", Name: "张三", Status: 1}
 	global.GVA_DB.Create(&c)
-	ensureRefTable(t, "CREATE TABLE sales_orders (customer_id int)")
-	global.GVA_DB.Exec("INSERT INTO sales_orders (customer_id) VALUES (?)", c.ID)
+	ensureRefTable(t, "CREATE TABLE sale_order (customer_id int, deleted_at datetime)")
+	global.GVA_DB.Exec("INSERT INTO sale_order (customer_id, deleted_at) VALUES (?, NULL)", c.ID)
 	if err := svc.DeleteCustomer(ctx, c.ID); err == nil || err.Error() != "该客户已被销售订单引用，无法删除" {
 		t.Fatalf("应返回引用拒绝, got %v", err)
 	}
