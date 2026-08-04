@@ -13,7 +13,7 @@
         <el-table-column label="名称" prop="name" min-width="150" />
         <el-table-column label="主图" width="70" align="center">
           <template #default="{ row }">
-            <el-image v-if="row.image" :src="row.image" :preview-src-list="[row.image]" preview-teleported fit="cover" style="width: 40px; height: 40px; border-radius: 4px" />
+            <el-image v-if="row.image" :src="getUrl(row.image)" :preview-src-list="[getUrl(row.image)]" preview-teleported fit="cover" style="width: 40px; height: 40px; border-radius: 4px" />
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -77,6 +77,7 @@
         </el-form-item>
         <el-form-item label="商品主图">
           <upload-image :image-url="form.image" @on-success="(url) => (form.image = url)" />
+          <el-image v-if="form.image" :src="getUrl(form.image)" :preview-src-list="[getUrl(form.image)]" preview-teleported fit="cover" style="width: 60px; height: 60px; border-radius: 4px; margin-left: 8px" />
         </el-form-item>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="form.remark" type="textarea" :rows="2" />
@@ -98,6 +99,7 @@ import { useRouter } from 'vue-router'
 import { getGoodsPage, createGoods, updateGoods, deleteGoods, deleteGoodsForever, setGoodsStatus } from '@/api/jxc/goods'
 import { getCategoryTree, getAllBrands } from '@/api/jxc/basic'
 import UploadImage from '@/components/upload/image.vue'
+import { getUrl } from '@/utils/image'
 
 const router = useRouter()
 const loading = ref(false), page = ref(1), pageSize = ref(10), total = ref(0), keyword = ref('')
