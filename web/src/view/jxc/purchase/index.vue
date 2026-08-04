@@ -215,7 +215,7 @@ const loadOptions = async () => {
   ])
   suppliers.value = s.data.list || []
   warehouses.value = w.data.list || []
-  skuOptions.value = (sku.data.list || []).filter(s => s.status === 1)
+  skuOptions.value = (sku.data || []).filter(s => s.status === 1)
 }
 
 const addItem = () => form.items.push({ skuId: undefined, qty: 1, price: 0 })
@@ -252,13 +252,9 @@ const handleSave = async () => {
   }
   saving.value = true
   try {
-    if (form.ID) {
-      await updatePurchase(form)
-      ElMessage.success('更新成功')
-    } else {
-      await createPurchase(form)
-      ElMessage.success('创建成功')
-    }
+    const res = form.ID ? await updatePurchase(form) : await createPurchase(form)
+    if (res && res.code !== 0) return
+    ElMessage.success(form.ID ? '更新成功' : '创建成功')
     editVisible.value = false
     await fetchData()
   } finally {
@@ -267,25 +263,29 @@ const handleSave = async () => {
 }
 
 const handleDelete = async (id) => {
-  await deletePurchase(id)
+  const res = await deletePurchase(id)
+  if (res && res.code !== 0) return
   ElMessage.success('删除成功')
   await fetchData()
 }
 
 const handleAudit = async (id) => {
-  await auditPurchase(id)
+  const res = await auditPurchase(id)
+  if (res && res.code !== 0) return
   ElMessage.success('审核成功')
   await fetchData()
 }
 
 const handleCancel = async (id) => {
-  await cancelPurchase(id)
+  const res = await cancelPurchase(id)
+  if (res && res.code !== 0) return
   ElMessage.success('已取消')
   await fetchData()
 }
 
 const handleStockIn = async (id) => {
-  await stockInPurchase(id)
+  const res = await stockInPurchase(id)
+  if (res && res.code !== 0) return
   ElMessage.success('入库成功，库存已更新')
   await fetchData()
 }

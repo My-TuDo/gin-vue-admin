@@ -139,18 +139,33 @@ function goBack() { router.back() }
 async function submitForm() {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
+  if (!form.goodsId) {
+    ElMessage.warning('请选择所属商品')
+    return
+  }
   submitLoading.value = true
   try {
-    form.ID ? await updateSku(form) : await createSku(form)
+    const res = form.ID ? await updateSku(form) : await createSku(form)
+    if (res && res.code !== 0) return
     ElMessage.success(form.ID ? '更新成功' : '创建成功')
     dialogVisible.value = false
     await fetchData()
   } finally { submitLoading.value = false }
 }
 
-async function handleDelete(id) { await deleteSku({ id }); ElMessage.success('删除成功'); await fetchData() }
+async function handleDelete(id) {
+  const res = await deleteSku({ id })
+  if (res && res.code !== 0) return
+  ElMessage.success('删除成功')
+  await fetchData()
+}
 
-async function handleDeleteForever(id) { await deleteSkuForever({ id }); ElMessage.success('已彻底删除'); await fetchData() }
+async function handleDeleteForever(id) {
+  const res = await deleteSkuForever({ id })
+  if (res && res.code !== 0) return
+  ElMessage.success('已彻底删除')
+  await fetchData()
+}
 
 async function toggleStatus(row) {
   const s = row.status === 1 ? 0 : 1
