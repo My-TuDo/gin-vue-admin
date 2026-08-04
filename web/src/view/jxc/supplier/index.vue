@@ -113,20 +113,32 @@ async function submitForm() {
   if (!valid) return
   submitLoading.value = true
   try {
-    form.ID ? await updateSupplier(form) : await createSupplier(form)
+    const res = form.ID ? await updateSupplier(form) : await createSupplier(form)
+    if (res && res.code !== 0) return
     ElMessage.success(form.ID ? '更新成功' : '创建成功')
     dialogVisible.value = false
     await fetchData()
   } finally { submitLoading.value = false }
 }
 
-async function handleDelete(id) { await deleteSupplier({ id }); ElMessage.success('删除成功'); await fetchData() }
+async function handleDelete(id) {
+  const res = await deleteSupplier({ id })
+  if (res && res.code !== 0) return
+  ElMessage.success('删除成功')
+  await fetchData()
+}
 
-async function handleDeleteForever(id) { await deleteSupplierForever({ id }); ElMessage.success('已彻底删除'); await fetchData() }
+async function handleDeleteForever(id) {
+  const res = await deleteSupplierForever({ id })
+  if (res && res.code !== 0) return
+  ElMessage.success('已彻底删除')
+  await fetchData()
+}
 
 async function toggleStatus(row) {
   const s = row.status === 1 ? 0 : 1
-  await setSupplierStatus({ id: row.ID, status: s })
+  const res = await setSupplierStatus({ id: row.ID, status: s })
+  if (res && res.code !== 0) return
   row.status = s; ElMessage.success(s ? '已启用' : '已停用')
 }
 

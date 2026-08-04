@@ -174,15 +174,23 @@ func TestSetGoodsStatus(t *testing.T) {
 
 // ========== 商品 SKU ==========
 
-// TestGetSkuList 测试查询某商品下的 SKU 列表
+// TestGetSkuList 测试查询 SKU 列表（按商品过滤 / 全量）
 func TestGetSkuList(t *testing.T) {
 	goodsTestDB(t)
-	g := newTestGoods(t, "SP001", "纯棉T恤")
-	global.GVA_DB.Create(&jxc.GoodsSku{GoodsID: g.ID, SkuCode: "SP001-RED-M", Color: "红色", Size: "M"})
-	global.GVA_DB.Create(&jxc.GoodsSku{GoodsID: g.ID, SkuCode: "SP001-RED-L", Color: "红色", Size: "L"})
-	list, err := gsvc.GetSkuList(ctx, g.ID)
+	g1 := newTestGoods(t, "SP001", "纯棉T恤")
+	g2 := newTestGoods(t, "SP002", "牛仔裤")
+	global.GVA_DB.Create(&jxc.GoodsSku{GoodsID: g1.ID, SkuCode: "SP001-RED-M", Color: "红色", Size: "M"})
+	global.GVA_DB.Create(&jxc.GoodsSku{GoodsID: g1.ID, SkuCode: "SP001-RED-L", Color: "红色", Size: "L"})
+	global.GVA_DB.Create(&jxc.GoodsSku{GoodsID: g2.ID, SkuCode: "SP002-BLUE-M", Color: "蓝色", Size: "M"})
+	// 按商品过滤
+	list, err := gsvc.GetSkuList(ctx, g1.ID)
 	if err != nil || len(list) != 2 {
-		t.Fatalf("list=%v err=%v", list, err)
+		t.Fatalf("按商品过滤 list=%v err=%v", list, err)
+	}
+	// goodsId=0 返回全部（供采购/销售选品）
+	all, err := gsvc.GetSkuList(ctx, 0)
+	if err != nil || len(all) != 3 {
+		t.Fatalf("全量 list=%v err=%v", all, err)
 	}
 }
 

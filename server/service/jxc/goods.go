@@ -87,15 +87,22 @@ func (s *GoodsService) SetGoodsStatus(ctx context.Context, id uint, status int8)
 
 // ========== 商品 SKU ==========
 
-// GetSkuList 查询某商品下的SKU列表
+// GetSkuList 查询SKU列表（goodsId 为 0 时返回全部, 供采购/销售选品）
 func (s *GoodsService) GetSkuList(ctx context.Context, goodsId uint) (list []jxc.GoodsSku, err error) {
-	err = global.GVA_DB.WithContext(ctx).Where("goods_id = ?", goodsId).Find(&list).Error
+	db := global.GVA_DB.WithContext(ctx).Model(&jxc.GoodsSku{}).Where("goods_id > 0")
+	if goodsId > 0 {
+		db = db.Where("goods_id = ?", goodsId)
+	}
+	err = db.Order("id asc").Find(&list).Error
 	return
 }
 
 // CreateSku 创建 SKU（编码自动生成: 商品款号-颜色-尺码, 校验同商品组合唯一）
 func (s *GoodsService) CreateSku(ctx context.Context, sku *jxc.GoodsSku) error {
 	db := global.GVA_DB.WithContext(ctx)
+	if sku.GoodsID == 0 {
+		return errors.New("请选择所属商品")
+	}
 	if sku.SkuCode == "" {
 		var goods jxc.Goods
 		if err := db.First(&goods, sku.GoodsID).Error; err != nil {

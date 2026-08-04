@@ -128,21 +128,33 @@ async function submitForm() {
   if (!valid) return
   submitLoading.value = true
   try {
-    form.ID ? await updateCustomer(form) : await createCustomer(form)
+    const res = form.ID ? await updateCustomer(form) : await createCustomer(form)
+    if (res && res.code !== 0) return
     ElMessage.success(form.ID ? '更新成功' : '创建成功')
     dialogVisible.value = false
     await fetchData()
   } finally { submitLoading.value = false }
 }
 
-async function handleDelete(id) { await deleteCustomer({ id }); ElMessage.success('删除成功'); await fetchData() }
+async function handleDelete(id) {
+  const res = await deleteCustomer({ id })
+  if (res && res.code !== 0) return
+  ElMessage.success('删除成功')
+  await fetchData()
+}
 
-async function handleDeleteForever(id) { await deleteCustomerForever({ id }); ElMessage.success('已彻底删除'); await fetchData() }
+async function handleDeleteForever(id) {
+  const res = await deleteCustomerForever({ id })
+  if (res && res.code !== 0) return
+  ElMessage.success('已彻底删除')
+  await fetchData()
+}
 
 async function toggleStatus(row) {
   const s = row.status === 1 ? 0 : 1
-  await setCustomerStatus({ id: row.ID, status: s })
-  row.status = s
+  const res = await setCustomerStatus({ id: row.ID, status: s })
+  if (res && res.code !== 0) return
+  row.status = s;
   ElMessage.success(s === 1 ? '已启用' : '已停用')
 }
 

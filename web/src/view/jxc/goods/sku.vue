@@ -6,7 +6,10 @@
         <el-button type="primary" icon="plus" @click="openDialog()">新增规格</el-button>
       </div>
       <div class="gva-search">
-        <span class="goods-title">商品：{{ goodsName }}</span>
+        <el-select v-if="!goodsId" v-model="form.goodsId" placeholder="选择所属商品" filterable style="width: 260px" @change="fetchData">
+          <el-option v-for="g in goodsOptions" :key="g.ID" :label="`${g.code} ${g.name}`" :value="g.ID" />
+        </el-select>
+        <span v-else class="goods-title">商品：{{ goodsName }}</span>
       </div>
       <el-table :data="tableData" border v-loading="loading">
         <el-table-column label="SKU编码" prop="skuCode" min-width="160" />
@@ -44,6 +47,11 @@
 
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑规格' : '新增规格'" width="480px" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+        <el-form-item v-if="!goodsId" label="所属商品" prop="goodsId">
+          <el-select v-model="form.goodsId" placeholder="选择商品" filterable style="width: 100%">
+            <el-option v-for="g in goodsOptions" :key="g.ID" :label="`${g.code} ${g.name}`" :value="g.ID" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="SKU编码" prop="skuCode">
           <el-input v-model="form.skuCode" :disabled="!!form.ID" placeholder="保存后自动生成" />
         </el-form-item>
@@ -76,6 +84,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { getSkuList, createSku, updateSku, deleteSku, deleteSkuForever, setSkuStatus } from '@/api/jxc/goods'
+import { getAllGoods } from '@/api/jxc/goods'
 
 const route = useRoute()
 const router = useRouter()
@@ -83,13 +92,21 @@ const goodsId = Number(route.query.goodsId || 0)
 const goodsName = route.query.goodsName || ''
 const loading = ref(false)
 const tableData = ref([])
+const goodsOptions = ref([])
 const dialogVisible = ref(false), submitLoading = ref(false), isEdit = ref(false)
 const formRef = ref(null)
 const form = reactive({ ID: 0, goodsId, skuCode: '', barcode: '', color: '', size: '', costPrice: 0, salePrice: 0 })
 const rules = {
   // skuCode: 编码由后端自动生成（商品编码-颜色-尺码）
+  goodsId: [{ required: true, message: '请选择所属商品', trigger: 'change' }],
   color: [{ required: true, message: '请输入颜色', trigger: 'blur' }],
   size: [{ required: true, message: '请输入尺码', trigger: 'blur' }],
+}
+
+async function loadGoods() {
+  if (goodsId) return
+  const { data } = await getAllGoods()
+  goodsOptions.value = data || []
 }
 
 function resetForm() { Object.assign(form, { ID: 0, goodsId, skuCode: '', barcode: '', color: '', size: '', costPrice: 0, salePrice: 0 }) }
@@ -101,6 +118,8 @@ async function fetchData() {
     tableData.value = data || []
   } finally { loading.value = false }
 }
+
+onMounted(() => { loadGoods(); fetchData() })
 
 function openDialog(id) {
   isEdit.value = !!id
@@ -120,18 +139,33 @@ function goBack() { router.back() }
 async function submitForm() {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
+  if (!form.goodsId) {
+    ElMessage.warning('请选择所属商品')
+    return
+  }
   submitLoading.value = true
   try {
-    form.ID ? await updateSku(form) : await createSku(form)
+    const res = form.ID ? await updateSku(form) : await createSku(form)
+    if (res && res.code !== 0) return
     ElMessage.success(form.ID ? '更新成功' : '创建成功')
     dialogVisible.value = false
     await fetchData()
   } finally { submitLoading.value = false }
 }
 
-async function handleDelete(id) { await deleteSku({ id }); ElMessage.success('删除成功'); await fetchData() }
+async function handleDelete(id) {
+  const res = await deleteSku({ id })
+  if (res && res.code !== 0) return
+  ElMessage.success('删除成功')
+  await fetchData()
+}
 
-async function handleDeleteForever(id) { await deleteSkuForever({ id }); ElMessage.success('已彻底删除'); await fetchData() }
+async function handleDeleteForever(id) {
+  const res = await deleteSkuForever({ id })
+  if (res && res.code !== 0) return
+  ElMessage.success('已彻底删除')
+  await fetchData()
+}
 
 async function toggleStatus(row) {
   const s = row.status === 1 ? 0 : 1
@@ -140,5 +174,4 @@ async function toggleStatus(row) {
   ElMessage.success(s === 1 ? '已启用' : '已停用')
 }
 
-onMounted(fetchData)
 </script>

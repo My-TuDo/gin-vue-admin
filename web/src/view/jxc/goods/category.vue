@@ -145,7 +145,8 @@ async function submitForm() {
   if (!valid) return
   submitLoading.value = true
   try {
-    form.ID ? await updateCategory(form) : await createCategory(form)
+    const res = form.ID ? await updateCategory(form) : await createCategory(form)
+    if (res && res.code !== 0) return
     ElMessage.success(form.ID ? '更新成功' : '创建成功')
     dialogVisible.value = false
     await fetchData()
@@ -153,21 +154,24 @@ async function submitForm() {
 }
 
 async function handleDelete(id) {
-  await deleteCategory({ id })
+  const res = await deleteCategory({ id })
+  if (res && res.code !== 0) return
   ElMessage.success('删除成功')
   await fetchData()
 }
 
 async function handleDeleteForever(id) {
-  await deleteCategoryForever({ id })
+  const res = await deleteCategoryForever({ id })
+  if (res && res.code !== 0) return
   ElMessage.success('已彻底删除')
   await fetchData()
 }
 
 async function toggleStatus(row) {
   const s = row.status === 1 ? 0 : 1
-  await setCategoryStatus({ id: row.ID, status: s })
-  row.status = s
+  const res = await setCategoryStatus({ id: row.ID, status: s })
+  if (res && res.code !== 0) return
+  row.status = s;
   ElMessage.success(s === 1 ? '已启用' : '已停用')
 }
 

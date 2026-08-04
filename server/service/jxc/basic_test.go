@@ -240,8 +240,8 @@ func TestDeleteSupplier_Referenced(t *testing.T) {
 	testDB(t)
 	s := jxc.Supplier{Code: "S001", Name: "广州布行", Status: 1}
 	global.GVA_DB.Create(&s)
-	ensureRefTable(t, "CREATE TABLE purchase_orders (supplier_id int)")
-	global.GVA_DB.Exec("INSERT INTO purchase_orders (supplier_id) VALUES (?)", s.ID)
+	ensureRefTable(t, "CREATE TABLE purchase_order (supplier_id int, deleted_at datetime)")
+	global.GVA_DB.Exec("INSERT INTO purchase_order (supplier_id, deleted_at) VALUES (?, NULL)", s.ID)
 	if err := svc.DeleteSupplier(ctx, s.ID); err == nil || err.Error() != "该供应商已被采购订单引用，无法删除" {
 		t.Fatalf("应返回引用拒绝, got %v", err)
 	}
@@ -322,8 +322,8 @@ func TestDeleteWarehouse_Referenced(t *testing.T) {
 	testDB(t)
 	w := jxc.Warehouse{Code: "W001", Name: "总仓", Status: 1}
 	global.GVA_DB.Create(&w)
-	ensureRefTable(t, "CREATE TABLE stocks (warehouse_id int, quantity int)")
-	global.GVA_DB.Exec("INSERT INTO stocks (warehouse_id, quantity) VALUES (?, 3)", w.ID)
+	ensureRefTable(t, "CREATE TABLE stock (warehouse_id int, quantity int)")
+	global.GVA_DB.Exec("INSERT INTO stock (warehouse_id, quantity) VALUES (?, 3)", w.ID)
 	if err := svc.DeleteWarehouse(ctx, w.ID); err == nil || err.Error() != "该仓库仍存在库存，无法删除" {
 		t.Fatalf("应返回引用拒绝, got %v", err)
 	}

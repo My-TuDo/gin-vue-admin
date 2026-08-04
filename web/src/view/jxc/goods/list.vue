@@ -141,21 +141,33 @@ async function submitForm() {
   if (!valid) return
   submitLoading.value = true
   try {
-    form.ID ? await updateGoods(form) : await createGoods(form)
+    const res = form.ID ? await updateGoods(form) : await createGoods(form)
+    if (res && res.code !== 0) return
     ElMessage.success(form.ID ? '更新成功' : '创建成功')
     dialogVisible.value = false
     await fetchData()
   } finally { submitLoading.value = false }
 }
 
-async function handleDelete(id) { await deleteGoods({ id }); ElMessage.success('删除成功'); await fetchData() }
+async function handleDelete(id) {
+  const res = await deleteGoods({ id })
+  if (res && res.code !== 0) return
+  ElMessage.success('删除成功')
+  await fetchData()
+}
 
-async function handleDeleteForever(id) { await deleteGoodsForever({ id }); ElMessage.success('已彻底删除'); await fetchData() }
+async function handleDeleteForever(id) {
+  const res = await deleteGoodsForever({ id })
+  if (res && res.code !== 0) return
+  ElMessage.success('已彻底删除')
+  await fetchData()
+}
 
 async function toggleStatus(row) {
   const s = row.status === 1 ? 0 : 1
-  await setGoodsStatus({ id: row.ID, status: s })
-  row.status = s
+  const res = await setGoodsStatus({ id: row.ID, status: s })
+  if (res && res.code !== 0) return
+  row.status = s;
   ElMessage.success(s === 1 ? '已上架' : '已下架')
 }
 
