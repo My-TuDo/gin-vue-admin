@@ -126,6 +126,7 @@ func TestApiGoodsBadBody(t *testing.T) {
 	}{
 		{"CreateGoods", gapi.CreateGoods}, {"UpdateGoods", gapi.UpdateGoods},
 		{"DeleteGoods", gapi.DeleteGoods}, {"SetGoodsStatus", gapi.SetGoodsStatus},
+		{"DeleteGoodsForever", gapi.DeleteGoodsForever},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, rb := doReq(t, tc.call, http.MethodPost, `{bad json`)
@@ -133,6 +134,16 @@ func TestApiGoodsBadBody(t *testing.T) {
 				t.Fatalf("坏 JSON 应返回业务错误码")
 			}
 		})
+	}
+}
+
+// TestApiDeleteGoodsForever 测试彻底删除商品接口
+func TestApiDeleteGoodsForever(t *testing.T) {
+	goodsApiTestDB(t)
+	global.GVA_DB.Create(&jxc.Goods{Code: "SP001", Name: "纯棉T恤", Unit: "件", Status: 1})
+	_, rb := doReq(t, gapi.DeleteGoodsForever, http.MethodDelete, `{"id":1}`)
+	if rb.Code != 0 {
+		t.Fatalf("delete forever code=%d msg=%s", rb.Code, rb.Msg)
 	}
 }
 

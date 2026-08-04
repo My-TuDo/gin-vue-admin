@@ -27,13 +27,18 @@
         <el-table-column label="创建时间" width="170">
           <template #default="{ row }"> {{ dayjs(row.CreatedAt).format('YYYY-MM-DD HH:mm') }} </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="openSku(row)">规格</el-button>
             <el-button type="primary" link @click="openDialog(row.ID)">编辑</el-button>
             <el-popconfirm title="确认删除该商品?" @confirm="handleDelete(row.ID)">
               <template #reference>
                 <el-button type="danger" link>删除</el-button>
+              </template>
+            </el-popconfirm>
+            <el-popconfirm title="彻底删除不可恢复，确认?" @confirm="handleDeleteForever(row.ID)">
+              <template #reference>
+                <el-button type="danger" link>彻底删除</el-button>
               </template>
             </el-popconfirm>
           </template>
@@ -84,7 +89,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import { useRouter } from 'vue-router'
-import { getGoodsPage, createGoods, updateGoods, deleteGoods, setGoodsStatus } from '@/api/jxc/goods'
+import { getGoodsPage, createGoods, updateGoods, deleteGoods, deleteGoodsForever, setGoodsStatus } from '@/api/jxc/goods'
 import { getCategoryTree, getAllBrands } from '@/api/jxc/basic'
 
 const router = useRouter()
@@ -144,6 +149,8 @@ async function submitForm() {
 }
 
 async function handleDelete(id) { await deleteGoods({ id }); ElMessage.success('删除成功'); await fetchData() }
+
+async function handleDeleteForever(id) { await deleteGoodsForever({ id }); ElMessage.success('已彻底删除'); await fetchData() }
 
 async function toggleStatus(row) {
   const s = row.status === 1 ? 0 : 1

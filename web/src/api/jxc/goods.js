@@ -19,6 +19,9 @@ export const updateGoods = (data) =>
 export const deleteGoods = (data) =>
   request({ url: '/jxc/goods', method: 'delete', data })
 
+export const deleteGoodsForever = (data) =>
+  request({ url: '/jxc/goods/forever', method: 'delete', data })
+
 export const setGoodsStatus = (data) =>
   request({ url: '/jxc/goods/status', method: 'put', data })
 
@@ -34,6 +37,9 @@ export const updateSku = (data) =>
 
 export const deleteSku = (data) =>
   request({ url: '/jxc/goods/sku', method: 'delete', data })
+
+export const deleteSkuForever = (data) =>
+  request({ url: '/jxc/goods/sku/forever', method: 'delete', data })
 
 export const setSkuStatus = (data) =>
   request({ url: '/jxc/goods/sku/status', method: 'put', data })

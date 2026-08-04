@@ -24,12 +24,17 @@
             <el-switch :model-value="row.status === 1" @change="toggleStatus(row)" />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="openDialog(row.ID)">编辑</el-button>
             <el-popconfirm title="确认删除该规格?" @confirm="handleDelete(row.ID)">
               <template #reference>
                 <el-button type="danger" link>删除</el-button>
+              </template>
+            </el-popconfirm>
+            <el-popconfirm title="彻底删除不可恢复，确认?" @confirm="handleDeleteForever(row.ID)">
+              <template #reference>
+                <el-button type="danger" link>彻底删除</el-button>
               </template>
             </el-popconfirm>
           </template>
@@ -70,7 +75,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
-import { getSkuList, createSku, updateSku, deleteSku, setSkuStatus } from '@/api/jxc/goods'
+import { getSkuList, createSku, updateSku, deleteSku, deleteSkuForever, setSkuStatus } from '@/api/jxc/goods'
 
 const route = useRoute()
 const router = useRouter()
@@ -125,6 +130,8 @@ async function submitForm() {
 }
 
 async function handleDelete(id) { await deleteSku({ id }); ElMessage.success('删除成功'); await fetchData() }
+
+async function handleDeleteForever(id) { await deleteSkuForever({ id }); ElMessage.success('已彻底删除'); await fetchData() }
 
 async function toggleStatus(row) {
   const s = row.status === 1 ? 0 : 1

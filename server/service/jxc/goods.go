@@ -69,6 +69,17 @@ func (s *GoodsService) DeleteGoods(ctx context.Context, id uint) error {
 	return db.Delete(&jxc.Goods{}, id).Error
 }
 
+// DeleteGoodsForever 彻底删除商品（物理删除，不可恢复；有 SKU 仍拒绝）
+func (s *GoodsService) DeleteGoodsForever(ctx context.Context, id uint) error {
+	db := global.GVA_DB.WithContext(ctx)
+	var skuCount int64
+	db.Model(&jxc.GoodsSku{}).Where("goods_id = ?", id).Count(&skuCount)
+	if skuCount > 0 {
+		return errors.New("该商品存在 SKU, 请先删除 SKU")
+	}
+	return db.Unscoped().Delete(&jxc.Goods{}, id).Error
+}
+
 // SetGoodsStatus 设置商品状态（上架/下架）
 func (s *GoodsService) SetGoodsStatus(ctx context.Context, id uint, status int8) error {
 	return global.GVA_DB.WithContext(ctx).Model(&jxc.Goods{}).Where("id = ?", id).Update("status", status).Error
@@ -108,6 +119,11 @@ func (s *GoodsService) UpdateSku(ctx context.Context, sku *jxc.GoodsSku) error {
 // DeleteSku 删除 SKU
 func (s *GoodsService) DeleteSku(ctx context.Context, id uint) error {
 	return global.GVA_DB.WithContext(ctx).Delete(&jxc.GoodsSku{}, id).Error
+}
+
+// DeleteSkuForever 彻底删除 SKU（物理删除，不可恢复）
+func (s *GoodsService) DeleteSkuForever(ctx context.Context, id uint) error {
+	return global.GVA_DB.WithContext(ctx).Unscoped().Delete(&jxc.GoodsSku{}, id).Error
 }
 
 // SetSkuStatus 设置 SKU 状态 （启用/停用）

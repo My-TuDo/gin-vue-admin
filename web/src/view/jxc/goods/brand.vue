@@ -26,12 +26,17 @@
         <el-table-column label="创建时间" width="170">
           <template #default="{ row }"> {{ dayjs(row.CreatedAt).format('YYYY-MM-DD HH:mm') }} </template>
         </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="openDialog(row.ID)">编辑</el-button>
             <el-popconfirm title="确认删除?" @confirm="handleDelete(row.ID)">
               <template #reference>
                 <el-button type="danger" link>删除</el-button>
+              </template>
+            </el-popconfirm>
+            <el-popconfirm title="彻底删除不可恢复，确认?" @confirm="handleDeleteForever(row.ID)">
+              <template #reference>
+                <el-button type="danger" link>彻底删除</el-button>
               </template>
             </el-popconfirm>
           </template>
@@ -70,7 +75,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
-import { getBrandList, createBrand, updateBrand, deleteBrand, setBrandStatus } from '@/api/jxc/basic'
+import { getBrandList, createBrand, updateBrand, deleteBrand, deleteBrandForever, setBrandStatus } from '@/api/jxc/basic'
 
 const loading = ref(false), page = ref(1), pageSize = ref(10), total = ref(0)
 const keyword = ref('')
@@ -120,6 +125,12 @@ async function submitForm() {
 async function handleDelete(id) {
   await deleteBrand({ id })
   ElMessage.success('删除成功')
+  await fetchData()
+}
+
+async function handleDeleteForever(id) {
+  await deleteBrandForever({ id })
+  ElMessage.success('已彻底删除')
   await fetchData()
 }
 

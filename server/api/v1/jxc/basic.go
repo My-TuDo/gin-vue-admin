@@ -96,6 +96,28 @@ func (a *BasicApi) DeleteCategory(c *gin.Context) {
 	response.OkWithMessage("删除分类成功", c)
 }
 
+// DeleteCategoryForever 彻底删除商品分类
+// @Tags     JxcCategory
+// @Summary  彻底删除商品分类（物理删除，不可恢复）
+// @Security ApiKeyAuth
+// @accept   application/json
+// @Produce  application/json
+// @Param    data body      request.GetById  true "分类ID"
+// @Success  200  {object}  response.Response{msg=string}  "彻底删除成功"
+// @Router   /jxc/category/forever [delete]
+func (a *BasicApi) DeleteCategoryForever(c *gin.Context) {
+	var req request.GetById
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	if err := basicService.DeleteCategoryForever(c.Request.Context(), req.Uint()); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithMessage("彻底删除成功", c)
+}
+
 // SetCategoryStatus 启用/停用商品分类
 // @Router /jxc/category/status [put]
 func (a *BasicApi) SetCategoryStatus(c *gin.Context) {
@@ -191,6 +213,28 @@ func (a *BasicApi) DeleteBrand(c *gin.Context) {
 	response.OkWithMessage("操作成功", c)
 }
 
+// DeleteBrandForever 彻底删除品牌
+// @Tags     JxcBrand
+// @Summary  彻底删除品牌（物理删除，不可恢复）
+// @Security ApiKeyAuth
+// @accept   application/json
+// @Produce  application/json
+// @Param    data body      request.GetById  true "品牌ID"
+// @Success  200  {object}  response.Response{msg=string}  "彻底删除成功"
+// @Router   /jxc/brand/forever [delete]
+func (a *BasicApi) DeleteBrandForever(c *gin.Context) {
+	var req request.GetById
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	if err := basicService.DeleteBrandForever(c.Request.Context(), req.Uint()); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithMessage("彻底删除成功", c)
+}
+
 // SetBrandStatus 启用/停用品牌
 func (a *BasicApi) SetBrandStatus(c *gin.Context) {
 	var req struct {
@@ -278,6 +322,28 @@ func (a *BasicApi) DeleteSupplier(c *gin.Context) {
 		return
 	}
 	response.OkWithMessage("删除成功", c)
+}
+
+// DeleteSupplierForever 彻底删除供应商
+// @Tags     JxcSupplier
+// @Summary  彻底删除供应商（物理删除，不可恢复）
+// @Security ApiKeyAuth
+// @accept   application/json
+// @Produce  application/json
+// @Param    data body      request.GetById  true "供应商ID"
+// @Success  200  {object}  response.Response{msg=string}  "彻底删除成功"
+// @Router   /jxc/supplier/forever [delete]
+func (a *BasicApi) DeleteSupplierForever(c *gin.Context) {
+	var req request.GetById
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	if err := basicService.DeleteSupplierForever(c.Request.Context(), req.Uint()); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithMessage("彻底删除成功", c)
 }
 
 // SetSupplierStatus 启用/停用供应商
@@ -369,6 +435,28 @@ func (a *BasicApi) DeleteCustomer(c *gin.Context) {
 	response.OkWithMessage("删除成功", c)
 }
 
+// DeleteCustomerForever 彻底删除客户
+// @Tags     JxcCustomer
+// @Summary  彻底删除客户（物理删除，不可恢复）
+// @Security ApiKeyAuth
+// @accept   application/json
+// @Produce  application/json
+// @Param    data body      request.GetById  true "客户ID"
+// @Success  200  {object}  response.Response{msg=string}  "彻底删除成功"
+// @Router   /jxc/customer/forever [delete]
+func (a *BasicApi) DeleteCustomerForever(c *gin.Context) {
+	var req request.GetById
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	if err := basicService.DeleteCustomerForever(c.Request.Context(), req.Uint()); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithMessage("彻底删除成功", c)
+}
+
 // SetCustomerStatus 启用/停用客户
 func (a *BasicApi) SetCustomerStatus(c *gin.Context) {
 	var req struct {
@@ -456,6 +544,28 @@ func (a *BasicApi) DeleteWarehouse(c *gin.Context) {
 		return
 	}
 	response.OkWithMessage("删除成功", c)
+}
+
+// DeleteWarehouseForever 彻底删除仓库
+// @Tags     JxcWarehouse
+// @Summary  彻底删除仓库（物理删除，不可恢复）
+// @Security ApiKeyAuth
+// @accept   application/json
+// @Produce  application/json
+// @Param    data body      request.GetById  true "仓库ID"
+// @Success  200  {object}  response.Response{msg=string}  "彻底删除成功"
+// @Router   /jxc/warehouse/forever [delete]
+func (a *BasicApi) DeleteWarehouseForever(c *gin.Context) {
+	var req request.GetById
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	if err := basicService.DeleteWarehouseForever(c.Request.Context(), req.Uint()); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithMessage("彻底删除成功", c)
 }
 
 // SetWarehouseStatus 启用/停用仓库

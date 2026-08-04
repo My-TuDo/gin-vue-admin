@@ -213,14 +213,19 @@ func TestApiBindFailures(t *testing.T) {
 	}{
 		{"CreateCategory", api.CreateCategory}, {"UpdateCategory", api.UpdateCategory},
 		{"DeleteCategory", api.DeleteCategory}, {"SetCategoryStatus", api.SetCategoryStatus},
+		{"DeleteCategoryForever", api.DeleteCategoryForever},
 		{"CreateBrand", api.CreateBrand}, {"UpdateBrand", api.UpdateBrand},
 		{"DeleteBrand", api.DeleteBrand}, {"SetBrandStatus", api.SetBrandStatus},
+		{"DeleteBrandForever", api.DeleteBrandForever},
 		{"CreateSupplier", api.CreateSupplier}, {"UpdateSupplier", api.UpdateSupplier},
 		{"DeleteSupplier", api.DeleteSupplier}, {"SetSupplierStatus", api.SetSupplierStatus},
+		{"DeleteSupplierForever", api.DeleteSupplierForever},
 		{"CreateCustomer", api.CreateCustomer}, {"UpdateCustomer", api.UpdateCustomer},
 		{"DeleteCustomer", api.DeleteCustomer}, {"SetCustomerStatus", api.SetCustomerStatus},
+		{"DeleteCustomerForever", api.DeleteCustomerForever},
 		{"CreateWarehouse", api.CreateWarehouse}, {"UpdateWarehouse", api.UpdateWarehouse},
 		{"DeleteWarehouse", api.DeleteWarehouse}, {"SetWarehouseStatus", api.SetWarehouseStatus},
+		{"DeleteWarehouseForever", api.DeleteWarehouseForever},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -229,6 +234,16 @@ func TestApiBindFailures(t *testing.T) {
 				t.Fatalf("坏 JSON 应返回业务错误码")
 			}
 		})
+	}
+}
+
+// TestApiDeleteCategoryForever 测试彻底删除分类接口
+func TestApiDeleteCategoryForever(t *testing.T) {
+	apiTestDB(t)
+	global.GVA_DB.Create(&jxc.GoodsCategory{Code: "C001", Name: "男装", Status: 1})
+	_, rb := doReq(t, api.DeleteCategoryForever, http.MethodDelete, `{"id":1}`)
+	if rb.Code != 0 {
+		t.Fatalf("delete forever code=%d msg=%s", rb.Code, rb.Msg)
 	}
 }
 
