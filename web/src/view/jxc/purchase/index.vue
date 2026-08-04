@@ -215,7 +215,7 @@ const loadOptions = async () => {
   ])
   suppliers.value = s.data.list || []
   warehouses.value = w.data.list || []
-  skuOptions.value = sku.data.list || []
+  skuOptions.value = (sku.data.list || []).filter(s => s.status === 1)
 }
 
 const addItem = () => form.items.push({ skuId: undefined, qty: 1, price: 0 })
