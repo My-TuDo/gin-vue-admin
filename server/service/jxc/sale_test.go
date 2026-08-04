@@ -47,13 +47,13 @@ func getStockQty(t *testing.T, skuID uint) (qty, lock int) {
 	return stock.Quantity, stock.LockQuantity
 }
 
-// TestCreateSaleOrder_Lock 测试建单锁定库存
+// TestCreateSaleOrder_Lock 测试建单锁定库存（单价强制取 SKU 销售价）
 func TestCreateSaleOrder_Lock(t *testing.T) {
 	saleTestDB(t)
 	skuID := newSaleFixture(t)
 	order := &jxc.SaleOrder{
 		WarehouseID: 1, OrderType: jxc.SaleTypeNormal,
-		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 3, Price: 15}},
+		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 3, Price: 99}}, // 前端传 99，应被强制为 SKU 销售价 15
 	}
 	if err := saleSvc.CreateSaleOrder(context.Background(), order); err != nil {
 		t.Fatalf("创建销售单失败: %v", err)
@@ -62,7 +62,7 @@ func TestCreateSaleOrder_Lock(t *testing.T) {
 		t.Errorf("初始状态应为待出库, got %d", order.Status)
 	}
 	if order.TotalAmount != 45 {
-		t.Errorf("总金额应为 45, got %v", order.TotalAmount)
+		t.Errorf("总金额应为 45（3*15, 强制销售价）, got %v", order.TotalAmount)
 	}
 	qty, lock := getStockQty(t, skuID)
 	if qty != 10 || lock != 3 {
@@ -72,6 +72,9 @@ func TestCreateSaleOrder_Lock(t *testing.T) {
 	global.GVA_DB.Where("sale_id = ?", order.ID).Find(&items)
 	if len(items) != 1 || items[0].SkuCode != "SP001-M-红" {
 		t.Errorf("明细快照未写入: %+v", items)
+	}
+	if items[0].Price != 15 {
+		t.Errorf("明细单价应强制为 SKU 销售价 15, got %v", items[0].Price)
 	}
 }
 
@@ -378,9 +381,6 @@ func TestSale_ErrorBranches(t *testing.T) {
 	}
 	if err := saleSvc.CreateSaleOrder(ctx, &jxc.SaleOrder{WarehouseID: 1, Items: []jxc.SaleItem{{SkuID: skuID, Qty: 0}}}); err == nil {
 		t.Error("数量0应报错")
-	}
-	if err := saleSvc.CreateSaleOrder(ctx, &jxc.SaleOrder{WarehouseID: 1, Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: -1}}}); err == nil {
-		t.Error("负单价应报错")
 	}
 	if err := saleSvc.CreateSaleOrder(ctx, &jxc.SaleOrder{WarehouseID: 1, Items: []jxc.SaleItem{{SkuID: 999, Qty: 1}}}); err == nil {
 		t.Error("SKU不存在应报错")
