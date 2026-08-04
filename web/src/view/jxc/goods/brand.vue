@@ -13,7 +13,7 @@
         <el-table-column label="品牌名称" prop="name" min-width="150" />
         <el-table-column label="Logo" width="80" align="center">
           <template #default="{ row }">
-            <el-avatar v-if="row.logo" :src="row.logo" size="small" />
+            <el-avatar v-if="row.logo" :src="getUrl(row.logo)" size="small" />
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -56,8 +56,9 @@
         <el-form-item label="品牌名称" prop="name">
           <el-input v-model="form.name" />
         </el-form-item>
-        <el-form-item label="Logo URL" prop="logo">
-          <el-input v-model="form.logo" placeholder="可选" />
+        <el-form-item label="品牌Logo">
+          <upload-image :image-url="form.logo" @on-success="(url) => (form.logo = url)" />
+          <el-image v-if="form.logo" :src="getUrl(form.logo)" :preview-src-list="[getUrl(form.logo)]" preview-teleported fit="cover" style="width: 60px; height: 60px; border-radius: 4px; margin-left: 8px" />
         </el-form-item>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="form.remark" type="textarea" :rows="2" />
@@ -76,6 +77,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import { getBrandList, createBrand, updateBrand, deleteBrand, deleteBrandForever, setBrandStatus } from '@/api/jxc/basic'
+import UploadImage from '@/components/upload/image.vue'
+import { getUrl } from '@/utils/image'
 
 const loading = ref(false), page = ref(1), pageSize = ref(10), total = ref(0)
 const keyword = ref('')
@@ -83,13 +86,13 @@ const tableData = ref([])
 const dialogVisible = ref(false), submitLoading = ref(false), isEdit = ref(false)
 const formRef = ref(null)
 
-const form = reactive({ ID: 0, code: '', name: '', logo: '', remark: '' })
+const form = reactive({ ID: 0, code: '', name: '', logo: '', status: 1, remark: '' })
 const rules = {
   // code: 编码由后端自动生成（前缀+日期+序号）
   name: [{ required: true, message: '请输入品牌名称', trigger: 'blur' }],
 }
 
-function resetForm() { Object.assign(form, { ID: 0, code: '', name: '', logo: '', remark: '' }) }
+function resetForm() { Object.assign(form, { ID: 0, code: '', name: '', logo: '', status: 1, remark: '' }) }
 
 async function fetchData() {
   loading.value = true
@@ -105,7 +108,7 @@ function openDialog(id) {
   resetForm()
   if (id) {
     const row = tableData.value.find(r => r.ID === id)
-    if (row) Object.assign(form, { ID: row.ID, code: row.code, name: row.name, logo: row.logo || '', remark: row.remark || '' })
+    if (row) Object.assign(form, { ID: row.ID, code: row.code, name: row.name, logo: row.logo || '', status: row.status === 1 ? 1 : 0, remark: row.remark || '' })
   }
   dialogVisible.value = true
 }

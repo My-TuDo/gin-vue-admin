@@ -81,13 +81,13 @@ import { getSupplierList, createSupplier, updateSupplier, deleteSupplier, delete
 const loading = ref(false), page = ref(1), pageSize = ref(10), total = ref(0), keyword = ref('')
 const tableData = ref([]), dialogVisible = ref(false), submitLoading = ref(false), isEdit = ref(false)
 const formRef = ref(null)
-const form = reactive({ ID: 0, code: '', name: '', contact: '', phone: '', address: '', remark: '' })
+const form = reactive({ ID: 0, code: '', name: '', contact: '', phone: '', address: '', status: 1, remark: '' })
 const rules = {
   // code: 编码由后端自动生成（前缀+日期+序号）
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
 }
 
-function resetForm() { Object.assign(form, { ID: 0, code: '', name: '', contact: '', phone: '', address: '', remark: '' }) }
+function resetForm() { Object.assign(form, { ID: 0, code: '', name: '', contact: '', phone: '', address: '', status: 1, remark: '' }) }
 
 async function fetchData() {
   loading.value = true
@@ -103,7 +103,7 @@ function openDialog(id) {
   resetForm()
   if (id) {
     const row = tableData.value.find(r => r.ID === id)
-    if (row) Object.assign(form, { ID: row.ID, code: row.code, name: row.name, contact: row.contact || '', phone: row.phone || '', address: row.address || '', remark: row.remark || '' })
+    if (row) Object.assign(form, { ID: row.ID, code: row.code, name: row.name, contact: row.contact || '', phone: row.phone || '', address: row.address || '', status: row.status === 1 ? 1 : 0, remark: row.remark || '' })
   }
   dialogVisible.value = true
 }
