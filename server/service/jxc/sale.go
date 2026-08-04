@@ -59,7 +59,7 @@ func (s *SaleService) unlockStock(tx *gorm.DB, warehouseID, skuID uint, qty int)
 	return tx.Model(&stock).Update("lock_quantity", stock.LockQuantity-qty).Error
 }
 
-// fillItemSnapshot 填充明细快照并汇总金额
+// fillItemSnapshot 填充明细快照并汇总金额（单价以 SKU 销售价为准，不允许单据自定义）
 func (s *SaleService) fillItemSnapshot(db *gorm.DB, items []jxc.SaleItem) (float64, error) {
 	var total float64
 	for i := range items {
@@ -67,15 +67,14 @@ func (s *SaleService) fillItemSnapshot(db *gorm.DB, items []jxc.SaleItem) (float
 		if it.Qty <= 0 {
 			return 0, errors.New("销售数量必须大于 0")
 		}
-		if it.Price < 0 {
-			return 0, errors.New("销售单价不能为负")
-		}
-		it.Amount = float64(it.Qty) * it.Price
-		total += it.Amount
 		var sku jxc.GoodsSku
 		if err := db.First(&sku, it.SkuID).Error; err != nil {
 			return 0, errors.New("SKU 不存在")
 		}
+		// 单价固定取 SKU 销售价，前端传入的 price 一律忽略（角色改价权限后续版本开放）
+		it.Price = sku.SalePrice
+		it.Amount = float64(it.Qty) * it.Price
+		total += it.Amount
 		it.SkuCode = sku.SkuCode
 		it.Color = sku.Color
 		it.Size = sku.Size

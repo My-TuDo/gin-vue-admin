@@ -115,9 +115,10 @@
                   <el-input-number v-model="row.qty" :min="1" style="width: 100%" />
                 </template>
               </el-table-column>
-              <el-table-column label="单价" width="130">
+              <el-table-column label="单价" width="110" align="right">
                 <template #default="{ row }">
-                  <el-input-number v-model="row.price" :min="0" :precision="2" style="width: 100%" />
+                  <span v-if="row.price">¥ {{ row.price.toFixed(2) }}</span>
+                  <span v-else class="text-muted">选SKU后自动带出</span>
                 </template>
               </el-table-column>
               <el-table-column label="金额" width="110" align="right">
@@ -244,7 +245,7 @@ const loadShippedOrders = async () => {
 
 const addItem = () => form.items.push({ skuId: undefined, qty: 1, price: 0 })
 
-// 选中 SKU 后带出其销售价作为单价（可手动修改）
+// 选中 SKU 后带出其销售价作为单价（单价以 SKU 销售价为准，不可修改）
 const onSkuChange = (row) => {
   const sku = skuOptions.value.find((s) => s.ID === row.skuId)
   if (sku) row.price = sku.salePrice || 0
