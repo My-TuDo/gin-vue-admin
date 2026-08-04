@@ -95,8 +95,8 @@
             <el-table :data="form.items" border size="small" max-height="320">
               <el-table-column label="SKU" min-width="220">
                 <template #default="{ row }">
-                  <el-select v-model="row.skuId" placeholder="选择SKU" filterable style="width: 100%">
-                    <el-option v-for="s in skuOptions" :key="s.ID" :label="`${s.skuCode} ${s.color}${s.size ? '/' + s.size : ''}`" :value="s.ID" />
+                  <el-select v-model="row.skuId" placeholder="选择SKU" filterable style="width: 100%" @change="onSkuChange(row)">
+                    <el-option v-for="s in skuOptions" :key="s.ID" :label="s.skuCode" :value="s.ID" />
                   </el-select>
                 </template>
               </el-table-column>
@@ -219,6 +219,12 @@ const loadOptions = async () => {
 }
 
 const addItem = () => form.items.push({ skuId: undefined, qty: 1, price: 0 })
+
+// 选中 SKU 后自动带出其成本价作为采购单价（可手动修改）
+const onSkuChange = (row) => {
+  const sku = skuOptions.value.find((s) => s.ID === row.skuId)
+  if (sku) row.price = sku.costPrice || 0
+}
 
 const openCreate = () => {
   Object.assign(form, { ID: 0, supplierId: undefined, warehouseId: undefined, remark: '', items: [] })

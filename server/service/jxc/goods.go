@@ -89,7 +89,7 @@ func (s *GoodsService) SetGoodsStatus(ctx context.Context, id uint, status int8)
 
 // GetSkuList 查询SKU列表（goodsId 为 0 时返回全部, 供采购/销售选品）
 func (s *GoodsService) GetSkuList(ctx context.Context, goodsId uint) (list []jxc.GoodsSku, err error) {
-	db := global.GVA_DB.WithContext(ctx).Model(&jxc.GoodsSku{})
+	db := global.GVA_DB.WithContext(ctx).Model(&jxc.GoodsSku{}).Where("goods_id > 0")
 	if goodsId > 0 {
 		db = db.Where("goods_id = ?", goodsId)
 	}

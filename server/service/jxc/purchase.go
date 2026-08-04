@@ -232,6 +232,11 @@ func (s *PurchaseService) StockIn(ctx context.Context, id uint, operator string)
 			if err := tx.Create(&log).Error; err != nil {
 				return err
 			}
+			// 回写 SKU 成本价（最新进价法）
+			if err := tx.Model(&jxc.GoodsSku{}).Where("id = ?", it.SkuID).
+				Update("cost_price", it.Price).Error; err != nil {
+				return err
+			}
 		}
 		return tx.Model(&jxc.PurchaseOrder{}).Where("id = ?", id).
 			Update("status", jxc.PurchaseStatusStockIn).Error

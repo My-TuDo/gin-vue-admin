@@ -261,6 +261,12 @@ func TestStockIn(t *testing.T) {
 	if len(logs) != 1 || logs[0].BusinessType != "purchase_in" || logs[0].BeforeQty != 0 || logs[0].AfterQty != 10 {
 		t.Errorf("流水不符: %+v", logs)
 	}
+	// 成本价回写（最新进价法）
+	var sku jxc.GoodsSku
+	global.GVA_DB.First(&sku, skuID)
+	if sku.CostPrice != 10 {
+		t.Errorf("入库后 SKU 成本价应回写为采购单价 10, got %v", sku.CostPrice)
+	}
 	// 重复入库拒绝（状态已变）
 	if err := purchaseSvc.StockIn(ctx, oid, "tester"); err == nil {
 		t.Error("重复入库应拒绝")
