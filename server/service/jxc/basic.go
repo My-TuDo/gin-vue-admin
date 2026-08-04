@@ -223,12 +223,10 @@ func (s *BasicService) UpdateSupplier(ctx context.Context, spli *jxc.Supplier) e
 	return global.GVA_DB.WithContext(ctx).Omit("code", "created_at").Save(spli).Error // 忽略code字段，避免更新时修改唯一约束
 }
 
-type PurchaseOrder struct{} // 占位使用，采购订单表暂未实现
-
 // DeleteSupplier 删除供应商（软删除，需嵌入 global.GVA_MODEL/Deleted_At）
 func (s *BasicService) DeleteSupplier(ctx context.Context, id uint) error {
 	var orderCount int64
-	global.GVA_DB.WithContext(ctx).Model(&PurchaseOrder{}).Where("supplier_id = ?", id).Count(&orderCount) // PurchaseOrder 采购订单表暂未实现
+	global.GVA_DB.WithContext(ctx).Model(&jxc.PurchaseOrder{}).Where("supplier_id = ?", id).Count(&orderCount)
 	if orderCount > 0 {
 		return errors.New("该供应商已被采购订单引用，无法删除")
 	}
@@ -239,7 +237,7 @@ func (s *BasicService) DeleteSupplier(ctx context.Context, id uint) error {
 func (s *BasicService) DeleteSupplierForever(ctx context.Context, id uint) error {
 	db := global.GVA_DB.WithContext(ctx)
 	var orderCount int64
-	db.Model(&PurchaseOrder{}).Where("supplier_id = ?", id).Count(&orderCount)
+	db.Model(&jxc.PurchaseOrder{}).Where("supplier_id = ?", id).Count(&orderCount)
 	if orderCount > 0 {
 		return errors.New("该供应商已被采购订单引用，无法删除")
 	}
@@ -367,12 +365,10 @@ func (s *BasicService) UpdateWarehouse(ctx context.Context, w *jxc.Warehouse) er
 	return global.GVA_DB.WithContext(ctx).Omit("code", "created_at").Save(w).Error // 忽略code字段，避免更新时修改唯一约束
 }
 
-type Stock struct{} // 占位使用，库存表暂未实现
-
 // DeleteWarehouse 删除仓库（软删除，需嵌入 global.GVA_MODEL/Deleted_At）
 func (s *BasicService) DeleteWarehouse(ctx context.Context, id uint) error {
 	var stockTotal int64
-	global.GVA_DB.WithContext(ctx).Model(&Stock{}).Where("warehouse_id = ? AND quantity > 0", id).Count(&stockTotal)
+	global.GVA_DB.WithContext(ctx).Model(&jxc.Stock{}).Where("warehouse_id = ? AND quantity > 0", id).Count(&stockTotal)
 	if stockTotal > 0 {
 		return errors.New("该仓库仍存在库存，无法删除")
 	}
@@ -383,7 +379,7 @@ func (s *BasicService) DeleteWarehouse(ctx context.Context, id uint) error {
 func (s *BasicService) DeleteWarehouseForever(ctx context.Context, id uint) error {
 	db := global.GVA_DB.WithContext(ctx)
 	var stockTotal int64
-	db.Model(&Stock{}).Where("warehouse_id = ? AND quantity > 0", id).Count(&stockTotal)
+	db.Model(&jxc.Stock{}).Where("warehouse_id = ? AND quantity > 0", id).Count(&stockTotal)
 	if stockTotal > 0 {
 		return errors.New("该仓库仍存在库存，无法删除")
 	}

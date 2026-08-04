@@ -88,6 +88,10 @@ func RegisterTables() {
 		jxc.Warehouse{},
 		jxc.Goods{},
 		jxc.GoodsSku{},
+	jxc.PurchaseOrder{},
+	jxc.PurchaseItem{},
+	jxc.Stock{},
+	jxc.StockLog{},
 	)
 	if err != nil {
 		logger.Bg().Mod("system").Err(err).Error("register table failed")
