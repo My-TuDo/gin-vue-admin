@@ -115,7 +115,8 @@ async function submitForm() {
   if (!valid) return
   submitLoading.value = true
   try {
-    form.ID ? await updateBrand(form) : await createBrand(form)
+    const res = form.ID ? await updateBrand(form) : await createBrand(form)
+    if (res && res.code !== 0) return
     ElMessage.success(form.ID ? '更新成功' : '创建成功')
     dialogVisible.value = false
     await fetchData()
@@ -123,21 +124,24 @@ async function submitForm() {
 }
 
 async function handleDelete(id) {
-  await deleteBrand({ id })
+  const res = await deleteBrand({ id })
+  if (res && res.code !== 0) return
   ElMessage.success('删除成功')
   await fetchData()
 }
 
 async function handleDeleteForever(id) {
-  await deleteBrandForever({ id })
+  const res = await deleteBrandForever({ id })
+  if (res && res.code !== 0) return
   ElMessage.success('已彻底删除')
   await fetchData()
 }
 
 async function toggleStatus(row) {
   const s = row.status === 1 ? 0 : 1
-  await setBrandStatus({ id: row.ID, status: s })
-  row.status = s
+  const res = await setBrandStatus({ id: row.ID, status: s })
+  if (res && res.code !== 0) return
+  row.status = s;
   ElMessage.success(s === 1 ? '已启用' : '已停用')
 }
 
