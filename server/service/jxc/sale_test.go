@@ -238,6 +238,23 @@ func TestConfirmReturn(t *testing.T) {
 	if len(logs) != 1 || logs[0].ChangeQty != 1 {
 		t.Errorf("退货流水不符: %+v", logs)
 	}
+	// 虚增拦截：草稿阶段各自校验通过（只统计已确认占用），确认时硬校验拒绝超限
+	retA := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeReturn, OriginalOrderID: &sale.ID,
+		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 2, Price: 15}}}
+	if err := saleSvc.CreateSaleOrder(ctx, retA); err != nil {
+		t.Fatalf("创建草稿A失败: %v", err)
+	}
+	retB := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeReturn, OriginalOrderID: &sale.ID,
+		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 15}}}
+	if err := saleSvc.CreateSaleOrder(ctx, retB); err != nil {
+		t.Fatalf("创建草稿B失败: %v", err)
+	}
+	if err := saleSvc.ConfirmReturn(ctx, retA.ID, "tester"); err != nil {
+		t.Fatalf("草稿A确认失败: %v", err)
+	}
+	if err := saleSvc.ConfirmReturn(ctx, retB.ID, "tester"); err == nil {
+		t.Error("确认时入库超限应被拒绝（禁止虚增）")
+	}
 	// 非退货单不可退货
 	if err := saleSvc.ConfirmReturn(ctx, sale.ID, "tester"); err == nil {
 		t.Error("正常销售单执行退货应拒绝")
