@@ -73,7 +73,7 @@
     <el-dialog v-model="editVisible" :title="form.ID ? '编辑销售单' : '新建销售单'" width="880px" destroy-on-close>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-form-item label="单据类型" prop="orderType">
-          <el-select v-model="form.orderType" style="width: 200px">
+          <el-select v-model="form.orderType" style="width: 200px" @change="onTypeChange">
             <el-option label="正常销售" :value="1" />
             <el-option label="退货退款" :value="2" />
             <el-option label="换货" :value="3" />
@@ -403,6 +403,20 @@ const openCreate = () => {
   editVisible.value = true
 }
 
+// 单据类型切换时规整明细：换货=保留方向行（默认给一行换出+一行换入）；其他=全部转 direction 0
+const onTypeChange = (t) => {
+  if (t === 3) {
+    form.items = form.items.filter((it) => it.direction !== 0)
+    if (!form.items.length) {
+      addOutItem()
+      addInItem()
+    }
+  } else {
+    form.items = form.items.map((it) => ({ ...it, direction: 0 }))
+    if (!form.items.length) addItem()
+  }
+}
+
 const openEdit = (row) => {
   Object.assign(form, { ID: row.ID, orderType: row.orderType, customerId: row.customerId, warehouseId: row.warehouseId, originalOrderId: row.originalOrderId, remark: row.remark, items: [] })
   if (row.originalOrderId) onOriginalChange(row.originalOrderId)
@@ -428,8 +442,9 @@ const handleSave = async () => {
     ElMessage.warning('请完整选择每行的 SKU')
     return
   }
-  // 换货单必须同时包含换出与换入明细
+  // 换货单必须同时包含换出与换入明细（防御：剔除可能残留的无方向行）
   if (form.orderType === 3) {
+    form.items = form.items.filter((it) => it.direction !== 0)
     if (!outItems.value.length || !inItems.value.length) {
       ElMessage.warning('换货单必须同时包含换出和换入明细')
       return
