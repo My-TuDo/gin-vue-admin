@@ -42,16 +42,17 @@ func (SaleOrder) TableName() string { return "sale_order" }
 
 // SaleItem 销售明细（生命周期跟随销售单，不软删除）
 type SaleItem struct {
-	ID        uint     `json:"ID" gorm:"primarykey;comment:主键ID"`
-	SaleID    uint     `json:"saleId" gorm:"column:sale_id;not null;index:idx_sale_item_order;comment:销售单ID"`
-	SkuID     uint     `json:"skuId" gorm:"column:sku_id;not null;comment:SKU ID"`
-	SkuCode   string   `json:"skuCode" gorm:"column:sku_code;size:50;comment:SKU编码快照"`
-	GoodsName string   `json:"goodsName" gorm:"column:goods_name;size:200;comment:商品名称快照"`
-	Color     string   `json:"color" gorm:"column:color;size:50;comment:颜色快照"`
-	Size      string   `json:"size" gorm:"column:size;size:50;comment:尺码快照"`
-	Qty       int      `json:"qty" gorm:"column:qty;not null;default:0;comment:销售数量"`
-	Price     float64  `json:"price" gorm:"column:price;type:decimal(12,2);not null;default:0;comment:销售单价"`
-	Amount    float64  `json:"amount" gorm:"column:amount;type:decimal(12,2);not null;default:0;comment:销售金额 qty*price"`
+	ID        uint    `json:"ID" gorm:"primarykey;comment:主键ID"`
+	SaleID    uint    `json:"saleId" gorm:"column:sale_id;not null;index:idx_sale_item_order;comment:销售单ID"`
+	SkuID     uint    `json:"skuId" gorm:"column:sku_id;not null;comment:SKU ID"`
+	SkuCode   string  `json:"skuCode" gorm:"column:sku_code;size:50;comment:SKU编码快照"`
+	GoodsName string  `json:"goodsName" gorm:"column:goods_name;size:200;comment:商品名称快照"`
+	Color     string  `json:"color" gorm:"column:color;size:50;comment:颜色快照"`
+	Size      string  `json:"size" gorm:"column:size;size:50;comment:尺码快照"`
+	Qty       int     `json:"qty" gorm:"column:qty;not null;default:0;comment:数量（恒为正）"`
+	Price     float64 `json:"price" gorm:"column:price;type:decimal(12,2);not null;default:0;comment:销售单价"`
+	Amount    float64 `json:"amount" gorm:"column:amount;type:decimal(12,2);not null;default:0;comment:金额（退货/换入为负）"`
+	Direction int8    `json:"direction" gorm:"column:direction;not null;default:0;comment:方向 0默认 1换出(正) 2换入(负)"`
 
 	Sku *GoodsSku `json:"sku" gorm:"foreignKey:SkuID;references:ID"`
 }

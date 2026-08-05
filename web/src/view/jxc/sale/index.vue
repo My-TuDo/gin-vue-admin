@@ -101,37 +101,87 @@
         <!-- 明细 -->
         <el-form-item label="销售明细">
           <div style="width: 100%">
-            <div v-if="form.orderType === 3" class="mb-2 tip-text">换货单：换出数量填<b>负数</b>，换入数量填正数，确认时同时处理</div>
-            <el-table :data="form.items" border size="small" max-height="320">
-              <el-table-column label="SKU" min-width="200">
-                <template #default="{ row }">
-                  <el-select v-model="row.skuId" placeholder="选择SKU" filterable style="width: 100%" @change="onSkuChange(row)">
-                    <el-option v-for="s in skuOptions" :key="s.ID" :label="s.skuCode" :value="s.ID" />
-                  </el-select>
-                </template>
-              </el-table-column>
-              <el-table-column label="数量" width="130">
-                <template #default="{ row }">
-                  <el-input-number v-model="row.qty" :min="form.orderType === 3 ? -99999 : 1" style="width: 100%" />
-                </template>
-              </el-table-column>
-              <el-table-column label="单价" width="110" align="right">
-                <template #default="{ row }">
-                  <span v-if="row.price">¥ {{ row.price.toFixed(2) }}</span>
-                  <span v-else class="text-muted">选SKU后自动带出</span>
-                </template>
-              </el-table-column>
-              <el-table-column label="金额" width="110" align="right">
-                <template #default="{ row }">¥ {{ ((row.qty || 0) * (row.price || 0)).toFixed(2) }}</template>
-              </el-table-column>
-              <el-table-column label="操作" width="60" align="center">
-                <template #default="{ $index }">
-                  <el-button link type="danger" @click="form.items.splice($index, 1)">删</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-            <el-button type="primary" link icon="Plus" class="mt-2" @click="addItem">添加明细</el-button>
-            <div class="mt-2 text-right">合计金额：<b style="color: #e6a23c">¥ {{ totalAmount.toFixed(2) }}</b></div>
+            <!-- 换货：出库/入库双子列表 -->
+            <template v-if="form.orderType === 3">
+              <div class="sub-title">换出明细（卖出，金额为正）</div>
+              <el-table :data="outItems" border size="small" max-height="220">
+                <el-table-column label="SKU" min-width="200">
+                  <template #default="{ row }">
+                    <el-select v-model="row.skuId" placeholder="选择SKU" filterable style="width: 100%" @change="onSkuChange(row)">
+                      <el-option v-for="s in skuOptions" :key="s.ID" :label="s.skuCode" :value="s.ID" />
+                    </el-select>
+                  </template>
+                </el-table-column>
+                <el-table-column label="数量" width="110">
+                  <template #default="{ row }"><el-input-number v-model="row.qty" :min="1" style="width: 100%" /></template>
+                </el-table-column>
+                <el-table-column label="金额" width="110" align="right">
+                  <template #default="{ row }">¥ {{ ((row.qty || 0) * (row.price || 0)).toFixed(2) }}</template>
+                </el-table-column>
+                <el-table-column label="操作" width="60" align="center">
+                  <template #default="{ $index }">
+                    <el-button link type="danger" @click="form.items.splice(outIndex($index), 1)">删</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <el-button type="primary" link icon="Plus" class="mt-2" @click="addOutItem">添加换出明细</el-button>
+              <div class="sub-title mt-3">换入明细（收回，金额为负）</div>
+              <el-table :data="inItems" border size="small" max-height="220">
+                <el-table-column label="SKU" min-width="200">
+                  <template #default="{ row }">
+                    <el-select v-model="row.skuId" placeholder="选择SKU" filterable style="width: 100%" @change="onSkuChange(row)">
+                      <el-option v-for="s in skuOptions" :key="s.ID" :label="s.skuCode" :value="s.ID" />
+                    </el-select>
+                  </template>
+                </el-table-column>
+                <el-table-column label="数量" width="110">
+                  <template #default="{ row }"><el-input-number v-model="row.qty" :min="1" style="width: 100%" /></template>
+                </el-table-column>
+                <el-table-column label="金额" width="110" align="right">
+                  <template #default="{ row }">-¥ {{ ((row.qty || 0) * (row.price || 0)).toFixed(2) }}</template>
+                </el-table-column>
+                <el-table-column label="操作" width="60" align="center">
+                  <template #default="{ $index }">
+                    <el-button link type="danger" @click="form.items.splice(inIndex($index), 1)">删</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <el-button type="primary" link icon="Plus" class="mt-2" @click="addInItem">添加换入明细</el-button>
+              <div class="mt-2 text-right">
+                差额（出−入，多退少补）：<b :style="{ color: totalAmount >= 0 ? '#67c23a' : '#f56c6c' }">¥ {{ totalAmount.toFixed(2) }}</b>
+              </div>
+            </template>
+            <!-- 正常销售/退货：单一列表 -->
+            <template v-else>
+              <el-table :data="form.items" border size="small" max-height="320">
+                <el-table-column label="SKU" min-width="200">
+                  <template #default="{ row }">
+                    <el-select v-model="row.skuId" placeholder="选择SKU" filterable style="width: 100%" @change="onSkuChange(row)">
+                      <el-option v-for="s in skuOptions" :key="s.ID" :label="s.skuCode" :value="s.ID" />
+                    </el-select>
+                  </template>
+                </el-table-column>
+                <el-table-column label="数量" width="110">
+                  <template #default="{ row }"><el-input-number v-model="row.qty" :min="1" style="width: 100%" /></template>
+                </el-table-column>
+                <el-table-column label="单价" width="110" align="right">
+                  <template #default="{ row }">
+                    <span v-if="row.price">¥ {{ row.price.toFixed(2) }}</span>
+                    <span v-else class="text-muted">选SKU后带出</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="金额" width="110" align="right">
+                  <template #default="{ row }">¥ {{ ((row.qty || 0) * (row.price || 0)).toFixed(2) }}</template>
+                </el-table-column>
+                <el-table-column label="操作" width="60" align="center">
+                  <template #default="{ $index }">
+                    <el-button link type="danger" @click="form.items.splice($index, 1)">删</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <el-button type="primary" link icon="Plus" class="mt-2" @click="addItem">添加明细</el-button>
+              <div class="mt-2 text-right">合计金额：<b style="color: #e6a23c">¥ {{ totalAmount.toFixed(2) }}</b></div>
+            </template>
           </div>
         </el-form-item>
       </el-form>
@@ -193,7 +243,6 @@ const search = reactive({ page: 1, pageSize: 10, keyword: '' })
 const customers = ref([])
 const warehouses = ref([])
 const skuOptions = ref([])
-const shippedOrders = ref([])
 
 const editVisible = ref(false)
 const detailVisible = ref(false)
@@ -246,13 +295,50 @@ const loadOptions = async () => {
   skuOptions.value = (sku.data || []).filter((s) => s.status === 1)
 }
 
-// 已出库的销售单（退货/换货的原单候选）
+// 已出库的销售单（退货/换货的原单候选，按类型过滤）
+const normalShipped = ref([])
+const returnShipped = ref([])
+const shippedOrders = computed(() => {
+  const base = form.orderType === 2 ? normalShipped.value : [...normalShipped.value, ...returnShipped.value]
+  return base
+})
+
 const loadShippedOrders = async () => {
   const { data } = await getSalePage({ page: 1, pageSize: 999 })
-  shippedOrders.value = (data.list || []).filter((o) => o.status === 2)
+  const all = data.list || []
+  normalShipped.value = all.filter((o) => o.orderType === 1 && o.status === 2)
+  returnShipped.value = all.filter((o) => o.orderType === 2 && o.status === 2)
 }
 
-const addItem = () => form.items.push({ skuId: undefined, qty: 1, price: 0 })
+const addItem = () => form.items.push({ skuId: undefined, qty: 1, price: 0, direction: 0 })
+
+// 换货：出库/入库两个子列表
+const outItems = computed(() => form.items.filter((it) => it.direction === 1))
+const inItems = computed(() => form.items.filter((it) => it.direction === 2))
+const addOutItem = () => form.items.push({ skuId: undefined, qty: 1, price: 0, direction: 1 })
+const addInItem = () => form.items.push({ skuId: undefined, qty: 1, price: 0, direction: 2 })
+
+// 子列表索引 → 原数组索引（用于删除）
+const outIndex = (i) => {
+  let count = 0
+  for (let idx = 0; idx < form.items.length; idx++) {
+    if (form.items[idx].direction === 1) {
+      if (count === i) return idx
+      count++
+    }
+  }
+  return -1
+}
+const inIndex = (i) => {
+  let count = 0
+  for (let idx = 0; idx < form.items.length; idx++) {
+    if (form.items[idx].direction === 2) {
+      if (count === i) return idx
+      count++
+    }
+  }
+  return -1
+}
 
 // 选中 SKU 后带出其销售价作为单价（单价以 SKU 销售价为准，不可修改）
 const onSkuChange = (row) => {
@@ -269,7 +355,7 @@ const openCreate = () => {
 const openEdit = (row) => {
   Object.assign(form, { ID: row.ID, orderType: row.orderType, customerId: row.customerId, warehouseId: row.warehouseId, originalOrderId: row.originalOrderId, remark: row.remark, items: [] })
   getSaleDetail(row.ID).then(({ data }) => {
-    form.items = (data.items || []).map((it) => ({ skuId: it.skuId, qty: it.qty, price: it.price }))
+    form.items = (data.items || []).map((it) => ({ skuId: it.skuId, qty: it.qty, price: it.price, direction: it.direction || 0 }))
   })
   editVisible.value = true
 }
@@ -338,4 +424,5 @@ onMounted(() => {
 .mt-3 { margin-top: 12px; }
 .justify-end { justify-content: flex-end; }
 .text-right { text-align: right; }
+.sub-title { font-weight: 600; margin-bottom: 6px; color: #606266; }
 </style>

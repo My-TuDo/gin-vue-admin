@@ -60,16 +60,12 @@ func (s *SaleService) unlockStock(tx *gorm.DB, warehouseID, skuID uint, qty int)
 }
 
 // fillItemSnapshot 填充明细快照并汇总金额
-// 单价以 SKU 销售价为准；退货单金额取负（收入减少）；换货单按 qty 正负（负=换出, 正=换入）
+// 单价以 SKU 销售价为准；金额符号：正常销售正 / 退货负 / 换货按 direction（1换出正 2换入负）
 func (s *SaleService) fillItemSnapshot(db *gorm.DB, orderType int8, items []jxc.SaleItem) (float64, error) {
 	var total float64
 	for i := range items {
 		it := &items[i]
-		if orderType == jxc.SaleTypeExchange {
-			if it.Qty == 0 {
-				return 0, errors.New("换货明细数量不能为 0（换出填负数, 换入填正数）")
-			}
-		} else if it.Qty <= 0 {
+		if it.Qty <= 0 {
 			return 0, errors.New("销售数量必须大于 0")
 		}
 		var sku jxc.GoodsSku
@@ -79,8 +75,17 @@ func (s *SaleService) fillItemSnapshot(db *gorm.DB, orderType int8, items []jxc.
 		// 单价固定取 SKU 销售价，前端传入的 price 一律忽略（角色改价权限后续版本开放）
 		it.Price = sku.SalePrice
 		it.Amount = float64(it.Qty) * it.Price
-		if orderType == jxc.SaleTypeReturn {
-			it.Amount = -it.Amount
+		switch orderType {
+		case jxc.SaleTypeReturn:
+			it.Amount = -it.Amount // 退货：收入减少
+		case jxc.SaleTypeExchange:
+			switch it.Direction {
+			case 1: // 换出：正向流水（销售延续）
+			case 2: // 换入：负向流水（相当于退回）
+				it.Amount = -it.Amount
+			default:
+				return 0, errors.New("换货明细必须指定方向（1换出/2换入）")
+			}
 		}
 		total += it.Amount
 		it.SkuCode = sku.SkuCode
@@ -91,6 +96,31 @@ func (s *SaleService) fillItemSnapshot(db *gorm.DB, orderType int8, items []jxc.
 		it.GoodsName = goods.Name
 	}
 	return total, nil
+}
+
+// checkOriginalOrder 校验关联原单（退货只能关联正常销售已出库；换货可关联正常销售已出库或退货已退货）
+func (s *SaleService) checkOriginalOrder(db *gorm.DB, orderType int8, originalID *uint) error {
+	if originalID == nil || *originalID == 0 {
+		return errors.New("请选择关联原单")
+	}
+	var original jxc.SaleOrder
+	if err := db.First(&original, *originalID).Error; err != nil {
+		return errors.New("关联原单不存在")
+	}
+	if original.Status != jxc.SaleStatusShipped {
+		return errors.New("仅已出库的销售单可作为原单")
+	}
+	switch orderType {
+	case jxc.SaleTypeReturn:
+		if original.OrderType != jxc.SaleTypeNormal {
+			return errors.New("退货单只能关联正常销售的销售单")
+		}
+	case jxc.SaleTypeExchange:
+		if original.OrderType != jxc.SaleTypeNormal && original.OrderType != jxc.SaleTypeReturn {
+			return errors.New("换货单只能关联正常销售或退货退款单")
+		}
+	}
+	return nil
 }
 
 // ========== 销售单 CRUD ==========
@@ -109,6 +139,12 @@ func (s *SaleService) CreateSaleOrder(ctx context.Context, order *jxc.SaleOrder)
 	order.Status = jxc.SaleStatusPending
 	if order.OrderType == 0 {
 		order.OrderType = jxc.SaleTypeNormal
+	}
+	// 退货/换货必须关联合法原单
+	if order.OrderType != jxc.SaleTypeNormal {
+		if err := s.checkOriginalOrder(db, order.OrderType, order.OriginalOrderID); err != nil {
+			return err
+		}
 	}
 	total, err := s.fillItemSnapshot(db, order.OrderType, order.Items)
 	if err != nil {
@@ -167,6 +203,12 @@ func (s *SaleService) UpdateSaleOrder(ctx context.Context, order *jxc.SaleOrder)
 	}
 	if old.Status != jxc.SaleStatusPending {
 		return errors.New("仅待出库状态的销售单可以修改")
+	}
+	// 退货/换货必须关联合法原单
+	if order.OrderType != jxc.SaleTypeNormal {
+		if err := s.checkOriginalOrder(db, order.OrderType, order.OriginalOrderID); err != nil {
+			return err
+		}
 	}
 	total, err := s.fillItemSnapshot(db, order.OrderType, order.Items)
 	if err != nil {
@@ -389,19 +431,17 @@ func (s *SaleService) ConfirmExchange(ctx context.Context, id uint, operator str
 			}
 			// 更新前捕获数量（GORM Update 会回填 struct）
 			beforeQty := stock.Quantity
-			businessType := "sale_exchange_in"
-			if it.Qty < 0 {
-				// 换出明细（负数）：扣减库存
-				businessType = "sale_exchange_out"
-				outQty := -it.Qty
-				if err == gorm.ErrRecordNotFound || stock.Quantity < outQty {
-					return fmt.Errorf("库存不足：SKU %s 需换出 %d", it.SkuCode, outQty)
+			switch it.Direction {
+			case 1:
+				// 换出明细：扣减库存（出为正）
+				if err == gorm.ErrRecordNotFound || stock.Quantity < it.Qty {
+					return fmt.Errorf("库存不足：SKU %s 需换出 %d", it.SkuCode, it.Qty)
 				}
-				if err := tx.Model(&stock).Update("quantity", stock.Quantity-outQty).Error; err != nil {
+				if err := tx.Model(&stock).Update("quantity", stock.Quantity-it.Qty).Error; err != nil {
 					return err
 				}
-			} else {
-				// 换入明细（正数）：增加库存
+			case 2:
+				// 换入明细：增加库存（入为负）
 				if err == gorm.ErrRecordNotFound {
 					beforeQty = 0
 					stock = jxc.Stock{WarehouseID: order.WarehouseID, SkuID: it.SkuID, Quantity: it.Qty}
@@ -413,12 +453,20 @@ func (s *SaleService) ConfirmExchange(ctx context.Context, id uint, operator str
 						return err
 					}
 				}
+			default:
+				return errors.New("换货明细方向缺失")
 			}
-			// 流水（负明细 ChangeQty 为负）
+			// 流水（换出 ChangeQty 为负, 换入为正）
+			businessType := "sale_exchange_out"
+			changeQty := -it.Qty
+			if it.Direction == 2 {
+				businessType = "sale_exchange_in"
+				changeQty = it.Qty
+			}
 			log := jxc.StockLog{
 				WarehouseID: order.WarehouseID, SkuID: it.SkuID,
 				BusinessType: businessType, BusinessNo: order.OrderNo,
-				BeforeQty: beforeQty, ChangeQty: it.Qty, AfterQty: beforeQty + it.Qty,
+				BeforeQty: beforeQty, ChangeQty: changeQty, AfterQty: beforeQty + changeQty,
 				Operator: operator,
 			}
 			if err := tx.Create(&log).Error; err != nil {
