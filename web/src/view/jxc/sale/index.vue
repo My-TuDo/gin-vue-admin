@@ -91,7 +91,7 @@
         </el-form-item>
         <el-form-item v-if="form.orderType !== 1" label="关联原单" prop="originalOrderId">
           <el-select v-model="form.originalOrderId" placeholder="选择已出库的原销售单" style="width: 300px" filterable>
-            <el-option v-for="o in shippedOrders" :key="o.ID" :label="`${o.orderNo}（${o.customer?.name || '散客'}）`" :value="o.ID" />
+            <el-option v-for="o in shippedOrders" :key="o.ID" :label="`${o.orderNo}（${o.orderType === 3 ? '换货' : '销售'}·${o.customer?.name || '散客'}）`" :value="o.ID" />
           </el-select>
         </el-form-item>
         <el-form-item label="备注">
@@ -302,13 +302,16 @@ const loadOptions = async () => {
   skuOptions.value = (sku.data || []).filter((s) => s.status === 1)
 }
 
-// 已出库的正常销售单（退货/换货的原单候选；换货只允许关联正常销售）
+// 已出库的正常销售/换货单（退货/换货的原单候选；换出的商品可继续退/换）
 const normalShipped = ref([])
-const shippedOrders = computed(() => (form.orderType === 1 ? [] : normalShipped.value))
+const exchangeShipped = ref([])
+const shippedOrders = computed(() => (form.orderType === 1 ? [] : [...normalShipped.value, ...exchangeShipped.value]))
 
 const loadShippedOrders = async () => {
   const { data } = await getSalePage({ page: 1, pageSize: 999 })
-  normalShipped.value = (data.list || []).filter((o) => o.orderType === 1 && o.status === 2)
+  const all = data.list || []
+  normalShipped.value = all.filter((o) => o.orderType === 1 && o.status === 2)
+  exchangeShipped.value = all.filter((o) => o.orderType === 3 && o.status === 2)
 }
 
 const addItem = () => form.items.push({ skuId: undefined, qty: 1, price: 0, direction: 0 })
