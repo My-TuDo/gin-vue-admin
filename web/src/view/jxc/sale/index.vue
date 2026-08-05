@@ -271,7 +271,14 @@ const statusTag = (s, t = 1) => {
 // 待出库单据的确认动作文案
 const actionText = (row) => ({ 1: '出库', 2: '退货入库', 3: '换货确认' }[row.orderType] || '确认')
 
-const totalAmount = computed(() => form.items.reduce((sum, it) => sum + (it.qty || 0) * (it.price || 0), 0))
+// 合计金额：换入（direction=2）与退货单为负，换出/正常销售为正
+const totalAmount = computed(() =>
+  form.items.reduce((sum, it) => {
+    let amt = (it.qty || 0) * (it.price || 0)
+    if (it.direction === 2 || form.orderType === 2) amt = -amt
+    return sum + amt
+  }, 0)
+)
 
 const fetchData = async () => {
   loading.value = true
@@ -295,19 +302,13 @@ const loadOptions = async () => {
   skuOptions.value = (sku.data || []).filter((s) => s.status === 1)
 }
 
-// 已出库的销售单（退货/换货的原单候选，按类型过滤）
+// 已出库的正常销售单（退货/换货的原单候选；换货只允许关联正常销售）
 const normalShipped = ref([])
-const returnShipped = ref([])
-const shippedOrders = computed(() => {
-  const base = form.orderType === 2 ? normalShipped.value : [...normalShipped.value, ...returnShipped.value]
-  return base
-})
+const shippedOrders = computed(() => (form.orderType === 1 ? [] : normalShipped.value))
 
 const loadShippedOrders = async () => {
   const { data } = await getSalePage({ page: 1, pageSize: 999 })
-  const all = data.list || []
-  normalShipped.value = all.filter((o) => o.orderType === 1 && o.status === 2)
-  returnShipped.value = all.filter((o) => o.orderType === 2 && o.status === 2)
+  normalShipped.value = (data.list || []).filter((o) => o.orderType === 1 && o.status === 2)
 }
 
 const addItem = () => form.items.push({ skuId: undefined, qty: 1, price: 0, direction: 0 })
@@ -375,6 +376,13 @@ const handleSave = async () => {
   if (form.items.some((it) => !it.skuId)) {
     ElMessage.warning('请完整选择每行的 SKU')
     return
+  }
+  // 换货单必须同时包含换出与换入明细
+  if (form.orderType === 3) {
+    if (!outItems.value.length || !inItems.value.length) {
+      ElMessage.warning('换货单必须同时包含换出和换入明细')
+      return
+    }
   }
   saving.value = true
   try {
