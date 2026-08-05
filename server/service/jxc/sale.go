@@ -62,6 +62,21 @@ func (s *SaleService) unlockStock(tx *gorm.DB, warehouseID, skuID uint, qty int)
 // fillItemSnapshot 填充明细快照并汇总金额
 // 单价以 SKU 销售价为准；金额符号：正常销售正 / 退货负 / 换货按 direction（1换出正 2换入负）
 func (s *SaleService) fillItemSnapshot(db *gorm.DB, orderType int8, items []jxc.SaleItem) (float64, error) {
+	// 换货单必须同时包含换出（direction=1）与换入（direction=2）明细
+	if orderType == jxc.SaleTypeExchange {
+		hasOut, hasIn := false, false
+		for _, it := range items {
+			if it.Direction == 1 {
+				hasOut = true
+			}
+			if it.Direction == 2 {
+				hasIn = true
+			}
+		}
+		if !hasOut || !hasIn {
+			return 0, errors.New("换货单必须同时包含换出和换入明细")
+		}
+	}
 	var total float64
 	for i := range items {
 		it := &items[i]
@@ -116,8 +131,8 @@ func (s *SaleService) checkOriginalOrder(db *gorm.DB, orderType int8, originalID
 			return errors.New("退货单只能关联正常销售的销售单")
 		}
 	case jxc.SaleTypeExchange:
-		if original.OrderType != jxc.SaleTypeNormal && original.OrderType != jxc.SaleTypeReturn {
-			return errors.New("换货单只能关联正常销售或退货退款单")
+		if original.OrderType != jxc.SaleTypeNormal {
+			return errors.New("换货单只能关联正常销售的销售单")
 		}
 	}
 	return nil
