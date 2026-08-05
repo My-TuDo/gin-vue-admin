@@ -32,6 +32,7 @@ type GoodsSku struct {
 	Size      string  `json:"size" gorm:"column:size;size:50;not null;uniqueIndex:uk_sku_goods_color_size,priority:3;comment:尺码"`
 	CostPrice float64 `json:"costPrice" gorm:"column:cost_price;type:decimal(12,2);not null;default:0;comment:成本价"`
 	SalePrice float64 `json:"salePrice" gorm:"column:sale_price;type:decimal(12,2);not null;default:0;comment:销售价"`
+	SafeStock int     `json:"safeStock" gorm:"column:safe_stock;not null;default:0;comment:安全库存（0=不预警）"`
 	Status    int8    `json:"status" gorm:"column:status;not null;default:1;comment:状态 1启用 0停用"`
 
 	Goods *Goods `json:"goods" gorm:"foreignKey:GoodsID;references:ID"`

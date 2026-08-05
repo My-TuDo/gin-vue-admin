@@ -18,6 +18,22 @@ const (
 	SaleTypeExchange = 3 // 换货（一张单含换出 qty<0 与换入 qty>0 明细, 联合确认）
 )
 
+// POSItem 收银明细
+type POSItem struct {
+	SkuID uint `json:"skuId" binding:"required" comment:"SKU ID"`
+	Qty   int  `json:"qty" binding:"required" comment:"数量"`
+}
+
+// POSCheckoutReq 收银结算请求（收款即出库）
+type POSCheckoutReq struct {
+	WarehouseID uint      `json:"warehouseId" binding:"required" comment:"收银仓库ID"`
+	CustomerID  *uint     `json:"customerId" comment:"客户ID（可选，散客为空）"`
+	PayMethod   string    `json:"payMethod" binding:"required" comment:"支付方式 cash/wechat/alipay"`
+	PaidAmount  float64   `json:"paidAmount" comment:"实收金额（现金找零用）"`
+	Items       []POSItem `json:"items" binding:"required" comment:"明细列表"`
+	Remark      string    `json:"remark" comment:"备注"`
+}
+
 // SaleRemaining 原单剩余可退换件数（供前端数量上限钳制）
 type SaleRemaining struct {
 	OrderNo   string `json:"orderNo" gorm:"-" comment:"原单单号"`

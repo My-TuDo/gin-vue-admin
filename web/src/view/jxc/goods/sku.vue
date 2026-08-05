@@ -70,6 +70,10 @@
         <el-form-item label="销售价" prop="salePrice">
           <el-input-number v-model="form.salePrice" :min="0" :precision="2" :step="1" />
         </el-form-item>
+        <el-form-item label="安全库存">
+          <el-input-number v-model="form.safeStock" :min="0" :step="1" />
+          <div class="tip-text">低于该库存时仪表盘预警（0=不预警）</div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -95,7 +99,7 @@ const tableData = ref([])
 const goodsOptions = ref([])
 const dialogVisible = ref(false), submitLoading = ref(false), isEdit = ref(false)
 const formRef = ref(null)
-const form = reactive({ ID: 0, goodsId, skuCode: '', barcode: '', color: '', size: '', costPrice: 0, salePrice: 0 })
+const form = reactive({ ID: 0, goodsId, skuCode: '', barcode: '', color: '', size: '', costPrice: 0, salePrice: 0, safeStock: 0 })
 const rules = {
   // skuCode: 编码由后端自动生成（商品编码-颜色-尺码）
   goodsId: [{ required: true, message: '请选择所属商品', trigger: 'change' }],
@@ -109,7 +113,7 @@ async function loadGoods() {
   goodsOptions.value = data || []
 }
 
-function resetForm() { Object.assign(form, { ID: 0, goodsId, skuCode: '', barcode: '', color: '', size: '', costPrice: 0, salePrice: 0 }) }
+function resetForm() { Object.assign(form, { ID: 0, goodsId, skuCode: '', barcode: '', color: '', size: '', costPrice: 0, salePrice: 0, safeStock: 0 }) }
 
 async function fetchData() {
   loading.value = true
