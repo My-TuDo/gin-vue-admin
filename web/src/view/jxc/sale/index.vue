@@ -400,6 +400,9 @@ const onSkuChange = (row) => {
 const openCreate = () => {
   Object.assign(form, { ID: 0, orderType: 1, customerId: undefined, warehouseId: undefined, originalOrderId: undefined, remark: '', items: [] })
   addItem()
+  // 每次打开都刷新：原单候选（刚完成的销售单立即可关联）+ 可售库存（数量上限）
+  loadShippedOrders()
+  loadStock()
   editVisible.value = true
 }
 
