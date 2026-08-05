@@ -466,6 +466,12 @@ func (s *SaleService) ConfirmReturn(ctx context.Context, id uint, operator strin
 		if err := tx.Where("sale_id = ?", id).Find(&items).Error; err != nil {
 			return err
 		}
+		// 确认时硬校验入库上限：其他已确认占用 + 本次入库 ≤ 原单出库（禁止虚增）
+		if order.OriginalOrderID != nil {
+			if err := s.checkInboundLimit(tx, order.OrderType, *order.OriginalOrderID, items, 0); err != nil {
+				return err
+			}
+		}
 		for i := range items {
 			it := &items[i]
 			var stock jxc.Stock
@@ -515,6 +521,12 @@ func (s *SaleService) ConfirmExchange(ctx context.Context, id uint, operator str
 		var items []jxc.SaleItem
 		if err := tx.Where("sale_id = ?", id).Find(&items).Error; err != nil {
 			return err
+		}
+		// 确认时硬校验入库上限：其他已确认占用 + 本次换入 ≤ 原单出库（禁止虚增）
+		if order.OriginalOrderID != nil {
+			if err := s.checkInboundLimit(tx, order.OrderType, *order.OriginalOrderID, items, 0); err != nil {
+				return err
+			}
 		}
 		for i := range items {
 			it := &items[i]
