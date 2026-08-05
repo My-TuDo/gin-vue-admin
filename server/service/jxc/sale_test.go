@@ -285,16 +285,27 @@ func TestConfirmExchange(t *testing.T) {
 	if err := saleSvc.ConfirmExchange(ctx, sale.ID, "tester"); err == nil {
 		t.Error("正常销售单执行换货应拒绝")
 	}
-	// 换入明细且无库存记录（创建新库存）；换出 SKU 保留 1 件库存
-	global.GVA_DB.Exec("DELETE FROM stock")
-	global.GVA_DB.Create(&jxc.Stock{WarehouseID: 1, SkuID: skuID, Quantity: 1})
+	// 换货单可作为原单（换出的商品可继续退/换），但换入数量不可超过原单换出数量
 	var g jxc.Goods
 	global.GVA_DB.First(&g)
 	var sku2 jxc.GoodsSku
 	sku2 = jxc.GoodsSku{GoodsID: g.ID, SkuCode: "SP002-M-蓝", Color: "蓝", Size: "M", SalePrice: 15}
 	global.GVA_DB.Create(&sku2)
-	ex2 := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeExchange, OriginalOrderID: &sale.ID,
+	ex3 := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeExchange, OriginalOrderID: &ex.ID,
+		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 15, Direction: 1}, {SkuID: sku2.ID, Qty: 1, Price: 15, Direction: 2}}}
+	if err := saleSvc.CreateSaleOrder(ctx, ex3); err != nil {
+		t.Errorf("换货关联换货单应允许: %v", err)
+	}
+	ex3Over := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeExchange, OriginalOrderID: &ex.ID,
 		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 15, Direction: 1}, {SkuID: sku2.ID, Qty: 2, Price: 15, Direction: 2}}}
+	if err := saleSvc.CreateSaleOrder(ctx, ex3Over); err == nil {
+		t.Error("换货关联换货单换入超限应拒绝")
+	}
+	// 换入明细且无库存记录（创建新库存）；换出 SKU 保留 1 件库存
+	global.GVA_DB.Exec("DELETE FROM stock")
+	global.GVA_DB.Create(&jxc.Stock{WarehouseID: 1, SkuID: skuID, Quantity: 1})
+	ex2 := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeExchange, OriginalOrderID: &ex.ID,
+		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 15, Direction: 1}, {SkuID: sku2.ID, Qty: 1, Price: 15, Direction: 2}}}
 	if err := saleSvc.CreateSaleOrder(ctx, ex2); err != nil {
 		t.Fatalf("创建换货单失败: %v", err)
 	}
@@ -302,8 +313,8 @@ func TestConfirmExchange(t *testing.T) {
 		t.Fatalf("换货换入失败: %v", err)
 	}
 	qty, _ = getStockQty(t, sku2.ID)
-	if qty != 2 {
-		t.Errorf("换入新建库存应为 2, got %d", qty)
+	if qty != 1 {
+		t.Errorf("换入新建库存应为 1, got %d", qty)
 	}
 }
 
@@ -457,7 +468,7 @@ func TestSale_ErrorBranches(t *testing.T) {
 	}
 	// 已出库单不可更新（正确 ID）
 	order3 := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeNormal,
-		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 15}}}
+		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 3, Price: 15}}}
 	if err := saleSvc.CreateSaleOrder(ctx, order3); err != nil {
 		t.Fatalf("创建失败: %v", err)
 	}

@@ -113,7 +113,7 @@ func (s *SaleService) fillItemSnapshot(db *gorm.DB, orderType int8, items []jxc.
 	return total, nil
 }
 
-// checkOriginalOrder 校验关联原单（退货只能关联正常销售已出库；换货可关联正常销售已出库或退货已退货）
+// checkOriginalOrder 校验关联原单（退货/换货可关联正常销售已出库或换货已完成；换出的商品可继续退/换）
 func (s *SaleService) checkOriginalOrder(db *gorm.DB, orderType int8, originalID *uint) error {
 	if originalID == nil || *originalID == 0 {
 		return errors.New("请选择关联原单")
@@ -126,13 +126,86 @@ func (s *SaleService) checkOriginalOrder(db *gorm.DB, orderType int8, originalID
 		return errors.New("仅已出库的销售单可作为原单")
 	}
 	switch orderType {
-	case jxc.SaleTypeReturn:
-		if original.OrderType != jxc.SaleTypeNormal {
-			return errors.New("退货单只能关联正常销售的销售单")
+	case jxc.SaleTypeReturn, jxc.SaleTypeExchange:
+		if original.OrderType != jxc.SaleTypeNormal && original.OrderType != jxc.SaleTypeExchange {
+			return errors.New("退货/换货单只能关联正常销售或换货单")
 		}
-	case jxc.SaleTypeExchange:
-		if original.OrderType != jxc.SaleTypeNormal {
-			return errors.New("换货单只能关联正常销售的销售单")
+	}
+	return nil
+}
+
+// checkInboundLimit 校验入库数量上限（按商品 Goods 维度，支持同款换码/换色）：
+// 退货/换货单的入库明细不得超过原单该商品的出库数量减去已被其他已确认单据占用的数量
+func (s *SaleService) checkInboundLimit(db *gorm.DB, orderType int8, originalID uint, items []jxc.SaleItem, excludeID uint) error {
+	if orderType != jxc.SaleTypeReturn && orderType != jxc.SaleTypeExchange {
+		return nil
+	}
+	// 收集涉及 SKU 的 Goods 映射
+	skuSet := map[uint]struct{}{}
+	for _, it := range items {
+		skuSet[it.SkuID] = struct{}{}
+	}
+	var skus []jxc.GoodsSku
+	if len(skuSet) > 0 {
+		ids := make([]uint, 0, len(skuSet))
+		for id := range skuSet {
+			ids = append(ids, id)
+		}
+		db.Where("id IN ?", ids).Find(&skus)
+	}
+	skuGoods := map[uint]uint{}
+	for _, s := range skus {
+		skuGoods[s.ID] = s.GoodsID
+	}
+	goodsName := map[uint]string{}
+	for _, s := range skus {
+		if s.GoodsID > 0 && goodsName[s.GoodsID] == "" {
+			var g jxc.Goods
+			db.First(&g, s.GoodsID)
+			goodsName[s.GoodsID] = g.Name
+		}
+	}
+	// 原单出库明细（按商品）：正常销售单全部明细；换货单取换出明细（direction=1）
+	type qtyRow struct {
+		GoodsID uint
+		Qty     int
+	}
+	var outQty []qtyRow
+	db.Table("sale_item si").
+		Select("gs.goods_id AS goods_id, SUM(si.qty) AS qty").
+		Joins("JOIN sale_order o ON o.id = si.sale_id").
+		Joins("JOIN goods_sku gs ON gs.id = si.sku_id").
+		Where("si.sale_id = ? AND (o.order_type = ? OR si.direction = ?)", originalID, jxc.SaleTypeNormal, 1).
+		Group("gs.goods_id").Scan(&outQty)
+	// 已被其他已确认单据占用的入库数量（按商品）：退货单明细 direction=0、换货单换入 direction=2
+	var used []qtyRow
+	db.Table("sale_item si").
+		Select("gs.goods_id AS goods_id, SUM(si.qty) AS qty").
+		Joins("JOIN sale_order o ON o.id = si.sale_id").
+		Joins("JOIN goods_sku gs ON gs.id = si.sku_id").
+		Where("o.original_order_id = ? AND o.status = ? AND o.id <> ? AND si.direction IN (0, 2)", originalID, jxc.SaleStatusShipped, excludeID).
+		Group("gs.goods_id").Scan(&used)
+	// 当前单据入库明细（按商品）
+	inQty := map[uint]int{}
+	for _, it := range items {
+		isIn := orderType == jxc.SaleTypeReturn || (orderType == jxc.SaleTypeExchange && it.Direction == 2)
+		if isIn {
+			inQty[skuGoods[it.SkuID]] += it.Qty
+		}
+	}
+	// 校验：入库数量 ≤ 原单出库 − 已占用
+	limitByGoods := map[uint]int{}
+	for _, r := range outQty {
+		limitByGoods[r.GoodsID] = r.Qty
+	}
+	usedByGoods := map[uint]int{}
+	for _, r := range used {
+		usedByGoods[r.GoodsID] += r.Qty
+	}
+	for goodsID, qty := range inQty {
+		limit := limitByGoods[goodsID] - usedByGoods[goodsID]
+		if qty > limit {
+			return fmt.Errorf("入库数量超出原单剩余可退换数量：商品「%s」原单出库 %d，已占用 %d，最多还可入库 %d", goodsName[goodsID], limitByGoods[goodsID], usedByGoods[goodsID], limit)
 		}
 	}
 	return nil
@@ -158,6 +231,9 @@ func (s *SaleService) CreateSaleOrder(ctx context.Context, order *jxc.SaleOrder)
 	// 退货/换货必须关联合法原单
 	if order.OrderType != jxc.SaleTypeNormal {
 		if err := s.checkOriginalOrder(db, order.OrderType, order.OriginalOrderID); err != nil {
+			return err
+		}
+		if err := s.checkInboundLimit(db, order.OrderType, *order.OriginalOrderID, order.Items, 0); err != nil {
 			return err
 		}
 	}
@@ -222,6 +298,9 @@ func (s *SaleService) UpdateSaleOrder(ctx context.Context, order *jxc.SaleOrder)
 	// 退货/换货必须关联合法原单
 	if order.OrderType != jxc.SaleTypeNormal {
 		if err := s.checkOriginalOrder(db, order.OrderType, order.OriginalOrderID); err != nil {
+			return err
+		}
+		if err := s.checkInboundLimit(db, order.OrderType, *order.OriginalOrderID, order.Items, order.ID); err != nil {
 			return err
 		}
 	}
