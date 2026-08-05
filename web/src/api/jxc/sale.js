@@ -3,6 +3,7 @@ import service from '@/utils/request'
 // 销售单
 export const getSalePage = (params) => service.get('/jxc/sale/page', { params })
 export const getSaleDetail = (id) => service.get('/jxc/sale/detail', { params: { id } })
+export const getSaleRemaining = (id) => service.get('/jxc/sale/remaining', { params: { id } })
 export const createSaleOrder = (data) => service.post('/jxc/sale', data)
 export const updateSaleOrder = (data) => service.put('/jxc/sale', data)
 export const deleteSaleOrder = (id) => service.delete('/jxc/sale', { data: { id } })
