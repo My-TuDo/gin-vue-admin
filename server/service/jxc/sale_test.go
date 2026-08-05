@@ -2,6 +2,7 @@ package jxc
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -467,6 +468,22 @@ func TestGetSalePage_Detail(t *testing.T) {
 	}
 }
 
+// TestIsDuplicateKey 单号唯一冲突识别
+func TestIsDuplicateKey(t *testing.T) {
+	if isDuplicateKey(nil) {
+		t.Error("nil 不应判定为重复键")
+	}
+	if !isDuplicateKey(errors.New("Duplicate entry 'SO-1' for key 'sale_order.uk_sale_order_no'")) {
+		t.Error("MySQL 重复键应识别")
+	}
+	if !isDuplicateKey(errors.New("UNIQUE constraint failed: sale_order.order_no")) {
+		t.Error("SQLite 重复键应识别")
+	}
+	if isDuplicateKey(errors.New("other error")) {
+		t.Error("其他错误不应判定为重复键")
+	}
+}
+
 // TestSale_ErrorBranches 测试销售 service 异常/错误分支
 func TestSale_ErrorBranches(t *testing.T) {
 	saleTestDB(t)
@@ -632,6 +649,31 @@ func TestSale_ErrorBranches(t *testing.T) {
 	}
 	if err := saleSvc.ConfirmExchange(ctx, okEx.ID, "t"); err == nil {
 		t.Error("重复换货应拒绝")
+	}
+	// 退货明细含原单外 SKU → 拒绝（退货限定原单商品）
+	var skuB jxc.GoodsSku
+	var gTmp jxc.Goods
+	global.GVA_DB.First(&gTmp)
+	skuB = jxc.GoodsSku{GoodsID: gTmp.ID, SkuCode: "SP001-L-黑", Color: "黑", Size: "L", CostPrice: 8, SalePrice: 15, Status: 1}
+	global.GVA_DB.Create(&skuB)
+	badSkuRet := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeReturn, OriginalOrderID: &order3.ID, Items: []jxc.SaleItem{{SkuID: skuB.ID, Qty: 1, Price: 15}}}
+	if err := saleSvc.CreateSaleOrder(ctx, badSkuRet); err == nil {
+		t.Error("退货明细含原单外 SKU 应拒绝")
+	}
+	// 软删除后重建：单号不重复（Unscoped 查询）
+	del1 := &jxc.SaleOrder{WarehouseID: 1, Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 1}}}
+	if err := saleSvc.CreateSaleOrder(ctx, del1); err != nil {
+		t.Fatalf("创建待删单失败: %v", err)
+	}
+	if err := saleSvc.DeleteSaleOrder(ctx, del1.ID); err != nil {
+		t.Fatalf("删除失败: %v", err)
+	}
+	del2 := &jxc.SaleOrder{WarehouseID: 1, Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 1}}}
+	if err := saleSvc.CreateSaleOrder(ctx, del2); err != nil {
+		t.Errorf("删除后重建应成功: %v", err)
+	}
+	if del2.OrderNo == del1.OrderNo {
+		t.Error("重建单号不应与已删除单重复")
 	}
 	// 单号序号解析失败（坏单号插入后再创建，须在 DROP 之前）
 	badDate := time.Now().Format("20060102")

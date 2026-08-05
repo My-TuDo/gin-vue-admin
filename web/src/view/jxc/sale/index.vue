@@ -108,7 +108,7 @@
                 <el-table-column label="SKU" min-width="200">
                   <template #default="{ row }">
                     <el-select v-model="row.skuId" placeholder="选择SKU" filterable style="width: 100%" @change="onSkuChange(row)">
-                      <el-option v-for="s in skuOptions" :key="s.ID" :label="s.skuCode" :value="s.ID" />
+                      <el-option v-for="s in rowSkuOptions(row)" :key="s.ID" :label="s.skuCode" :value="s.ID" />
                     </el-select>
                   </template>
                 </el-table-column>
@@ -130,7 +130,7 @@
                 <el-table-column label="SKU" min-width="200">
                   <template #default="{ row }">
                     <el-select v-model="row.skuId" placeholder="选择SKU" filterable style="width: 100%" @change="onSkuChange(row)">
-                      <el-option v-for="s in skuOptions" :key="s.ID" :label="s.skuCode" :value="s.ID" />
+                      <el-option v-for="s in rowSkuOptions(row)" :key="s.ID" :label="s.skuCode" :value="s.ID" />
                     </el-select>
                   </template>
                 </el-table-column>
@@ -157,7 +157,7 @@
                 <el-table-column label="SKU" min-width="200">
                   <template #default="{ row }">
                     <el-select v-model="row.skuId" placeholder="选择SKU" filterable style="width: 100%" @change="onSkuChange(row)">
-                      <el-option v-for="s in skuOptions" :key="s.ID" :label="s.skuCode" :value="s.ID" />
+                      <el-option v-for="s in rowSkuOptions(row)" :key="s.ID" :label="s.skuCode" :value="s.ID" />
                     </el-select>
                   </template>
                 </el-table-column>
@@ -317,11 +317,26 @@ const loadStock = async () => {
 
 // 原单剩余可退换件数（数量上限：退货/换入，按单据总量）
 const remainingTotal = ref(undefined)
+// 原单出库过的 SKU（退货单只能退原单商品，业界退货限定原单商品）
+const originalSkus = ref([])
 const onOriginalChange = async (id) => {
   remainingTotal.value = undefined
+  originalSkus.value = []
   if (!id) return
-  const { data } = await getSaleRemaining(id)
-  remainingTotal.value = data?.remaining
+  const [rem, det] = await Promise.all([getSaleRemaining(id), getSaleDetail(id)])
+  remainingTotal.value = rem.data?.remaining
+  const detData = det.data || {}
+  originalSkus.value = (detData.items || [])
+    .filter((it) => detData.orderType === 1 || it.direction === 1)
+    .map((it) => it.skuId)
+}
+
+// SKU 下拉：退货单只显示原单出过的商品；换货/正常销售显示全部
+const rowSkuOptions = (row) => {
+  if (form.orderType === 2) {
+    return skuOptions.value.filter((s) => originalSkus.value.includes(s.ID))
+  }
+  return skuOptions.value
 }
 
 // 行数量上限：退货/换入=原单剩余件数；销售/换出=可售库存（键盘超限自动钳制、+ 按钮达上限禁用）
@@ -406,7 +421,7 @@ const openCreate = () => {
   editVisible.value = true
 }
 
-// 单据类型切换时规整明细：换货=保留方向行（默认给一行换出+一行换入）；其他=全部转 direction 0
+// 单据类型切换时规整明细：换货=保留方向行（默认给一行换出+一行换入）；其他=仅保留无方向行
 const onTypeChange = (t) => {
   if (t === 3) {
     form.items = form.items.filter((it) => it.direction !== 0)
@@ -415,7 +430,7 @@ const onTypeChange = (t) => {
       addInItem()
     }
   } else {
-    form.items = form.items.map((it) => ({ ...it, direction: 0 }))
+    form.items = form.items.filter((it) => it.direction === 0)
     if (!form.items.length) addItem()
   }
 }
