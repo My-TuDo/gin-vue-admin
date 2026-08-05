@@ -222,6 +222,10 @@ func TestConfirmReturn(t *testing.T) {
 	if err := saleSvc.CreateSaleOrder(ctx, ret); err != nil {
 		t.Fatalf("创建退货单失败: %v", err)
 	}
+	// 退货单金额应为负（收入减少）
+	if ret.TotalAmount >= 0 {
+		t.Errorf("退货单总金额应为负值, got %v", ret.TotalAmount)
+	}
 	if err := saleSvc.ConfirmReturn(ctx, ret.ID, "tester"); err != nil {
 		t.Fatalf("退货入库失败: %v", err)
 	}
@@ -240,7 +244,7 @@ func TestConfirmReturn(t *testing.T) {
 	}
 }
 
-// TestConfirmExchange 测试换货（出库扣减/入库增加）
+// TestConfirmExchange 测试换货合并单（负明细换出 + 正明细换入, 一次确认）
 func TestConfirmExchange(t *testing.T) {
 	saleTestDB(t)
 	skuID := newSaleFixture(t)
@@ -250,36 +254,50 @@ func TestConfirmExchange(t *testing.T) {
 	saleSvc.CreateSaleOrder(ctx, sale)
 	saleSvc.ConfirmOut(ctx, sale.ID, "tester")
 
-	// 换货出库（type=3）
-	exOut := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeExOut, OriginalOrderID: &sale.ID,
-		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 15}}}
-	if err := saleSvc.CreateSaleOrder(ctx, exOut); err != nil {
-		t.Fatalf("创建换货出库单失败: %v", err)
+	// 换货单：换出 -1 件 + 换入 +2 件（关联原单）
+	ex := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeExchange, OriginalOrderID: &sale.ID,
+		Items: []jxc.SaleItem{
+			{SkuID: skuID, Qty: -1, Price: 15}, // 换出
+			{SkuID: skuID, Qty: 2, Price: 15},  // 换入
+		}}
+	if err := saleSvc.CreateSaleOrder(ctx, ex); err != nil {
+		t.Fatalf("创建换货单失败: %v", err)
 	}
-	if err := saleSvc.ConfirmExchange(ctx, exOut.ID, "tester"); err != nil {
-		t.Fatalf("换货出库失败: %v", err)
+	// 换货单总金额 = -15 + 30 = 15
+	if ex.TotalAmount != 15 {
+		t.Errorf("换货单总金额应为 15（-15+30）, got %v", ex.TotalAmount)
+	}
+	// 一次确认同时完成换出与换入
+	if err := saleSvc.ConfirmExchange(ctx, ex.ID, "tester"); err != nil {
+		t.Fatalf("换货确认失败: %v", err)
 	}
 	qty, _ := getStockQty(t, skuID)
-	if qty != 7 {
-		t.Errorf("换出后库存应为 7, got %d", qty)
+	if qty != 9 { // 10(初始) - 2(原单出库) - 1(换出) + 2(换入)
+		t.Errorf("换货后库存应为 9, got %d", qty)
 	}
-
-	// 换货入库（type=4）
-	exIn := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeExIn, OriginalOrderID: &sale.ID,
-		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 2, Price: 15}}}
-	if err := saleSvc.CreateSaleOrder(ctx, exIn); err != nil {
-		t.Fatalf("创建换货入库单失败: %v", err)
-	}
-	if err := saleSvc.ConfirmExchange(ctx, exIn.ID, "tester"); err != nil {
-		t.Fatalf("换货入库失败: %v", err)
-	}
-	qty, _ = getStockQty(t, skuID)
-	if qty != 9 {
-		t.Errorf("换入后库存应为 9, got %d", qty)
+	var logs []jxc.StockLog
+	global.GVA_DB.Where("sku_id = ? AND business_type LIKE 'sale_exchange%'", skuID).Order("id").Find(&logs)
+	if len(logs) != 2 || logs[0].BusinessType != "sale_exchange_out" || logs[0].ChangeQty != -1 ||
+		logs[1].BusinessType != "sale_exchange_in" || logs[1].ChangeQty != 2 {
+		t.Errorf("换货流水不符: %+v", logs)
 	}
 	// 非换货单不可执行换货
 	if err := saleSvc.ConfirmExchange(ctx, sale.ID, "tester"); err == nil {
 		t.Error("正常销售单执行换货应拒绝")
+	}
+	// 换入明细且无库存记录（创建新库存）
+	global.GVA_DB.Exec("DELETE FROM stock")
+	ex2 := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeExchange, OriginalOrderID: &sale.ID,
+		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 3, Price: 15}}}
+	if err := saleSvc.CreateSaleOrder(ctx, ex2); err != nil {
+		t.Fatalf("创建换货单失败: %v", err)
+	}
+	if err := saleSvc.ConfirmExchange(ctx, ex2.ID, "tester"); err != nil {
+		t.Fatalf("换货换入失败: %v", err)
+	}
+	qty, _ = getStockQty(t, skuID)
+	if qty != 3 {
+		t.Errorf("换入新建库存应为 3, got %d", qty)
 	}
 }
 
@@ -457,9 +475,9 @@ func TestSale_ErrorBranches(t *testing.T) {
 	if err := saleSvc.ConfirmReturn(ctx, order.ID, "t"); err == nil {
 		t.Error("正常销售单执行退货应拒绝")
 	}
-	// 换货：出库单库存不足（清空库存记录）
+	// 换货：换出明细库存不足（清空库存记录）
 	global.GVA_DB.Exec("DELETE FROM stock")
-	exOut := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeExOut, Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 15}}}
+	exOut := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeExchange, Items: []jxc.SaleItem{{SkuID: skuID, Qty: -1, Price: 15}}}
 	if err := saleSvc.CreateSaleOrder(ctx, exOut); err != nil {
 		t.Fatalf("创建换货单失败: %v", err)
 	}
@@ -485,7 +503,7 @@ func TestSale_ErrorBranches(t *testing.T) {
 	if err := saleSvc.ConfirmReturn(ctx, okRet.ID, "t"); err == nil {
 		t.Error("重复退货应拒绝")
 	}
-	okEx := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeExIn, Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 15}}}
+	okEx := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeExchange, Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 15}}}
 	if err := saleSvc.CreateSaleOrder(ctx, okEx); err != nil {
 		t.Fatalf("创建换货单失败: %v", err)
 	}

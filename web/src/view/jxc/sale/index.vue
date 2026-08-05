@@ -33,7 +33,7 @@
         </el-table-column>
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
-            <el-tag :type="statusTag(row.status).type">{{ statusTag(row.status).text }}</el-tag>
+            <el-tag :type="statusTag(row.status, row.orderType).type">{{ statusTag(row.status, row.orderType).text }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="创建人" prop="creator" width="90" />
@@ -76,8 +76,7 @@
           <el-select v-model="form.orderType" style="width: 200px">
             <el-option label="正常销售" :value="1" />
             <el-option label="退货退款" :value="2" />
-            <el-option label="换货出库" :value="3" />
-            <el-option label="换货入库" :value="4" />
+            <el-option label="换货" :value="3" />
           </el-select>
         </el-form-item>
         <el-form-item label="客户">
@@ -102,6 +101,7 @@
         <!-- 明细 -->
         <el-form-item label="销售明细">
           <div style="width: 100%">
+            <div v-if="form.orderType === 3" class="mb-2 tip-text">换货单：换出数量填<b>负数</b>，换入数量填正数，确认时同时处理</div>
             <el-table :data="form.items" border size="small" max-height="320">
               <el-table-column label="SKU" min-width="200">
                 <template #default="{ row }">
@@ -110,9 +110,9 @@
                   </el-select>
                 </template>
               </el-table-column>
-              <el-table-column label="数量" width="120">
+              <el-table-column label="数量" width="130">
                 <template #default="{ row }">
-                  <el-input-number v-model="row.qty" :min="1" style="width: 100%" />
+                  <el-input-number v-model="row.qty" :min="form.orderType === 3 ? -99999 : 1" style="width: 100%" />
                 </template>
               </el-table-column>
               <el-table-column label="单价" width="110" align="right">
@@ -147,7 +147,7 @@
         <el-descriptions :column="2" border>
           <el-descriptions-item label="销售单号">{{ detail.orderNo }}</el-descriptions-item>
           <el-descriptions-item label="状态">
-            <el-tag :type="statusTag(detail.status).type">{{ statusTag(detail.status).text }}</el-tag>
+            <el-tag :type="statusTag(detail.status, detail.orderType).type">{{ statusTag(detail.status, detail.orderType).text }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="类型">
             <el-tag :type="typeTag(detail.orderType).type" size="small">{{ typeTag(detail.orderType).text }}</el-tag>
@@ -207,11 +207,20 @@ const rules = {
   originalOrderId: [{ required: true, message: '请选择关联原单', trigger: 'change' }],
 }
 
-const typeTag = (t) => ({ 1: { type: 'primary', text: '正常销售' }, 2: { type: 'warning', text: '退货退款' }, 3: { type: 'danger', text: '换货出库' }, 4: { type: 'success', text: '换货入库' } }[t] || { type: 'info', text: t })
-const statusTag = (s) => ({ 1: { type: 'info', text: '待出库' }, 2: { type: 'success', text: '已出库' }, 3: { type: 'danger', text: '已取消' } }[s] || { type: 'info', text: s })
+const typeTag = (t) => ({ 1: { type: 'primary', text: '正常销售' }, 2: { type: 'warning', text: '退货退款' }, 3: { type: 'danger', text: '换货' } }[t] || { type: 'info', text: t })
+
+// 状态文案按单据类型区分（退货/换货不叫"出库"）
+const statusTag = (s, t = 1) => {
+  const map = {
+    1: { 1: { type: 'info', text: '待出库' }, 2: { type: 'success', text: '已出库' }, 3: { type: 'danger', text: '已取消' } },
+    2: { 1: { type: 'info', text: '待退货' }, 2: { type: 'success', text: '已退货' }, 3: { type: 'danger', text: '已取消' } },
+    3: { 1: { type: 'info', text: '待确认' }, 2: { type: 'success', text: '已完成' }, 3: { type: 'danger', text: '已取消' } },
+  }
+  return (map[t] || map[1])[s] || { type: 'info', text: s }
+}
 
 // 待出库单据的确认动作文案
-const actionText = (row) => ({ 1: '出库', 2: '退货入库', 3: '换货确认', 4: '换货确认' }[row.orderType] || '确认')
+const actionText = (row) => ({ 1: '出库', 2: '退货入库', 3: '换货确认' }[row.orderType] || '确认')
 
 const totalAmount = computed(() => form.items.reduce((sum, it) => sum + (it.qty || 0) * (it.price || 0), 0))
 
@@ -309,7 +318,7 @@ const handleCancel = async (id) => {
 
 // 出库 / 退货入库 / 换货确认（按单据类型分发）
 const handleConfirm = async (row) => {
-  const res = { 1: confirmOut, 2: confirmReturn, 3: confirmExchange, 4: confirmExchange }[row.orderType](row.ID)
+  const res = { 1: confirmOut, 2: confirmReturn, 3: confirmExchange }[row.orderType](row.ID)
   const r = await res
   if (r && r.code !== 0) return
   ElMessage.success(actionText(row) + '成功')

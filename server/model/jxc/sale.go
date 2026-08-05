@@ -13,10 +13,9 @@ const (
 
 // 销售单类型
 const (
-	SaleTypeNormal    = 1 // 正常销售
-	SaleTypeReturn    = 2 // 退货退款
-	SaleTypeExOut     = 3 // 换货出库
-	SaleTypeExIn      = 4 // 换货入库
+	SaleTypeNormal   = 1 // 正常销售
+	SaleTypeReturn   = 2 // 退货退款（金额为负, 表示收入减少）
+	SaleTypeExchange = 3 // 换货（一张单含换出 qty<0 与换入 qty>0 明细, 联合确认）
 )
 
 // SaleOrder 销售单
@@ -25,7 +24,7 @@ type SaleOrder struct {
 	OrderNo         string  `json:"orderNo" gorm:"column:order_no;size:50;not null;uniqueIndex:uk_sale_order_no;comment:销售单号"`
 	CustomerID      *uint   `json:"customerId" gorm:"column:customer_id;index:idx_sale_customer_id;comment:客户ID（零售可空）"`
 	WarehouseID     uint    `json:"warehouseId" gorm:"column:warehouse_id;not null;comment:出库仓库ID"`
-	OrderType       int8    `json:"orderType" gorm:"column:order_type;not null;default:1;comment:单据类型 1正常销售 2退货退款 3换货出库 4换货入库"`
+	OrderType       int8    `json:"orderType" gorm:"column:order_type;not null;default:1;comment:单据类型 1正常销售 2退货退款 3换货"`
 	OriginalOrderID *uint   `json:"originalOrderId" gorm:"column:original_order_id;index:idx_sale_original_order_id;comment:关联原单ID（退货/换货）"`
 	Status          int8    `json:"status" gorm:"column:status;not null;default:1;comment:状态 1待出库 2已出库 3已取消"`
 	TotalAmount     float64 `json:"totalAmount" gorm:"column:total_amount;type:decimal(12,2);not null;default:0;comment:销售总金额"`
