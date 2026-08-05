@@ -91,7 +91,9 @@ func RegisterTables() {
 	jxc.PurchaseOrder{},
 	jxc.PurchaseItem{},
 	jxc.Stock{},
+	jxc.StockCheckItem{},
 	jxc.StockLog{},
+	jxc.StockCheck{},
 	jxc.SaleOrder{},
 	jxc.SaleItem{},
 	)
