@@ -6,6 +6,7 @@ type ServiceGroup struct {
 	PurchaseService
 	SaleService
 	StockService
+	StockCheckService
 }
 
 var JxcServiceGroup = new(ServiceGroup)
