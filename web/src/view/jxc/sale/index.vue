@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div>
     <!-- 搜索栏 -->
     <el-card shadow="never" class="mb-4">
@@ -90,7 +90,7 @@
           </el-select>
         </el-form-item>
         <el-form-item v-if="form.orderType !== 1" label="关联原单" prop="originalOrderId">
-          <el-select v-model="form.originalOrderId" placeholder="选择已出库的原销售单" style="width: 300px" filterable>
+          <el-select v-model="form.originalOrderId" placeholder="选择已出库的原销售单" style="width: 300px" filterable @change="onOriginalChange">
             <el-option v-for="o in shippedOrders" :key="o.ID" :label="`${o.orderNo}（${o.orderType === 3 ? '换货' : '销售'}·${o.customer?.name || '散客'}）`" :value="o.ID" />
           </el-select>
         </el-form-item>
@@ -113,7 +113,7 @@
                   </template>
                 </el-table-column>
                 <el-table-column label="数量" width="110">
-                  <template #default="{ row }"><el-input-number v-model="row.qty" :min="1" style="width: 100%" /></template>
+                  <template #default="{ row }"><el-input-number v-model="row.qty" :min="1" :max="rowMax(row)" :disabled="rowDisabled(row)" style="width: 100%" /></template>
                 </el-table-column>
                 <el-table-column label="金额" width="110" align="right">
                   <template #default="{ row }">¥ {{ ((row.qty || 0) * (row.price || 0)).toFixed(2) }}</template>
@@ -135,7 +135,7 @@
                   </template>
                 </el-table-column>
                 <el-table-column label="数量" width="110">
-                  <template #default="{ row }"><el-input-number v-model="row.qty" :min="1" style="width: 100%" /></template>
+                  <template #default="{ row }"><el-input-number v-model="row.qty" :min="1" :max="rowMax(row)" :disabled="rowDisabled(row)" style="width: 100%" /></template>
                 </el-table-column>
                 <el-table-column label="金额" width="110" align="right">
                   <template #default="{ row }">-¥ {{ ((row.qty || 0) * (row.price || 0)).toFixed(2) }}</template>
@@ -162,7 +162,7 @@
                   </template>
                 </el-table-column>
                 <el-table-column label="数量" width="110">
-                  <template #default="{ row }"><el-input-number v-model="row.qty" :min="1" style="width: 100%" /></template>
+                  <template #default="{ row }"><el-input-number v-model="row.qty" :min="1" :max="rowMax(row)" :disabled="rowDisabled(row)" style="width: 100%" /></template>
                 </el-table-column>
                 <el-table-column label="单价" width="110" align="right">
                   <template #default="{ row }">
@@ -230,9 +230,10 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getSalePage, getSaleDetail, createSaleOrder, updateSaleOrder, deleteSaleOrder, cancelSaleOrder, confirmOut, confirmReturn, confirmExchange } from '@/api/jxc/sale'
+import { getSalePage, getSaleDetail, getSaleRemaining, createSaleOrder, updateSaleOrder, deleteSaleOrder, cancelSaleOrder, confirmOut, confirmReturn, confirmExchange } from '@/api/jxc/sale'
 import { getCustomerList, getWarehouseList } from '@/api/jxc/basic'
 import { getSkuList } from '@/api/jxc/goods'
+import { getStockPage } from '@/api/jxc/stock'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -300,6 +301,60 @@ const loadOptions = async () => {
   customers.value = cu.data.list || []
   warehouses.value = w.data.list || []
   skuOptions.value = (sku.data || []).filter((s) => s.status === 1)
+  await loadStock()
+}
+
+// SKU 可售库存映射（数量上限：销售/换出）
+const skuStockMap = ref({})
+const loadStock = async () => {
+  const { data } = await getStockPage({ page: 1, pageSize: 999 })
+  const map = {}
+  ;(data.list || []).forEach((s) => {
+    map[s.skuId] = (s.quantity || 0) - (s.lockQuantity || 0)
+  })
+  skuStockMap.value = map
+}
+
+// 原单剩余可退换额度（数量上限：退货/换入，按商品）
+const remainingByGoods = ref({})
+const onOriginalChange = async (id) => {
+  remainingByGoods.value = {}
+  if (!id) return
+  const { data } = await getSaleRemaining(id)
+  const map = {}
+  ;(data || []).forEach((r) => {
+    map[r.goodsId] = r.remaining
+  })
+  remainingByGoods.value = map
+}
+
+// 行数量上限：退货/换入=原单剩余额度；销售/换出=可售库存（键盘超限自动钳制、+ 按钮达上限禁用）
+const rowMax = (row) => {
+  if (form.orderType === 2 || (form.orderType === 3 && row.direction === 2)) {
+    const sku = skuOptions.value.find((s) => s.ID === row.skuId)
+    if (!sku) return undefined
+    const rem = remainingByGoods.value[sku.goodsId]
+    return rem !== undefined && rem > 0 ? rem : undefined
+  }
+  if (row.skuId) {
+    const avail = skuStockMap.value[row.skuId]
+    return avail !== undefined && avail > 0 ? avail : undefined
+  }
+  return undefined
+}
+// 剩余额度/可售库存为 0 时禁用数量输入
+const rowDisabled = (row) => {
+  if (form.orderType === 2 || (form.orderType === 3 && row.direction === 2)) {
+    const sku = skuOptions.value.find((s) => s.ID === row.skuId)
+    if (!sku) return false
+    const rem = remainingByGoods.value[sku.goodsId]
+    return rem !== undefined && rem <= 0
+  }
+  if (row.skuId) {
+    const avail = skuStockMap.value[row.skuId]
+    return avail !== undefined && avail <= 0
+  }
+  return false
 }
 
 // 已出库的正常销售/换货单（退货/换货的原单候选；换出的商品可继续退/换）
@@ -358,6 +413,7 @@ const openCreate = () => {
 
 const openEdit = (row) => {
   Object.assign(form, { ID: row.ID, orderType: row.orderType, customerId: row.customerId, warehouseId: row.warehouseId, originalOrderId: row.originalOrderId, remark: row.remark, items: [] })
+  if (row.originalOrderId) onOriginalChange(row.originalOrderId)
   getSaleDetail(row.ID).then(({ data }) => {
     form.items = (data.items || []).map((it) => ({ skuId: it.skuId, qty: it.qty, price: it.price, direction: it.direction || 0 }))
   })
@@ -437,3 +493,4 @@ onMounted(() => {
 .text-right { text-align: right; }
 .sub-title { font-weight: 600; margin-bottom: 6px; color: #606266; }
 </style>
+

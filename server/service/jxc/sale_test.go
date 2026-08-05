@@ -429,6 +429,30 @@ func TestGetSalePage_Detail(t *testing.T) {
 	if err != nil || len(detail.Items) != 1 {
 		t.Fatalf("详情不符: %+v err=%v", detail.Items, err)
 	}
+	// 剩余可退换额度：原单出库后剩余 = 出库量；退货确认后剩余减少
+	if err := saleSvc.ConfirmOut(context.Background(), order.ID, "t"); err != nil {
+		t.Fatalf("出库失败: %v", err)
+	}
+	rem, err := saleSvc.GetRemaining(context.Background(), order.ID)
+	if err != nil || len(rem) != 1 || rem[0].Remaining != 1 {
+		t.Fatalf("剩余额度不符: %+v err=%v", rem, err)
+	}
+	ret := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeReturn, OriginalOrderID: &order.ID,
+		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 15}}}
+	if err := saleSvc.CreateSaleOrder(context.Background(), ret); err != nil {
+		t.Fatalf("创建退货单失败: %v", err)
+	}
+	if err := saleSvc.ConfirmReturn(context.Background(), ret.ID, "t"); err != nil {
+		t.Fatalf("退货失败: %v", err)
+	}
+	rem, err = saleSvc.GetRemaining(context.Background(), order.ID)
+	if err != nil || len(rem) != 1 || rem[0].Remaining != 0 || rem[0].UsedQty != 1 {
+		t.Fatalf("退货后剩余额度不符: %+v err=%v", rem, err)
+	}
+	// 原单不存在
+	if _, err := saleSvc.GetRemaining(context.Background(), 99999); err == nil {
+		t.Error("原单不存在应报错")
+	}
 }
 
 // TestSale_ErrorBranches 测试销售 service 异常/错误分支

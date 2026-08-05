@@ -1,6 +1,7 @@
 package jxc
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -63,6 +64,22 @@ func TestApiSaleFlow(t *testing.T) {
 	_, rb = doReq(t, sapi.ConfirmOut, http.MethodPut, `{"id":1}`)
 	if rb.Code != 0 {
 		t.Fatalf("out code=%d msg=%s", rb.Code, rb.Msg)
+	}
+	// 剩余可退换额度
+	c, w = newCtxQuery(t, "id=1")
+	sapi.GetSaleRemaining(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("remaining status=%d", w.Code)
+	}
+	var remList []jxc.SaleRemaining
+	_ = json.Unmarshal(w.Body.Bytes(), &struct {
+		Data []jxc.SaleRemaining `json:"data"`
+	}{Data: remList})
+	// 原单不存在
+	c, w = newCtxQuery(t, "id=99999")
+	sapi.GetSaleRemaining(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("remaining err status=%d", w.Code)
 	}
 	// 验证库存 10-2=8、锁定 0
 	var stock jxc.Stock

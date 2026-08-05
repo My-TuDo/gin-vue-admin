@@ -65,6 +65,28 @@ func (a *SaleApi) GetSaleDetail(c *gin.Context) {
 	response.OkWithData(order, c)
 }
 
+// GetSaleRemaining 查询原单剩余可退换数量（按商品，供前端数量上限钳制）
+// @Tags     JxcSale
+// @Summary  查询原单剩余可退换数量
+// @Security ApiKeyAuth
+// @Produce  application/json
+// @Param    id   query  uint  true  "原单ID"
+// @Success  200  {object}  response.Response{data=[]jxc.SaleRemaining}  "剩余可退换数量"
+// @Router   /jxc/sale/remaining [get]
+func (a *SaleApi) GetSaleRemaining(c *gin.Context) {
+	var req request.GetById
+	if err := c.ShouldBindQuery(&req); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	list, err := saleService.GetRemaining(c.Request.Context(), req.Uint())
+	if err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithData(list, c)
+}
+
 // CreateSaleOrder 创建销售单
 // @Tags     JxcSale
 // @Summary  创建销售单（正常销售自动锁定库存）

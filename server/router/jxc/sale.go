@@ -14,6 +14,7 @@ func (r *SaleRouter) InitSaleRouter(Router *gin.RouterGroup) {
 	// ===== 销售单 =====
 	readOnlyGroup.GET("sale/page", saleApi.GetSalePage)
 	readOnlyGroup.GET("sale/detail", saleApi.GetSaleDetail)
+	readOnlyGroup.GET("sale/remaining", saleApi.GetSaleRemaining)
 	recordGroup.POST("sale", saleApi.CreateSaleOrder)
 	recordGroup.PUT("sale", saleApi.UpdateSaleOrder)
 	recordGroup.DELETE("sale", saleApi.DeleteSaleOrder)
