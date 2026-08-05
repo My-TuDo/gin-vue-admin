@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
@@ -19,11 +20,12 @@ type SaleService struct{}
 // ========== 辅助 ==========
 
 // genSaleOrderNo 生成销售单号 SO-YYYYMMDD-XXX
+// 用 Unscoped 包含软删除行（避免删除后重建撞唯一索引）
 func (s *SaleService) genSaleOrderNo(db *gorm.DB) (string, error) {
 	date := time.Now().Format("20060102")
 	like := "SO-" + date + "%"
 	var maxNo string
-	if err := db.Model(&jxc.SaleOrder{}).Where("order_no LIKE ?", like).
+	if err := db.Unscoped().Model(&jxc.SaleOrder{}).Where("order_no LIKE ?", like).
 		Order("order_no DESC").Limit(1).Pluck("order_no", &maxNo).Error; err != nil {
 		return "", err
 	}
@@ -35,6 +37,15 @@ func (s *SaleService) genSaleOrderNo(db *gorm.DB) (string, error) {
 		return "", fmt.Errorf("解析单号序号失败: %s", maxNo)
 	}
 	return fmt.Sprintf("SO-%s-%03d", date, seq+1), nil
+}
+
+// isDuplicateKey 判断是否为唯一索引冲突（MySQL 1062 / SQLite UNIQUE constraint）
+func isDuplicateKey(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "Duplicate entry") || strings.Contains(msg, "UNIQUE constraint failed")
 }
 
 // lockStock 锁定库存（校验可售库存充足）
@@ -186,6 +197,29 @@ func (s *SaleService) checkInboundLimit(db *gorm.DB, orderType int8, originalID 
 	return nil
 }
 
+// checkReturnSkus 校验退货明细必须是原单出库过的 SKU（业界退货限定原单商品；换货才允许换不同商品）
+func (s *SaleService) checkReturnSkus(db *gorm.DB, orderType int8, originalID uint, items []jxc.SaleItem) error {
+	if orderType != jxc.SaleTypeReturn {
+		return nil
+	}
+	var skuIDs []uint
+	db.Table("sale_item si").
+		Select("DISTINCT si.sku_id").
+		Joins("JOIN sale_order o ON o.id = si.sale_id").
+		Where("si.sale_id = ? AND (o.order_type = ? OR si.direction = ?)", originalID, jxc.SaleTypeNormal, 1).
+		Scan(&skuIDs)
+	allowed := map[uint]bool{}
+	for _, id := range skuIDs {
+		allowed[id] = true
+	}
+	for _, it := range items {
+		if !allowed[it.SkuID] {
+			return fmt.Errorf("退货商品（SKU %d）不在原单出库商品中", it.SkuID)
+		}
+	}
+	return nil
+}
+
 // GetRemaining 查询原单剩余可退换件数（供前端数量上限钳制）
 func (s *SaleService) GetRemaining(ctx context.Context, originalID uint) (jxc.SaleRemaining, error) {
 	db := global.GVA_DB.WithContext(ctx)
@@ -208,23 +242,46 @@ func (s *SaleService) GetRemaining(ctx context.Context, originalID uint) (jxc.Sa
 // ========== 销售单 CRUD ==========
 
 // CreateSaleOrder 创建销售单（待出库, 正常销售锁定库存）
+// 单号并发/删除重建冲突时自动重试重新生成
 func (s *SaleService) CreateSaleOrder(ctx context.Context, order *jxc.SaleOrder) error {
 	if len(order.Items) == 0 {
 		return errors.New("销售单至少需要一条明细")
 	}
+	order.Status = jxc.SaleStatusPending
+	if order.OrderType == 0 {
+		order.OrderType = jxc.SaleTypeNormal
+	}
+	itemsCopy := order.Items
+	for attempt := 0; attempt < 3; attempt++ {
+		order.Items = itemsCopy
+		order.OrderNo = ""
+		order.ID = 0
+		err := s.createSaleOrderTx(ctx, order)
+		if err == nil {
+			return nil
+		}
+		if !isDuplicateKey(err) {
+			return err
+		}
+		// 单号冲突：重试（createSaleOrderTx 会重新生成单号）
+	}
+	return errors.New("单号生成冲突，请重试")
+}
+
+// createSaleOrderTx 创建销售单的事务体（单号生成 + 校验 + 落库）
+func (s *SaleService) createSaleOrderTx(ctx context.Context, order *jxc.SaleOrder) error {
 	db := global.GVA_DB.WithContext(ctx)
 	orderNo, err := s.genSaleOrderNo(db)
 	if err != nil {
 		return err
 	}
 	order.OrderNo = orderNo
-	order.Status = jxc.SaleStatusPending
-	if order.OrderType == 0 {
-		order.OrderType = jxc.SaleTypeNormal
-	}
 	// 退货/换货必须关联合法原单
 	if order.OrderType != jxc.SaleTypeNormal {
 		if err := s.checkOriginalOrder(db, order.OrderType, order.OriginalOrderID); err != nil {
+			return err
+		}
+		if err := s.checkReturnSkus(db, order.OrderType, *order.OriginalOrderID, order.Items); err != nil {
 			return err
 		}
 		if err := s.checkInboundLimit(db, order.OrderType, *order.OriginalOrderID, order.Items, 0); err != nil {
@@ -292,6 +349,9 @@ func (s *SaleService) UpdateSaleOrder(ctx context.Context, order *jxc.SaleOrder)
 	// 退货/换货必须关联合法原单
 	if order.OrderType != jxc.SaleTypeNormal {
 		if err := s.checkOriginalOrder(db, order.OrderType, order.OriginalOrderID); err != nil {
+			return err
+		}
+		if err := s.checkReturnSkus(db, order.OrderType, *order.OriginalOrderID, order.Items); err != nil {
 			return err
 		}
 		if err := s.checkInboundLimit(db, order.OrderType, *order.OriginalOrderID, order.Items, order.ID); err != nil {
