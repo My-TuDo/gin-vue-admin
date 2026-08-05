@@ -134,124 +134,75 @@ func (s *SaleService) checkOriginalOrder(db *gorm.DB, orderType int8, originalID
 	return nil
 }
 
-// calcInboundRemaining 计算原单各商品的可退换剩余额度（出库量 − 已确认占用）
-func (s *SaleService) calcInboundRemaining(db *gorm.DB, originalID uint, excludeID uint) (outQty, used map[uint]int, names map[uint]string, err error) {
-	type qtyRow struct {
-		GoodsID uint
-		Qty     int
-	}
-	var outRows []qtyRow
+// calcInboundRemaining 计算原单剩余可退换件数（出库总件数 − 已确认占用总件数）
+// 原单出库：正常销售 = 全部明细；换货单 = 换出明细（direction=1）
+// 已占用：该原单下已确认退/换单的入库明细（退货 direction=0、换入 direction=2）
+func (s *SaleService) calcInboundRemaining(db *gorm.DB, originalID uint, excludeID uint) (outQty, usedQty int, err error) {
+	var outRow struct{ Qty int }
 	if err = db.Table("sale_item si").
-		Select("gs.goods_id AS goods_id, SUM(si.qty) AS qty").
+		Select("COALESCE(SUM(si.qty), 0) AS qty").
 		Joins("JOIN sale_order o ON o.id = si.sale_id").
-		Joins("JOIN goods_sku gs ON gs.id = si.sku_id").
 		Where("si.sale_id = ? AND (o.order_type = ? OR si.direction = ?)", originalID, jxc.SaleTypeNormal, 1).
-		Group("gs.goods_id").Scan(&outRows).Error; err != nil {
-		return nil, nil, nil, err
+		Scan(&outRow).Error; err != nil {
+		return 0, 0, err
 	}
-	var usedRows []qtyRow
+	var usedRow struct{ Qty int }
 	if err = db.Table("sale_item si").
-		Select("gs.goods_id AS goods_id, SUM(si.qty) AS qty").
+		Select("COALESCE(SUM(si.qty), 0) AS qty").
 		Joins("JOIN sale_order o ON o.id = si.sale_id").
-		Joins("JOIN goods_sku gs ON gs.id = si.sku_id").
 		Where("o.original_order_id = ? AND o.status = ? AND o.id <> ? AND si.direction IN (0, 2)", originalID, jxc.SaleStatusShipped, excludeID).
-		Group("gs.goods_id").Scan(&usedRows).Error; err != nil {
-		return nil, nil, nil, err
+		Scan(&usedRow).Error; err != nil {
+		return 0, 0, err
 	}
-	outQty = map[uint]int{}
-	used = map[uint]int{}
-	names = map[uint]string{}
-	for _, r := range outRows {
-		outQty[r.GoodsID] = r.Qty
-	}
-	for _, r := range usedRows {
-		used[r.GoodsID] += r.Qty
-	}
-	for gid := range outQty {
-		var g jxc.Goods
-		if err := db.First(&g, gid).Error; err == nil {
-			names[gid] = g.Name
-		}
-	}
-	return outQty, used, names, nil
+	return outRow.Qty, usedRow.Qty, nil
 }
 
-// checkInboundLimit 校验入库数量上限（按商品 Goods 维度，支持同款换码/换色）：
-// 退货/换货单的入库明细不得超过原单该商品的出库数量减去已被其他已确认单据占用的数量
+// checkInboundLimit 校验入库数量上限（按单据件数总量）：
+// 退货/换货单的入库总件数不得超过原单出库总件数减去已被其他已确认单据占用的件数
+// 允许换不同商品（额度按件数，不限定商品），防止无中生有
 func (s *SaleService) checkInboundLimit(db *gorm.DB, orderType int8, originalID uint, items []jxc.SaleItem, excludeID uint) error {
 	if orderType != jxc.SaleTypeReturn && orderType != jxc.SaleTypeExchange {
 		return nil
 	}
-	// 收集涉及 SKU 的 Goods 映射
-	skuSet := map[uint]struct{}{}
-	for _, it := range items {
-		skuSet[it.SkuID] = struct{}{}
-	}
-	var skus []jxc.GoodsSku
-	if len(skuSet) > 0 {
-		ids := make([]uint, 0, len(skuSet))
-		for id := range skuSet {
-			ids = append(ids, id)
-		}
-		db.Where("id IN ?", ids).Find(&skus)
-	}
-	skuGoods := map[uint]uint{}
-	for _, s := range skus {
-		skuGoods[s.ID] = s.GoodsID
-	}
-	goodsName := map[uint]string{}
-	for _, s := range skus {
-		if s.GoodsID > 0 && goodsName[s.GoodsID] == "" {
-			var g jxc.Goods
-			db.First(&g, s.GoodsID)
-			goodsName[s.GoodsID] = g.Name
-		}
-	}
-	outQty, used, _, err := s.calcInboundRemaining(db, originalID, excludeID)
-	if err != nil {
-		return err
-	}
-	// 当前单据入库明细（按商品）
-	inQty := map[uint]int{}
+	// 当前单据入库总件数
+	inQty := 0
 	for _, it := range items {
 		isIn := orderType == jxc.SaleTypeReturn || (orderType == jxc.SaleTypeExchange && it.Direction == 2)
 		if isIn {
-			inQty[skuGoods[it.SkuID]] += it.Qty
+			inQty += it.Qty
 		}
 	}
-	// 校验：入库数量 ≤ 原单出库 − 已占用
-	for goodsID, qty := range inQty {
-		limit := outQty[goodsID] - used[goodsID]
-		if qty > limit {
-			return fmt.Errorf("入库数量超出原单剩余可退换数量：商品「%s」原单出库 %d，已占用 %d，最多还可入库 %d", goodsName[goodsID], outQty[goodsID], used[goodsID], limit)
-		}
+	if inQty == 0 {
+		return nil
+	}
+	outQty, usedQty, err := s.calcInboundRemaining(db, originalID, excludeID)
+	if err != nil {
+		return err
+	}
+	limit := outQty - usedQty
+	if inQty > limit {
+		return fmt.Errorf("入库件数超出原单剩余可退换数量：原单出库 %d 件，已占用 %d 件，最多还可入库 %d 件", outQty, usedQty, limit)
 	}
 	return nil
 }
 
-// GetRemaining 查询原单各商品的剩余可退换数量（供前端数量上限钳制）
-func (s *SaleService) GetRemaining(ctx context.Context, originalID uint) ([]jxc.SaleRemaining, error) {
+// GetRemaining 查询原单剩余可退换件数（供前端数量上限钳制）
+func (s *SaleService) GetRemaining(ctx context.Context, originalID uint) (jxc.SaleRemaining, error) {
 	db := global.GVA_DB.WithContext(ctx)
 	var original jxc.SaleOrder
 	if err := db.First(&original, originalID).Error; err != nil {
-		return nil, errors.New("关联原单不存在")
+		return jxc.SaleRemaining{}, errors.New("关联原单不存在")
 	}
-	outQty, used, names, err := s.calcInboundRemaining(db, originalID, 0)
+	outQty, usedQty, err := s.calcInboundRemaining(db, originalID, 0)
 	if err != nil {
-		return nil, err
+		return jxc.SaleRemaining{}, err
 	}
-	list := make([]jxc.SaleRemaining, 0, len(outQty))
-	for gid, oq := range outQty {
-		u := used[gid]
-		list = append(list, jxc.SaleRemaining{
-			GoodsID:   gid,
-			GoodsName: names[gid],
-			OutQty:    oq,
-			UsedQty:   u,
-			Remaining: oq - u,
-		})
-	}
-	return list, nil
+	return jxc.SaleRemaining{
+		OrderNo:   original.OrderNo,
+		OutQty:    outQty,
+		UsedQty:   usedQty,
+		Remaining: outQty - usedQty,
+	}, nil
 }
 
 // ========== 销售单 CRUD ==========

@@ -315,25 +315,19 @@ const loadStock = async () => {
   skuStockMap.value = map
 }
 
-// 原单剩余可退换额度（数量上限：退货/换入，按商品）
-const remainingByGoods = ref({})
+// 原单剩余可退换件数（数量上限：退货/换入，按单据总量）
+const remainingTotal = ref(undefined)
 const onOriginalChange = async (id) => {
-  remainingByGoods.value = {}
+  remainingTotal.value = undefined
   if (!id) return
   const { data } = await getSaleRemaining(id)
-  const map = {}
-  ;(data || []).forEach((r) => {
-    map[r.goodsId] = r.remaining
-  })
-  remainingByGoods.value = map
+  remainingTotal.value = data?.remaining
 }
 
-// 行数量上限：退货/换入=原单剩余额度；销售/换出=可售库存（键盘超限自动钳制、+ 按钮达上限禁用）
+// 行数量上限：退货/换入=原单剩余件数；销售/换出=可售库存（键盘超限自动钳制、+ 按钮达上限禁用）
 const rowMax = (row) => {
   if (form.orderType === 2 || (form.orderType === 3 && row.direction === 2)) {
-    const sku = skuOptions.value.find((s) => s.ID === row.skuId)
-    if (!sku) return undefined
-    const rem = remainingByGoods.value[sku.goodsId]
+    const rem = remainingTotal.value
     return rem !== undefined && rem > 0 ? rem : undefined
   }
   if (row.skuId) {
@@ -342,12 +336,10 @@ const rowMax = (row) => {
   }
   return undefined
 }
-// 剩余额度/可售库存为 0 时禁用数量输入
+// 剩余件数/可售库存为 0 时禁用数量输入
 const rowDisabled = (row) => {
   if (form.orderType === 2 || (form.orderType === 3 && row.direction === 2)) {
-    const sku = skuOptions.value.find((s) => s.ID === row.skuId)
-    if (!sku) return false
-    const rem = remainingByGoods.value[sku.goodsId]
+    const rem = remainingTotal.value
     return rem !== undefined && rem <= 0
   }
   if (row.skuId) {
