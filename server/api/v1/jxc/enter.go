@@ -7,6 +7,7 @@ type ApiGroup struct {
 	GoodsApi
 	PurchaseApi
 	SaleApi
+	StockApi
 }
 
 var (
@@ -14,4 +15,5 @@ var (
 	goodsService    = service.ServiceGroupApp.JxcServiceGroup.GoodsService
 	purchaseService = service.ServiceGroupApp.JxcServiceGroup.PurchaseService
 	saleService     = service.ServiceGroupApp.JxcServiceGroup.SaleService
+	stockService    = service.ServiceGroupApp.JxcServiceGroup.StockService
 )

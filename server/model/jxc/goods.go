@@ -33,6 +33,8 @@ type GoodsSku struct {
 	CostPrice float64 `json:"costPrice" gorm:"column:cost_price;type:decimal(12,2);not null;default:0;comment:成本价"`
 	SalePrice float64 `json:"salePrice" gorm:"column:sale_price;type:decimal(12,2);not null;default:0;comment:销售价"`
 	Status    int8    `json:"status" gorm:"column:status;not null;default:1;comment:状态 1启用 0停用"`
+
+	Goods *Goods `json:"goods" gorm:"foreignKey:GoodsID;references:ID"`
 }
 
 func (GoodsSku) TableName() string { return "goods_sku" }
