@@ -21,6 +21,11 @@ func memoryDBOpen(t testing.TB) *gorm.DB {
 	if err != nil {
 		t.Fatalf("testutil: 打开 sqlite :memory: 失败: %v", err)
 	}
+	// sqlite :memory: 每个连接是独立数据库，必须限制为单连接，
+	// 否则 Exec 与事务可能落在不同连接上导致"数据丢失"（跨测试不稳定）。
+	if sqlDB, err := db.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(1)
+	}
 	return db
 }
 

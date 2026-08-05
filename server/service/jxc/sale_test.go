@@ -3,6 +3,7 @@ package jxc
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
 	"github.com/flipped-aurora/gin-vue-admin/server/internal/testutil"
@@ -495,7 +496,8 @@ func TestSale_ErrorBranches(t *testing.T) {
 		t.Error("重复换货应拒绝")
 	}
 	// 单号序号解析失败（坏单号插入后再创建，须在 DROP 之前）
-	global.GVA_DB.Create(&jxc.SaleOrder{OrderNo: "SO-20260804-XXX", WarehouseID: 1, Status: 1})
+	badDate := time.Now().Format("20060102")
+	global.GVA_DB.Create(&jxc.SaleOrder{OrderNo: "SO-" + badDate + "-XXX", WarehouseID: 1, Status: 1})
 	if err := saleSvc.CreateSaleOrder(ctx, &jxc.SaleOrder{WarehouseID: 1, Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 1}}}); err == nil {
 		t.Error("单号解析失败应报错")
 	}
