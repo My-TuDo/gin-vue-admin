@@ -1,5 +1,22 @@
 package jxc
 
+import "github.com/flipped-aurora/gin-vue-admin/server/model/common/request"
+
+// StockQuery 库存查询参数
+type StockQuery struct {
+	request.PageInfo
+	WarehouseID uint `json:"warehouseId" form:"warehouseId"` // 仓库ID（0=全部）
+	LowStock    bool `json:"lowStock" form:"lowStock"`       // 仅看预警（quantity <= warning_quantity）
+}
+
+// StockLogQuery 流水查询参数
+type StockLogQuery struct {
+	request.PageInfo
+	WarehouseID  uint   `json:"warehouseId" form:"warehouseId"`
+	SkuID        uint   `json:"skuId" form:"skuId"`
+	BusinessType string `json:"businessType" form:"businessType"`
+}
+
 // Stock 库存（仓库 x SKU 快照，不软删除）
 type Stock struct {
 	ID              uint    `json:"ID" gorm:"primarykey;comment:主键ID"`
@@ -26,6 +43,7 @@ type StockLog struct {
 	ChangeQty    int     `json:"changeQty" gorm:"column:change_qty;not null;default:0;comment:变更数量 正入负出"`
 	AfterQty     int     `json:"afterQty" gorm:"column:after_qty;not null;default:0;comment:变更后数量"`
 	Operator     string  `json:"operator" gorm:"column:operator;size:50;comment:操作人"`
+	Remark       string  `json:"remark" gorm:"column:remark;size:200;comment:备注/原因（直接出入库等）"`
 }
 
 func (StockLog) TableName() string { return "stock_log" }

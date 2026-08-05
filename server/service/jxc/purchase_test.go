@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/internal/testutil"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/common/request"
@@ -347,7 +348,8 @@ func TestPurchase_ErrorBranches(t *testing.T) {
 		t.Error("流水表缺失入库应报错")
 	}
 	// 单号序号解析失败（坏单号插入后再创建）
-	global.GVA_DB.Create(&jxc.PurchaseOrder{OrderNo: "PO-20260804-XXX", SupplierID: 1, WarehouseID: 1, Status: 1})
+	badDate := time.Now().Format("20060102")
+	global.GVA_DB.Create(&jxc.PurchaseOrder{OrderNo: "PO-" + badDate + "-XXX", SupplierID: 1, WarehouseID: 1, Status: 1})
 	if err := purchaseSvc.CreatePurchase(ctx, &jxc.PurchaseOrder{SupplierID: 1, WarehouseID: 1, Items: []jxc.PurchaseItem{{SkuID: skuID, Qty: 1}}}); err == nil {
 		t.Error("单号解析失败应报错")
 	}
