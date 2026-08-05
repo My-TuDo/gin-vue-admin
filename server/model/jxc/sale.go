@@ -18,13 +18,12 @@ const (
 	SaleTypeExchange = 3 // 换货（一张单含换出 qty<0 与换入 qty>0 明细, 联合确认）
 )
 
-// SaleRemaining 原单剩余可退换数量（按商品，供前端数量上限钳制）
+// SaleRemaining 原单剩余可退换件数（供前端数量上限钳制）
 type SaleRemaining struct {
-	GoodsID   uint   `json:"goodsId" gorm:"-" comment:"商品ID"`
-	GoodsName string `json:"goodsName" gorm:"-" comment:"商品名称"`
-	OutQty    int    `json:"outQty" gorm:"-" comment:"原单出库数量"`
-	UsedQty   int    `json:"usedQty" gorm:"-" comment:"已被确认单据占用"`
-	Remaining int    `json:"remaining" gorm:"-" comment:"剩余可退换数量"`
+	OrderNo   string `json:"orderNo" gorm:"-" comment:"原单单号"`
+	OutQty    int    `json:"outQty" gorm:"-" comment:"原单出库件数"`
+	UsedQty   int    `json:"usedQty" gorm:"-" comment:"已被确认单据占用件数"`
+	Remaining int    `json:"remaining" gorm:"-" comment:"剩余可退换件数"`
 }
 
 // SaleOrder 销售单

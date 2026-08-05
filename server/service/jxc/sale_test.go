@@ -333,6 +333,18 @@ func TestConfirmExchange(t *testing.T) {
 	if qty != 1 {
 		t.Errorf("换入新建库存应为 1, got %d", qty)
 	}
+	// 允许换不同商品（件数额度）：换入完全不同的商品创建成功（业界允许换不同款，差价多退少补）
+	var g2 jxc.Goods
+	g2 = jxc.Goods{Code: "SP003", Name: "另一商品", Status: 1}
+	global.GVA_DB.Create(&g2)
+	var sku3 jxc.GoodsSku
+	sku3 = jxc.GoodsSku{GoodsID: g2.ID, SkuCode: "SP003-L-黑", Color: "黑", Size: "L", CostPrice: 10, SalePrice: 20, Status: 1}
+	global.GVA_DB.Create(&sku3)
+	ex4 := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeExchange, OriginalOrderID: &ex2.ID,
+		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 15, Direction: 1}, {SkuID: sku3.ID, Qty: 1, Price: 20, Direction: 2}}}
+	if err := saleSvc.CreateSaleOrder(ctx, ex4); err != nil {
+		t.Errorf("换入不同商品应允许（件数额度）: %v", err)
+	}
 }
 
 // TestSale_StockErrors 测试库存异常场景（出库不足/解锁失败/退货表缺失）
@@ -429,13 +441,13 @@ func TestGetSalePage_Detail(t *testing.T) {
 	if err != nil || len(detail.Items) != 1 {
 		t.Fatalf("详情不符: %+v err=%v", detail.Items, err)
 	}
-	// 剩余可退换额度：原单出库后剩余 = 出库量；退货确认后剩余减少
+	// 剩余可退换件数：原单出库后剩余 = 出库量；退货确认后剩余减少
 	if err := saleSvc.ConfirmOut(context.Background(), order.ID, "t"); err != nil {
 		t.Fatalf("出库失败: %v", err)
 	}
 	rem, err := saleSvc.GetRemaining(context.Background(), order.ID)
-	if err != nil || len(rem) != 1 || rem[0].Remaining != 1 {
-		t.Fatalf("剩余额度不符: %+v err=%v", rem, err)
+	if err != nil || rem.Remaining != 1 {
+		t.Fatalf("剩余件数不符: %+v err=%v", rem, err)
 	}
 	ret := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeReturn, OriginalOrderID: &order.ID,
 		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 15}}}
@@ -446,8 +458,8 @@ func TestGetSalePage_Detail(t *testing.T) {
 		t.Fatalf("退货失败: %v", err)
 	}
 	rem, err = saleSvc.GetRemaining(context.Background(), order.ID)
-	if err != nil || len(rem) != 1 || rem[0].Remaining != 0 || rem[0].UsedQty != 1 {
-		t.Fatalf("退货后剩余额度不符: %+v err=%v", rem, err)
+	if err != nil || rem.Remaining != 0 || rem.UsedQty != 1 {
+		t.Fatalf("退货后剩余件数不符: %+v err=%v", rem, err)
 	}
 	// 原单不存在
 	if _, err := saleSvc.GetRemaining(context.Background(), 99999); err == nil {
@@ -577,6 +589,13 @@ func TestSale_ErrorBranches(t *testing.T) {
 	}
 	// 换货：换出明细库存不足（清空库存记录）
 	global.GVA_DB.Exec("DELETE FROM stock")
+	// 方向缺失（绕过创建校验直接插入）：确认应报错
+	badDir := &jxc.SaleOrder{OrderNo: "SO-BADDIR", WarehouseID: 1, OrderType: jxc.SaleTypeExchange, OriginalOrderID: &order3.ID, Status: 1}
+	global.GVA_DB.Create(badDir)
+	global.GVA_DB.Create(&jxc.SaleItem{SaleID: badDir.ID, SkuID: skuID, Qty: 1, Price: 15, Direction: 0})
+	if err := saleSvc.ConfirmExchange(ctx, badDir.ID, "t"); err == nil {
+		t.Error("方向缺失换货确认应报错")
+	}
 	exOut := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeExchange, OriginalOrderID: &order3.ID,
 		Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 15, Direction: 1}, {SkuID: skuID, Qty: 1, Price: 15, Direction: 2}}}
 	if err := saleSvc.CreateSaleOrder(ctx, exOut); err != nil {
@@ -620,6 +639,16 @@ func TestSale_ErrorBranches(t *testing.T) {
 	if err := saleSvc.CreateSaleOrder(ctx, &jxc.SaleOrder{WarehouseID: 1, Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 1}}}); err == nil {
 		t.Error("单号解析失败应报错")
 	}
+	// 明细表缺失：GetRemaining 额度聚合报错
+	global.GVA_DB.Exec("DROP TABLE sale_item")
+	if _, err := saleSvc.GetRemaining(ctx, order3.ID); err == nil {
+		t.Error("明细表缺失 GetRemaining 应报错")
+	}
+	// 明细表缺失：退货/换货额度校验报错
+	retNoItem := &jxc.SaleOrder{WarehouseID: 1, OrderType: jxc.SaleTypeReturn, OriginalOrderID: &order3.ID, Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 15}}}
+	if err := saleSvc.CreateSaleOrder(ctx, retNoItem); err == nil {
+		t.Error("明细表缺失额度校验应报错")
+	}
 	// 主表缺失时报错
 	global.GVA_DB.Exec("DROP TABLE sale_order")
 	if err := saleSvc.CreateSaleOrder(ctx, &jxc.SaleOrder{WarehouseID: 1, Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1}}}); err == nil {
@@ -633,5 +662,10 @@ func TestSale_ErrorBranches(t *testing.T) {
 	}
 	if err := saleSvc.ConfirmExchange(ctx, 1, "t"); err == nil {
 		t.Error("主表缺失换货应报错")
+	}
+	// 明细表缺失：GetRemaining / 创建退货（额度聚合）应报错
+	global.GVA_DB.Exec("DROP TABLE sale_item")
+	if _, err := saleSvc.GetRemaining(ctx, 1); err == nil {
+		t.Error("明细表缺失 GetRemaining 应报错")
 	}
 }

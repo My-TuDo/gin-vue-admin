@@ -71,15 +71,21 @@ func TestApiSaleFlow(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("remaining status=%d", w.Code)
 	}
-	var remList []jxc.SaleRemaining
+	var rem jxc.SaleRemaining
 	_ = json.Unmarshal(w.Body.Bytes(), &struct {
-		Data []jxc.SaleRemaining `json:"data"`
-	}{Data: remList})
+		Data jxc.SaleRemaining `json:"data"`
+	}{Data: rem})
 	// 原单不存在
 	c, w = newCtxQuery(t, "id=99999")
 	sapi.GetSaleRemaining(c)
 	if w.Code != http.StatusOK {
 		t.Fatalf("remaining err status=%d", w.Code)
+	}
+	// 参数绑定错误
+	c, w = newCtxQuery(t, "id=abc")
+	sapi.GetSaleRemaining(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("remaining badparam status=%d", w.Code)
 	}
 	// 验证库存 10-2=8、锁定 0
 	var stock jxc.Stock
