@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/jxc"
@@ -16,13 +17,14 @@ type CashierService struct{}
 
 // RefundableOrder 可退换原单（含剩余件数）
 type RefundableOrder struct {
-	ID          uint    `json:"ID"`
-	OrderNo     string  `json:"orderNo"`
-	OrderType   int8    `json:"orderType"`
-	TotalAmount float64 `json:"totalAmount"`
-	OutQty      int     `json:"outQty"`
-	UsedQty     int     `json:"usedQty"`
-	Remaining   int     `json:"remaining"`
+	ID          uint      `json:"ID"`
+	OrderNo     string    `json:"orderNo"`
+	OrderType   int8      `json:"orderType"`
+	TotalAmount float64   `json:"totalAmount"`
+	CreatedAt   time.Time `json:"createdAt"`
+	OutQty      int       `json:"outQty"`
+	UsedQty     int       `json:"usedQty"`
+	Remaining   int       `json:"remaining"`
 }
 
 // RefundableOrders 可退换原单列表：已出库的正常销售/换货单，剩余件数 > 0
@@ -74,15 +76,16 @@ func (s *CashierService) RefundableOrders(ctx context.Context) ([]RefundableOrde
 		}
 		result = append(result, RefundableOrder{
 			ID: o.ID, OrderNo: o.OrderNo, OrderType: o.OrderType,
-			TotalAmount: o.TotalAmount, OutQty: outQty, UsedQty: usedQty, Remaining: remaining,
+			TotalAmount: o.TotalAmount, CreatedAt: o.CreatedAt,
+			OutQty: outQty, UsedQty: usedQty, Remaining: remaining,
 		})
 	}
-	// 按剩余件数降序，单号升序
+	// 按创建时间倒序（最新单在最上面）
 	sort.Slice(result, func(a, b int) bool {
-		if result[a].Remaining != result[b].Remaining {
-			return result[a].Remaining > result[b].Remaining
+		if !result[a].CreatedAt.Equal(result[b].CreatedAt) {
+			return result[a].CreatedAt.After(result[b].CreatedAt)
 		}
-		return result[a].OrderNo < result[b].OrderNo
+		return result[a].ID > result[b].ID
 	})
 	return result, nil
 }
