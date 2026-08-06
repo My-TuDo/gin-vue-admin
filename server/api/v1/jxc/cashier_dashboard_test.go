@@ -57,6 +57,43 @@ func TestApiCashierCheckout(t *testing.T) {
 	if rb.Code == 0 {
 		t.Error("坏参数应失败")
 	}
+	// 收银退款（原单=第一笔 30 元单，退 1 件 15 元）
+	_, rb = doReq(t, cashierApi2.Refund, http.MethodPost, `{"originalOrderId":1,"items":[{"skuId":1,"qty":1}]}`)
+	if rb.Code != 0 {
+		t.Fatalf("refund code=%d msg=%s", rb.Code, rb.Msg)
+	}
+	var ret jxc.SaleOrder
+	global.GVA_DB.Where("order_type = 2").First(&ret)
+	if ret.TotalAmount != -15 || ret.Status != jxc.SaleStatusShipped {
+		t.Errorf("退款单不符: %+v", ret)
+	}
+	// 退款超额度拒绝
+	_, rb = doReq(t, cashierApi2.Refund, http.MethodPost, `{"originalOrderId":1,"items":[{"skuId":1,"qty":99}]}`)
+	if rb.Code == 0 {
+		t.Error("退款超额度应失败")
+	}
+	// 退款参数绑定错误
+	_, rb = doReq(t, cashierApi2.Refund, http.MethodPost, `not-json`)
+	if rb.Code == 0 {
+		t.Error("坏参数退款应失败")
+	}
+	// 收银换货（退 1 件 + 换出 1 件同 SKU，差额 0）
+	_, rb = doReq(t, cashierApi2.Exchange, http.MethodPost,
+		`{"originalOrderId":1,"payMethod":"wechat","returnItems":[{"skuId":1,"qty":1}],"outItems":[{"skuId":1,"qty":1}]}`)
+	if rb.Code != 0 {
+		t.Fatalf("exchange code=%d msg=%s", rb.Code, rb.Msg)
+	}
+	// 换货实收不足拒绝
+	_, rb = doReq(t, cashierApi2.Exchange, http.MethodPost,
+		`{"originalOrderId":1,"payMethod":"cash","paidAmount":1,"returnItems":[{"skuId":1,"qty":1}],"outItems":[{"skuId":1,"qty":1}]}`)
+	if rb.Code == 0 {
+		t.Error("换货实收不足应失败")
+	}
+	// 换货参数绑定错误
+	_, rb = doReq(t, cashierApi2.Exchange, http.MethodPost, `not-json`)
+	if rb.Code == 0 {
+		t.Error("坏参数换货应失败")
+	}
 }
 
 // TestApiDashboard 仪表盘 api

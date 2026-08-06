@@ -9,5 +9,7 @@ func (r *CashierRouter) InitCashierRouter(Router *gin.RouterGroup) {
 	recordGroup := Router.Group("jxc")
 	{
 		recordGroup.POST("cashier/checkout", cashierApi.Checkout)
+	recordGroup.POST("cashier/refund", cashierApi.Refund)
+	recordGroup.POST("cashier/exchange", cashierApi.Exchange)
 	}
 }

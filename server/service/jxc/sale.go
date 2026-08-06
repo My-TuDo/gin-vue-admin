@@ -506,57 +506,62 @@ func (s *SaleService) ConfirmOut(ctx context.Context, id uint, operator string) 
 // ConfirmReturn 确认退货入库（退货单 → 已出库, 恢复库存+流水）
 func (s *SaleService) ConfirmReturn(ctx context.Context, id uint, operator string) error {
 	return global.GVA_DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var order jxc.SaleOrder
-		if err := tx.First(&order, id).Error; err != nil {
-			return err
-		}
-		if order.OrderType != jxc.SaleTypeReturn {
-			return errors.New("仅退货单可以执行退货入库")
-		}
-		if order.Status != jxc.SaleStatusPending {
-			return errors.New("仅待出库状态的退货单可以入库")
-		}
-		var items []jxc.SaleItem
-		if err := tx.Where("sale_id = ?", id).Find(&items).Error; err != nil {
-			return err
-		}
-		// 确认时硬校验入库上限：其他已确认占用 + 本次入库 ≤ 原单出库（禁止虚增）
-		if order.OriginalOrderID != nil {
-			if err := s.checkInboundLimit(tx, order.OrderType, *order.OriginalOrderID, items, 0); err != nil {
-				return err
-			}
-		}
-		for i := range items {
-			it := &items[i]
-			var stock jxc.Stock
-			err := tx.Where("warehouse_id = ? AND sku_id = ?", order.WarehouseID, it.SkuID).First(&stock).Error
-			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-				return err
-			}
-			beforeQty := stock.Quantity
-			if err == gorm.ErrRecordNotFound {
-				stock = jxc.Stock{WarehouseID: order.WarehouseID, SkuID: it.SkuID, Quantity: it.Qty}
-				if err := tx.Create(&stock).Error; err != nil {
-					return err
-				}
-			} else {
-				if err := tx.Model(&stock).Update("quantity", stock.Quantity+it.Qty).Error; err != nil {
-					return err
-				}
-			}
-			log := jxc.StockLog{
-				WarehouseID: order.WarehouseID, SkuID: it.SkuID,
-				BusinessType: "sale_return", BusinessNo: order.OrderNo,
-				BeforeQty: beforeQty, ChangeQty: it.Qty, AfterQty: beforeQty + it.Qty,
-				Operator: operator,
-			}
-			if err := tx.Create(&log).Error; err != nil {
-				return err
-			}
-		}
-		return tx.Model(&jxc.SaleOrder{}).Where("id = ?", id).
-			Update("status", jxc.SaleStatusShipped).Error
+		return s.confirmReturnTx(tx, id, operator)
 	})
+}
+
+// confirmReturnTx 退货入库事务体（供 ConfirmReturn 与收银退款/换货复用，须在事务内调用）
+func (s *SaleService) confirmReturnTx(tx *gorm.DB, id uint, operator string) error {
+	var order jxc.SaleOrder
+	if err := tx.First(&order, id).Error; err != nil {
+		return err
+	}
+	if order.OrderType != jxc.SaleTypeReturn {
+		return errors.New("仅退货单可以执行退货入库")
+	}
+	if order.Status != jxc.SaleStatusPending {
+		return errors.New("仅待出库状态的退货单可以入库")
+	}
+	var items []jxc.SaleItem
+	if err := tx.Where("sale_id = ?", id).Find(&items).Error; err != nil {
+		return err
+	}
+	// 确认时硬校验入库上限：其他已确认占用 + 本次入库 ≤ 原单出库（禁止虚增）
+	if order.OriginalOrderID != nil {
+		if err := s.checkInboundLimit(tx, order.OrderType, *order.OriginalOrderID, items, 0); err != nil {
+			return err
+		}
+	}
+	for i := range items {
+		it := &items[i]
+		var stock jxc.Stock
+		err := tx.Where("warehouse_id = ? AND sku_id = ?", order.WarehouseID, it.SkuID).First(&stock).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		beforeQty := stock.Quantity
+		if err == gorm.ErrRecordNotFound {
+			stock = jxc.Stock{WarehouseID: order.WarehouseID, SkuID: it.SkuID, Quantity: it.Qty}
+			if err := tx.Create(&stock).Error; err != nil {
+				return err
+			}
+		} else {
+			if err := tx.Model(&stock).Update("quantity", stock.Quantity+it.Qty).Error; err != nil {
+				return err
+			}
+		}
+		log := jxc.StockLog{
+			WarehouseID: order.WarehouseID, SkuID: it.SkuID,
+			BusinessType: "sale_return", BusinessNo: order.OrderNo,
+			BeforeQty: beforeQty, ChangeQty: it.Qty, AfterQty: beforeQty + it.Qty,
+			Operator: operator,
+		}
+		if err := tx.Create(&log).Error; err != nil {
+			return err
+		}
+	}
+	return tx.Model(&jxc.SaleOrder{}).Where("id = ?", id).
+		Update("status", jxc.SaleStatusShipped).Error
 }
 
 // ConfirmExchange 确认换货（换货单 → 已完成: 负明细换出扣库存, 正明细换入加库存, 联合确认）
