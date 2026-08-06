@@ -85,3 +85,20 @@ func (a *CashierApi) Exchange(c *gin.Context) {
 	}
 	response.OkWithData(result, c)
 }
+
+// RefundableOrders 可退换原单列表（剩余件数 > 0）
+// @Tags     JxcCashier
+// @Summary  可退换原单列表
+// @Security ApiKeyAuth
+// @Produce  application/json
+// @Success  200 {object} response.Response{data=[]jxc.CashierService.RefundableOrder} "原单列表"
+// @Router   /jxc/cashier/refundable-orders [get]
+func (a *CashierApi) RefundableOrders(c *gin.Context) {
+	list, err := cashierService.RefundableOrders(c.Request.Context())
+	if err != nil {
+		global.GVA_LOG.Error("获取可退换原单失败!", zap.Error(err))
+		response.FailWithMessage("获取原单失败", c)
+		return
+	}
+	response.OkWithData(list, c)
+}

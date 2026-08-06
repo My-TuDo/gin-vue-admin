@@ -135,8 +135,8 @@
             <div class="order-select">
               <div class="field">
                 <span class="f-label">原销售单</span>
-                <el-select v-model="refundOrderId" placeholder="选择已出库的销售单" filterable size="large" @change="loadRefundDetail">
-                  <el-option v-for="o in refundOrders" :key="o.ID" :label="`${o.orderNo}（¥ ${o.totalAmount?.toFixed(2)}）`" :value="o.ID" />
+                <el-select v-model="refundOrderId" placeholder="选择已出库的销售单" filterable size="large" @change="loadRefundDetail" @focus="loadRefundOrders">
+                  <el-option v-for="o in refundOrders" :key="o.ID" :label="`${o.orderNo}（剩 ${o.remaining} 件·¥ ${o.totalAmount?.toFixed(2)}）`" :value="o.ID" />
                 </el-select>
               </div>
               <el-button size="large" @click="loadRefundOrders"><el-icon class="btn-icon"><Refresh /></el-icon>刷新</el-button>
@@ -186,8 +186,8 @@
             <div class="exchange-top">
               <div class="field">
                 <span class="f-label">原销售单</span>
-                <el-select v-model="exchangeOrderId" placeholder="选择已出库的销售单" filterable size="large" @change="loadExchangeDetail">
-                  <el-option v-for="o in refundOrders" :key="o.ID" :label="`${o.orderNo}（¥ ${o.totalAmount?.toFixed(2)}）`" :value="o.ID" />
+                <el-select v-model="exchangeOrderId" placeholder="选择已出库的销售单" filterable size="large" @change="loadExchangeDetail" @focus="loadRefundOrders">
+                  <el-option v-for="o in refundOrders" :key="o.ID" :label="`${o.orderNo}（剩 ${o.remaining} 件）`" :value="o.ID" />
                 </el-select>
               </div>
               <div class="field">
@@ -337,7 +337,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Delete, Refresh } from '@element-plus/icons-vue'
-import { checkout, refund, exchange } from '@/api/jxc/cashier'
+import { checkout, refund, exchange, getRefundableOrders } from '@/api/jxc/cashier'
 import { getSalePage, getSaleDetail, getSaleRemaining } from '@/api/jxc/sale'
 import { getSkuList } from '@/api/jxc/goods'
 import { getWarehouseList, getCustomerList } from '@/api/jxc/basic'
@@ -441,9 +441,10 @@ const refundDetail = ref({})
 const refundItems = ref([])
 const remainingTotal = ref(0)
 
+// 可退换原单（后端已过滤剩余 0 的单，下拉展开时自动刷新保证最新）
 const loadRefundOrders = async () => {
-  const { data } = await getSalePage({ page: 1, pageSize: 999 })
-  refundOrders.value = (data.list || []).filter((o) => o.status === 2 && (o.orderType === 1 || o.orderType === 3))
+  const { data } = await getRefundableOrders()
+  refundOrders.value = data || []
 }
 
 const loadRefundDetail = async (id) => {
