@@ -1,6 +1,6 @@
 <template>
   <div class="cashier">
-    <el-tabs v-model="activeTab" class="cashier-tabs">
+    <el-tabs v-model="activeTab" class="cashier-tabs" @tab-change="onTabChange">
       <!-- ==================== 收款 ==================== -->
       <el-tab-pane label="收款" name="cash">
         <div class="pos-cash">
@@ -346,6 +346,12 @@ import QtyStepper from './components/QtyStepper.vue'
 import ResultDialog from './components/ResultDialog.vue'
 
 const activeTab = ref('cash')
+
+// 切 tab 时加载对应数据：换货默认显示全部商品；退款刷新原单候选
+const onTabChange = (name) => {
+  if (name === 'exchange') searchExchangeGoods()
+  if (name === 'refund') loadRefundOrders()
+}
 
 // ===== 收款 =====
 const keyword = ref('')
