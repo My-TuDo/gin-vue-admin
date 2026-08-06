@@ -13,5 +13,6 @@ func (r *DashboardRouter) InitDashboardRouter(Router *gin.RouterGroup) {
 		readOnlyGroup.GET("dashboard/top", dashboardApi.Top)
 		readOnlyGroup.GET("dashboard/stock-alert", dashboardApi.StockAlert)
 		readOnlyGroup.GET("dashboard/category", dashboardApi.Category)
+		readOnlyGroup.GET("dashboard/sales-history", dashboardApi.SalesHistory)
 	}
 }

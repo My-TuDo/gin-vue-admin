@@ -104,3 +104,25 @@ func (a *DashboardApi) Category(c *gin.Context) {
 	}
 	response.OkWithData(data, c)
 }
+
+// SalesHistory 历史销售统计（日期范围，按日/按月）
+// @Tags     JxcDashboard
+// @Summary  历史销售统计
+// @Security ApiKeyAuth
+// @Produce  application/json
+// @Param    from query string true "起始日期 yyyy-mm-dd"
+// @Param    to query string true "结束日期 yyyy-mm-dd"
+// @Param    granularity query string false "day/month（默认day）"
+// @Success  200 {object} response.Response{data=[]jxc.DashboardService.SalesHistoryItem} "统计"
+// @Router   /jxc/dashboard/sales-history [get]
+func (a *DashboardApi) SalesHistory(c *gin.Context) {
+	from := c.Query("from")
+	to := c.Query("to")
+	data, err := dashboardService.SalesHistory(c.Request.Context(), from, to, c.Query("granularity"))
+	if err != nil {
+		global.GVA_LOG.Error("历史统计失败!", zap.Error(err))
+		response.FailWithMessage("获取历史统计失败："+err.Error(), c)
+		return
+	}
+	response.OkWithData(data, c)
+}
