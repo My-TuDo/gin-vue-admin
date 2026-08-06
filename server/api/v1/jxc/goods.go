@@ -100,7 +100,7 @@ func (a *GoodsApi) CreateGoods(c *gin.Context) {
 		response.FailWithMessage("创建失败", c)
 		return
 	}
-	response.OkWithMessage("创建成功", c)
+	response.OkWithDetailed(&goods, "创建成功", c)
 }
 
 // UpdateGoods 更新商品
@@ -242,7 +242,7 @@ func (a *GoodsApi) CreateSku(c *gin.Context) {
 		response.FailWithMessage("创建失败", c)
 		return
 	}
-	response.OkWithMessage("创建成功", c)
+	response.OkWithDetailed(&sku, "创建成功", c)
 }
 
 // UpdateSku 更新 SKU

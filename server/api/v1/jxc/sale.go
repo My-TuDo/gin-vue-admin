@@ -108,7 +108,7 @@ func (a *SaleApi) CreateSaleOrder(c *gin.Context) {
 		response.FailWithMessage("创建失败："+err.Error(), c)
 		return
 	}
-	response.OkWithMessage("创建成功", c)
+	response.OkWithDetailed(&order, "创建成功", c)
 }
 
 // UpdateSaleOrder 更新销售单（仅待出库）
