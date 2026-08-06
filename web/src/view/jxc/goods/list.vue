@@ -58,7 +58,7 @@
         </el-table-column>
       </el-table>
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total"
-        layout="total, sizes, prev, pager, next" class="page-bar" @change="fetchData" />
+        layout="total, sizes, prev, pager, next" class="page-bar" @current-change="fetchData" @size-change="fetchData" />
     </div>
 
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑商品' : '新增商品'" width="520px" class="crud-dialog" @closed="resetForm">

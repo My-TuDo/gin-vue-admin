@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="jxc-page">
     <!-- 搜索栏 -->
     <div class="crud-search">

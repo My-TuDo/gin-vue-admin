@@ -48,7 +48,7 @@
       </el-table>
       <el-pagination
         v-model:current-page="page" v-model:page-size="pageSize" :total="total"
-        layout="total, sizes, prev, pager, next" class="page-bar" @change="fetchData"
+        layout="total, sizes, prev, pager, next" class="page-bar" @current-change="fetchData" @size-change="fetchData"
       />
     </div>
 
