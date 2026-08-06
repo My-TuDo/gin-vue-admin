@@ -17,12 +17,12 @@
       <el-col :span="14">
         <el-card shadow="never" class="mb-4">
           <template #header>近 {{ trendDays }} 天销售趋势</template>
-          <Chart :options="trendOption" height="300px" />
+          <VCharts :option="trendOption" autoresize style="height: 300px; width: 100%" />
         </el-card>
         <!-- 分类占比 -->
         <el-card shadow="never">
           <template #header>近 30 天分类销售占比</template>
-          <Chart :options="categoryOption" height="280px" />
+          <VCharts :option="categoryOption" autoresize style="height: 280px; width: 100%" />
         </el-card>
       </el-col>
 
@@ -30,7 +30,7 @@
       <el-col :span="10">
         <el-card shadow="never" class="mb-4">
           <template #header>热销商品 TOP{{ topLimit }}</template>
-          <Chart :options="topOption" height="300px" />
+          <VCharts :option="topOption" autoresize style="height: 300px; width: 100%" />
         </el-card>
         <el-card shadow="never">
           <template #header>
@@ -57,7 +57,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import Chart from '@/components/charts/index.vue'
+import VCharts from 'vue-echarts'
 import {
   getDashboardOverview, getDashboardTrend, getDashboardTop,
   getDashboardStockAlert, getDashboardCategory,
