@@ -62,7 +62,7 @@ func (a *BasicApi) CreateCategory(c *gin.Context) {
 		response.FailWithMessage("创建分类失败："+err.Error(), c)
 		return
 	}
-	response.OkWithMessage("创建分类成功", c)
+	response.OkWithDetailed(&category, "创建分类成功", c)
 }
 
 // UpdateCategory 更新商品分类
@@ -181,7 +181,7 @@ func (a *BasicApi) CreateBrand(c *gin.Context) {
 		response.FailWithMessage("创建失败："+err.Error(), c)
 		return
 	}
-	response.OkWithMessage("创建成功", c)
+	response.OkWithDetailed(&brand, "创建成功", c)
 }
 
 // UpdateBrand 更新品牌
@@ -292,7 +292,7 @@ func (a *BasicApi) CreateSupplier(c *gin.Context) {
 		response.FailWithMessage("创建失败: "+err.Error(), c)
 		return
 	}
-	response.OkWithMessage("创建成功", c)
+	response.OkWithDetailed(&supplier, "创建成功", c)
 }
 
 // UpateSupplier 更新供应商
@@ -403,7 +403,7 @@ func (a *BasicApi) CreateCustomer(c *gin.Context) {
 		response.FailWithMessage("创建失败: "+err.Error(), c)
 		return
 	}
-	response.OkWithMessage("创建成功", c)
+	response.OkWithDetailed(&customer, "创建成功", c)
 }
 
 // UpdataCustomer 更新客户
@@ -514,7 +514,7 @@ func (a *BasicApi) CreateWarehouse(c *gin.Context) {
 		response.FailWithMessage("创建失败: "+err.Error(), c)
 		return
 	}
-	response.OkWithMessage("创建成功", c)
+	response.OkWithDetailed(&warehouse, "创建成功", c)
 }
 
 // UpdateWarehouse 更新仓库
