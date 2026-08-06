@@ -6,3 +6,5 @@ export const checkout = (data) => service.post('/jxc/cashier/checkout', data)
 export const refund = (data) => service.post('/jxc/cashier/refund', data)
 // 收银换货（退回入库 + 换出出库，差额多退少补）
 export const exchange = (data) => service.post('/jxc/cashier/exchange', data)
+// 可退换原单列表（剩余件数 > 0）
+export const getRefundableOrders = () => service.get('/jxc/cashier/refundable-orders')

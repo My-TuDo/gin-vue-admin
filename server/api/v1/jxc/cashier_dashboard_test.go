@@ -95,6 +95,19 @@ func TestApiCashierCheckout(t *testing.T) {
 	if rb.Code == 0 {
 		t.Error("坏参数换货应失败")
 	}
+	// 可退换原单列表
+	c2, w2 := newCtxQuery(t, "")
+	cashierApi2.RefundableOrders(c2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("refundable-orders status=%d", w2.Code)
+	}
+	// 聚合失败分支
+	global.GVA_DB.Exec("DROP TABLE sale_item")
+	c2, w2 = newCtxQuery(t, "")
+	cashierApi2.RefundableOrders(c2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("refundable-orders err status=%d", w2.Code)
+	}
 }
 
 // TestApiDashboard 仪表盘 api

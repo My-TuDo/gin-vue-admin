@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/jxc"
@@ -12,6 +13,79 @@ import (
 
 // CashierService 收银台业务（收款/退款/换货，均即时完成）
 type CashierService struct{}
+
+// RefundableOrder 可退换原单（含剩余件数）
+type RefundableOrder struct {
+	ID          uint    `json:"ID"`
+	OrderNo     string  `json:"orderNo"`
+	OrderType   int8    `json:"orderType"`
+	TotalAmount float64 `json:"totalAmount"`
+	OutQty      int     `json:"outQty"`
+	UsedQty     int     `json:"usedQty"`
+	Remaining   int     `json:"remaining"`
+}
+
+// RefundableOrders 可退换原单列表：已出库的正常销售/换货单，剩余件数 > 0
+func (s *CashierService) RefundableOrders(ctx context.Context) ([]RefundableOrder, error) {
+	db := global.GVA_DB.WithContext(ctx)
+	// 每张已出库原单的出库件数（正常销售=全部明细；换货=换出明细）
+	type qtyRow struct {
+		ID  uint
+		Qty int
+	}
+	var outs []qtyRow
+	if err := db.Table("sale_item si").
+		Select("o.id AS id, SUM(si.qty) AS qty").
+		Joins("JOIN sale_order o ON o.id = si.sale_id").
+		Where("o.status = ? AND (o.order_type = ? OR si.direction = ?)", jxc.SaleStatusShipped, jxc.SaleTypeNormal, 1).
+		Group("o.id").Scan(&outs).Error; err != nil {
+		return nil, err
+	}
+	// 每张原单已被确认单据占用的件数
+	var useds []qtyRow
+	if err := db.Table("sale_item i").
+		Select("o.original_order_id AS id, SUM(i.qty) AS qty").
+		Joins("JOIN sale_order o ON o.id = i.sale_id").
+		Where("o.status = ? AND o.original_order_id IS NOT NULL AND i.direction IN (0, 2)", jxc.SaleStatusShipped).
+		Group("o.original_order_id").Scan(&useds).Error; err != nil {
+		return nil, err
+	}
+	usedMap := map[uint]int{}
+	for _, u := range useds {
+		usedMap[u.ID] += u.Qty
+	}
+	outMap := map[uint]int{}
+	for _, o := range outs {
+		outMap[o.ID] = o.Qty
+	}
+	// 原单主信息（已出库正常销售/换货）
+	var orders []jxc.SaleOrder
+	if err := db.Where("status = ? AND order_type IN (?, ?)", jxc.SaleStatusShipped, jxc.SaleTypeNormal, jxc.SaleTypeExchange).
+		Find(&orders).Error; err != nil {
+		return nil, err
+	}
+	result := make([]RefundableOrder, 0, len(orders))
+	for _, o := range orders {
+		outQty := outMap[o.ID]
+		usedQty := usedMap[o.ID]
+		remaining := outQty - usedQty
+		if remaining <= 0 {
+			continue // 已退/换完的单不再出现
+		}
+		result = append(result, RefundableOrder{
+			ID: o.ID, OrderNo: o.OrderNo, OrderType: o.OrderType,
+			TotalAmount: o.TotalAmount, OutQty: outQty, UsedQty: usedQty, Remaining: remaining,
+		})
+	}
+	// 按剩余件数降序，单号升序
+	sort.Slice(result, func(a, b int) bool {
+		if result[a].Remaining != result[b].Remaining {
+			return result[a].Remaining > result[b].Remaining
+		}
+		return result[a].OrderNo < result[b].OrderNo
+	})
+	return result, nil
+}
 
 // Checkout 收银结算：一个事务内生成销售单（已出库）+ 扣减库存 + 写流水
 func (s *CashierService) Checkout(ctx context.Context, req jxc.POSCheckoutReq, operator string) (*jxc.SaleOrder, error) {

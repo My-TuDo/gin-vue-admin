@@ -50,6 +50,69 @@ func TestCashierCheckout(t *testing.T) {
 	// 换货单确认后金额符号不影响收款（收银只走正常销售）
 }
 
+// TestCashierRefundableOrders 可退换原单列表（剩余>0 过滤）
+func TestCashierRefundableOrders(t *testing.T) {
+	saleTestDB(t)
+	skuID := newSaleFixture(t)
+	ctx := context.Background()
+	svc := &CashierService{}
+	saleSvc := &SaleService{}
+
+	// 空库
+	list, err := svc.RefundableOrders(ctx)
+	if err != nil || len(list) != 0 {
+		t.Fatalf("空库应无原单: %+v err=%v", list, err)
+	}
+	// 单 A 出库 3 件、单 B 出库 2 件
+	a := &jxc.SaleOrder{WarehouseID: 1, Items: []jxc.SaleItem{{SkuID: skuID, Qty: 3, Price: 15}}}
+	if err := saleSvc.CreateSaleOrder(ctx, a); err != nil {
+		t.Fatalf("建单A失败: %v", err)
+	}
+	if err := saleSvc.ConfirmOut(ctx, a.ID, "t"); err != nil {
+		t.Fatalf("出库A失败: %v", err)
+	}
+	b := &jxc.SaleOrder{WarehouseID: 1, Items: []jxc.SaleItem{{SkuID: skuID, Qty: 2, Price: 15}}}
+	if err := saleSvc.CreateSaleOrder(ctx, b); err != nil {
+		t.Fatalf("建单B失败: %v", err)
+	}
+	if err := saleSvc.ConfirmOut(ctx, b.ID, "t"); err != nil {
+		t.Fatalf("出库B失败: %v", err)
+	}
+	// 未出库单不出现
+	pending := &jxc.SaleOrder{WarehouseID: 1, Items: []jxc.SaleItem{{SkuID: skuID, Qty: 1, Price: 15}}}
+	if err := saleSvc.CreateSaleOrder(ctx, pending); err != nil {
+		t.Fatalf("建待出库单失败: %v", err)
+	}
+	list, err = svc.RefundableOrders(ctx)
+	if err != nil || len(list) != 2 {
+		t.Fatalf("应有 2 张可退换原单: %+v err=%v", list, err)
+	}
+	// A 剩余 3 排最前
+	if list[0].OrderNo != a.OrderNo || list[0].Remaining != 3 {
+		t.Errorf("A 应剩余 3 排最前: %+v", list[0])
+	}
+	// 退掉 A 全部 → A 不再出现
+	// 退掉 A 全部 → A 不再出现
+	if _, err := svc.Refund(ctx, jxc.POSRefundReq{
+		OriginalOrderID: a.ID,
+		Items:           []jxc.POSItem{{SkuID: skuID, Qty: 3}},
+	}, "t"); err != nil {
+		t.Fatalf("退款失败: %v", err)
+	}
+	list, err = svc.RefundableOrders(ctx)
+	if err != nil || len(list) != 1 || list[0].ID != b.ID {
+		t.Fatalf("退完后 A 应被过滤: %+v err=%v", list, err)
+	}
+	if list[0].UsedQty != 0 || list[0].Remaining != 2 {
+		t.Errorf("B 剩余应为 2: %+v", list[0])
+	}
+	// 明细表缺失报错
+	global.GVA_DB.Exec("DROP TABLE sale_item")
+	if _, err := svc.RefundableOrders(ctx); err == nil {
+		t.Error("明细表缺失应报错")
+	}
+}
+
 // TestCashierRefund 收银退款：退货单直接入库
 func TestCashierRefund(t *testing.T) {
 	saleTestDB(t)

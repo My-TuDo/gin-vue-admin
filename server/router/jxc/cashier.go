@@ -11,5 +11,9 @@ func (r *CashierRouter) InitCashierRouter(Router *gin.RouterGroup) {
 		recordGroup.POST("cashier/checkout", cashierApi.Checkout)
 	recordGroup.POST("cashier/refund", cashierApi.Refund)
 	recordGroup.POST("cashier/exchange", cashierApi.Exchange)
+	readOnlyGroup := Router.Group("jxc")
+	{
+		readOnlyGroup.GET("cashier/refundable-orders", cashierApi.RefundableOrders)
+	}
 	}
 }
