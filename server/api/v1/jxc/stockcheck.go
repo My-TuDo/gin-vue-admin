@@ -33,7 +33,7 @@ func (a *StockCheckApi) CreateStockCheck(c *gin.Context) {
 		response.FailWithMessage("创建失败："+err.Error(), c)
 		return
 	}
-	response.OkWithMessage("创建成功", c)
+	response.OkWithDetailed(&check, "创建成功", c)
 }
 
 // UpdateStockCheckItems 录入盘点数
