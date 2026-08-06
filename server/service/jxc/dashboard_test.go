@@ -3,10 +3,25 @@ package jxc
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/jxc"
 )
+
+// TestMondayOf 本周一计算（含周日边界）
+func TestMondayOf(t *testing.T) {
+	// 周日（2026-08-02）应回退到上周一 2026-07-27
+	sun := time.Date(2026, 8, 2, 0, 0, 0, 0, time.Local)
+	if m := mondayOf(sun); m.Format("2006-01-02") != "2026-07-27" {
+		t.Errorf("周日应回退到上周一: %v", m)
+	}
+	// 周四（2026-08-06）本周一 2026-08-03
+	thu := time.Date(2026, 8, 6, 0, 0, 0, 0, time.Local)
+	if m := mondayOf(thu); m.Format("2006-01-02") != "2026-08-03" {
+		t.Errorf("周四本周一应为 2026-08-03: %v", m)
+	}
+}
 
 // TestDashboard 仪表盘聚合（造销售/退货/换货数据验证口径）
 func TestDashboard(t *testing.T) {
@@ -46,6 +61,10 @@ func TestDashboard(t *testing.T) {
 	if ov[0].Sales != 15 || ov[0].Orders != 2 {
 		t.Errorf("今日销售额/订单数不符: %+v", ov[0])
 	}
+	// 本周/本月应包含今日数据（同日创建，三者一致）
+	if ov[1].Sales != 15 || ov[2].Sales != 15 || ov[1].Orders != 2 || ov[2].Orders != 2 {
+		t.Errorf("本周/本月应包含今日销售额: %+v", ov)
+	}
 	if ov[0].Profit != 7 {
 		t.Errorf("今日毛利应为 7, got %v", ov[0].Profit)
 	}
@@ -82,6 +101,32 @@ func TestDashboard(t *testing.T) {
 	if err != nil || len(alerts) != 1 || alerts[0].Available != 9 {
 		t.Fatalf("预警不符: %+v err=%v", alerts, err)
 	}
+	// 历史销售统计：把一张单改到上个月，验证按日/按月聚合
+	global.GVA_DB.Exec("UPDATE sale_order SET created_at = datetime('now', '-40 day') WHERE id = ?", sale.ID)
+	from := time.Now().AddDate(0, 0, -60).Format("2006-01-02")
+	to := time.Now().Format("2006-01-02")
+	hist, err := dashSvc.SalesHistory(ctx, from, to, "day")
+	if err != nil || len(hist) != 2 {
+		t.Fatalf("历史统计(按日)不符: %+v err=%v", hist, err)
+	}
+	var histTotal float64
+	for _, h := range hist {
+		histTotal += h.Sales
+	}
+	if histTotal != 15 {
+		t.Errorf("历史统计销售额应为 15, got %v", histTotal)
+	}
+	histM, err := dashSvc.SalesHistory(ctx, from, to, "month")
+	if err != nil || len(histM) != 2 {
+		t.Fatalf("历史统计(按月)不符: %+v err=%v", histM, err)
+	}
+	if histM[0].Date > histM[1].Date {
+		t.Errorf("按月结果应升序: %+v", histM)
+	}
+	// 缺参报错
+	if _, err := dashSvc.SalesHistory(ctx, "", to, "day"); err == nil {
+		t.Error("缺起始日期应报错")
+	}
 	// 空库聚合（无数据）
 	global.GVA_DB.Exec("DELETE FROM sale_order")
 	ov, err = dashSvc.Overview(ctx)
@@ -98,7 +143,7 @@ func TestDashboard(t *testing.T) {
 	if _, err := dashSvc.Category(ctx, 0); err != nil {
 		t.Errorf("Category 默认参数失败: %v", err)
 	}
-	// 主表缺失：聚合报错
+	// 主表缺失：历史统计报错
 	global.GVA_DB.Exec("DROP TABLE sale_order")
 	if _, err := dashSvc.Overview(ctx); err == nil {
 		t.Error("主表缺失概览应报错")
@@ -111,5 +156,8 @@ func TestDashboard(t *testing.T) {
 	}
 	if _, err := dashSvc.Category(ctx, 30); err == nil {
 		t.Error("主表缺失分类应报错")
+	}
+	if _, err := dashSvc.SalesHistory(ctx, "2026-01-01", "2026-01-31", "day"); err == nil {
+		t.Error("主表缺失历史统计应报错")
 	}
 }

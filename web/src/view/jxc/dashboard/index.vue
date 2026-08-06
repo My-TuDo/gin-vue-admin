@@ -1,5 +1,39 @@
 <template>
   <div>
+    <!-- 历史销售统计 -->
+    <el-card shadow="never" class="mb-4">
+      <template #header>
+        <div class="flex-between">
+          <span>历史销售统计</span>
+          <div class="history-tools">
+            <el-date-picker v-model="historyRange" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" size="small" style="width: 260px" @change="loadHistory" />
+            <el-radio-group v-model="historyGranularity" size="small" class="ml-2" @change="loadHistory">
+              <el-radio-button value="day">按日</el-radio-button>
+              <el-radio-button value="month">按月</el-radio-button>
+            </el-radio-group>
+          </div>
+        </div>
+      </template>
+      <el-table :data="historyList" border size="small" max-height="300">
+        <el-table-column label="日期" width="140" prop="date" />
+        <el-table-column label="销售额" align="right">
+          <template #default="{ row }"><b class="col-amount">¥ {{ row.sales.toFixed(2) }}</b></template>
+        </el-table-column>
+        <el-table-column label="订单数" width="100" align="right" prop="orders" />
+        <el-table-column label="毛利" align="right">
+          <template #default="{ row }">
+            <span :style="{ color: row.profit >= 0 ? '#67c23a' : '#f56c6c' }">¥ {{ row.profit.toFixed(2) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="合计" width="220" align="right">
+          <template #default>
+            <span>销售额 <b class="col-amount">¥ {{ historyTotal.sales.toFixed(2) }}</b> · 毛利 <b :style="{ color: historyTotal.profit >= 0 ? '#67c23a' : '#f56c6c' }">¥ {{ historyTotal.profit.toFixed(2) }}</b></span>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!historyList.length" description="选择日期范围查看历史销售" :image-size="60" />
+    </el-card>
+
     <!-- 概览卡片 -->
     <el-row :gutter="16" class="mb-4">
       <el-col v-for="ov in overview" :key="ov.label" :span="8">
@@ -67,13 +101,34 @@ import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/compon
 use([CanvasRenderer, LineChart, BarChart, PieChart, GridComponent, TooltipComponent, LegendComponent])
 import {
   getDashboardOverview, getDashboardTrend, getDashboardTop,
-  getDashboardStockAlert, getDashboardCategory,
+  getDashboardStockAlert, getDashboardCategory, getSalesHistory,
 } from '@/api/jxc/dashboard'
 
 const overview = ref([])
 const stockAlerts = ref([])
 const trendDays = 14
 const topLimit = 10
+
+// 历史销售统计
+const historyRange = ref([])
+const historyGranularity = ref('day')
+const historyList = ref([])
+const historyTotal = ref({ sales: 0, profit: 0 })
+
+const loadHistory = async () => {
+  const [from, to] = historyRange.value || []
+  if (!from || !to) {
+    historyList.value = []
+    historyTotal.value = { sales: 0, profit: 0 }
+    return
+  }
+  const { data } = await getSalesHistory(from, to, historyGranularity.value)
+  historyList.value = data || []
+  historyTotal.value = (data || []).reduce(
+    (acc, it) => ({ sales: acc.sales + it.sales, profit: acc.profit + it.profit }),
+    { sales: 0, profit: 0 }
+  )
+}
 
 const trendOption = ref({})
 const topOption = ref({})
@@ -138,4 +193,7 @@ onMounted(loadAll)
 .ov-profit { color: #67c23a; }
 .ov-loss { color: #f56c6c; }
 .flex-between { display: flex; justify-content: space-between; align-items: center; }
+.history-tools { display: flex; align-items: center; }
+.ml-2 { margin-left: 8px; }
+.col-amount { color: #e6a23c; }
 </style>

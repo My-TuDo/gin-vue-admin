@@ -2,6 +2,8 @@ package jxc
 
 import (
 	"context"
+	"errors"
+	"sort"
 	"time"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
@@ -49,18 +51,27 @@ type CatItem struct {
 	Amount float64 `json:"amount"`
 }
 
+// SalesHistoryItem 历史销售统计点（按日/按月）
+type SalesHistoryItem struct {
+	Date   string  `json:"date"`
+	Sales  float64 `json:"sales"`
+	Orders int64   `json:"orders"`
+	Profit float64 `json:"profit"`
+}
+
 // Overview 今日/本周/本月概览
 func (s *DashboardService) Overview(ctx context.Context) ([]OverviewItem, error) {
 	db := global.GVA_DB.WithContext(ctx)
 	now := time.Now()
+	// 统一上界：明天（各周期均覆盖到今天为止的全部数据）
+	to := nextDay(now.Format("2006-01-02"))
 	periods := []struct {
 		label string
 		from  string
-		to    string
 	}{
-		{"今日", now.Format("2006-01-02"), now.Format("2006-01-02")},
-		{"本周", mondayOf(now).Format("2006-01-02"), now.Format("2006-01-02")},
-		{"本月", time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02"), now.Format("2006-01-02")},
+		{"今日", now.Format("2006-01-02")},
+		{"本周", mondayOf(now).Format("2006-01-02")},
+		{"本月", time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")},
 	}
 	result := make([]OverviewItem, 0, 3)
 	for _, p := range periods {
@@ -70,7 +81,7 @@ func (s *DashboardService) Overview(ctx context.Context) ([]OverviewItem, error)
 		}
 		if err := db.Table("sale_order").
 			Select("COALESCE(SUM(total_amount),0) AS total, COUNT(*) AS orders").
-			Where("status = ? AND created_at >= ? AND created_at < ?", 2, p.from, nextDay(p.from)).
+			Where("status = ? AND created_at >= ? AND created_at < ?", 2, p.from, to).
 			Scan(&sales).Error; err != nil {
 			return nil, err
 		}
@@ -83,7 +94,7 @@ func (s *DashboardService) Overview(ctx context.Context) ([]OverviewItem, error)
 				"COALESCE(SUM(CASE WHEN i.amount < 0 THEN i.amount ELSE 0 END),0) AS return_amt").
 			Joins("JOIN sale_order o ON o.id = i.sale_id").
 			Joins("JOIN goods_sku sku ON sku.id = i.sku_id").
-			Where("o.status = ? AND o.created_at >= ? AND o.created_at < ?", 2, p.from, nextDay(p.from)).
+			Where("o.status = ? AND o.created_at >= ? AND o.created_at < ?", 2, p.from, to).
 			Scan(&profit).Error; err != nil {
 			return nil, err
 		}
@@ -165,6 +176,53 @@ func (s *DashboardService) Category(ctx context.Context, days int) ([]CatItem, e
 		Where("o.status = ? AND o.created_at >= ?", 2, from).
 		Group("c.id").Order("amount DESC").Scan(&list).Error
 	return list, err
+}
+
+// SalesHistory 历史销售统计（日期范围，按日/按月汇总：销售额/订单数/毛利）
+func (s *DashboardService) SalesHistory(ctx context.Context, from, to string, granularity string) ([]SalesHistoryItem, error) {
+	if from == "" || to == "" {
+		return nil, errors.New("请选择日期范围")
+	}
+	if granularity != "month" {
+		granularity = "day"
+	}
+	db := global.GVA_DB.WithContext(ctx)
+	var list []SalesHistoryItem
+	err := db.Table("sale_order o").
+		Select("DATE(o.created_at) AS date, COALESCE(SUM(o.total_amount),0) AS sales, COUNT(*) AS orders, "+
+			"COALESCE(SUM(i.amount - i.qty * COALESCE(sku.cost_price,0) * CASE WHEN i.amount >= 0 THEN 1 ELSE -1 END),0) AS profit").
+		Joins("JOIN sale_item i ON i.sale_id = o.id").
+		Joins("JOIN goods_sku sku ON sku.id = i.sku_id").
+		Where("o.status = ? AND o.created_at >= ? AND o.created_at < ?", 2, from, nextDay(to)).
+		Group("DATE(o.created_at)").Order("date").Scan(&list).Error
+	if err != nil {
+		return nil, err
+	}
+	if granularity == "month" {
+		// 按月聚合（Go 侧完成，避免 SQL 方言差异）
+		byMonth := map[string]*SalesHistoryItem{}
+		var result []SalesHistoryItem
+		for i := range list {
+			month := list[i].Date
+			if len(month) >= 7 {
+				month = month[:7]
+			}
+			if m, ok := byMonth[month]; ok {
+				m.Sales += list[i].Sales
+				m.Orders += list[i].Orders
+				m.Profit += list[i].Profit
+			} else {
+				byMonth[month] = &SalesHistoryItem{Date: month, Sales: list[i].Sales, Orders: list[i].Orders, Profit: list[i].Profit}
+			}
+		}
+		for _, m := range byMonth {
+			result = append(result, *m)
+		}
+		// 按月排序
+		sort.Slice(result, func(a, b int) bool { return result[a].Date < result[b].Date })
+		return result, nil
+	}
+	return list, nil
 }
 
 // mondayOf 本周一

@@ -2,6 +2,7 @@ package jxc
 
 import (
 	"net/http"
+	"time"
 	"testing"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
@@ -131,6 +132,20 @@ func TestApiDashboard(t *testing.T) {
 	dashboardApi2.Top(c)
 	if w.Code != http.StatusOK {
 		t.Fatalf("top params status=%d", w.Code)
+	}
+	// 历史销售统计
+	from := time.Now().AddDate(0, 0, -7).Format("2006-01-02")
+	to := time.Now().Format("2006-01-02")
+	c, w = newCtxQuery(t, "from="+from+"&to="+to+"&granularity=day")
+	dashboardApi2.SalesHistory(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("sales-history status=%d", w.Code)
+	}
+	// 缺参
+	c, w = newCtxQuery(t, "to="+to)
+	dashboardApi2.SalesHistory(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("sales-history missing status=%d", w.Code)
 	}
 	// 聚合失败分支（主表缺失）
 	global.GVA_DB.Exec("DROP TABLE sale_order")
