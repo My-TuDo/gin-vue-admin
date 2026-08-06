@@ -1,28 +1,24 @@
 <template>
-  <div>
-    <el-card shadow="never" class="mb-4">
-      <el-tabs v-model="activeTab">
+  <div class="jxc-page">
+    <div class="crud-card">
+      <el-tabs v-model="activeTab" class="pos-tabs">
         <!-- 库存列表 -->
         <el-tab-pane label="库存列表" name="stock">
-          <el-form :inline="true" class="mt-2">
-            <el-form-item label="仓库">
+          <div class="tab-toolbar">
+            <div class="toolbar-fields">
               <el-select v-model="stockQuery.warehouseId" placeholder="全部仓库" clearable style="width: 160px" @change="fetchStock">
                 <el-option v-for="w in warehouses" :key="w.ID" :label="w.name" :value="w.ID" />
               </el-select>
-            </el-form-item>
-            <el-form-item label="关键词">
-              <el-input v-model="stockQuery.keyword" placeholder="SKU编码/商品名" clearable style="width: 180px" @keyup.enter="fetchStock" @clear="fetchStock" />
-            </el-form-item>
-            <el-form-item>
+              <el-input v-model="stockQuery.keyword" placeholder="SKU编码/商品名" clearable style="width: 190px" @keyup.enter="fetchStock" @clear="fetchStock" />
               <el-checkbox v-model="stockQuery.lowStock" @change="fetchStock">仅看预警</el-checkbox>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" icon="Search" @click="fetchStock">查询</el-button>
-              <el-button type="success" icon="Plus" @click="openDirect('in')">直接入库</el-button>
-              <el-button type="warning" icon="Minus" @click="openDirect('out')">直接出库</el-button>
-            </el-form-item>
-          </el-form>
-          <el-table :data="stockList" v-loading="loading" border stripe>
+            </div>
+            <div class="toolbar-actions">
+              <el-button type="primary" :icon="Search" @click="fetchStock">查询</el-button>
+              <el-button type="success" class="btn-create" :icon="Plus" @click="openDirect('in')">直接入库</el-button>
+              <el-button type="warning" :icon="Minus" @click="openDirect('out')">直接出库</el-button>
+            </div>
+          </div>
+          <el-table :data="stockList" v-loading="loading" border stripe class="pos-table">
             <el-table-column label="仓库" min-width="110">
               <template #default="{ row }">{{ warehouseName(row.warehouseId) }}</template>
             </el-table-column>
@@ -42,12 +38,14 @@
             </el-table-column>
             <el-table-column label="锁定" prop="lockQuantity" width="80" align="center" />
             <el-table-column label="可售" width="90" align="center">
-              <template #default="{ row }">{{ row.quantity - row.lockQuantity }}</template>
+              <template #default="{ row }">
+                <span class="avail" :class="{ zero: row.quantity - row.lockQuantity <= 0 }">{{ row.quantity - row.lockQuantity }}</span>
+              </template>
             </el-table-column>
             <el-table-column label="预警值" prop="warningQuantity" width="80" align="center" />
           </el-table>
           <el-pagination
-            class="mt-3 justify-end"
+            class="page-bar"
             background
             layout="total, sizes, prev, pager, next"
             :total="stockTotal"
@@ -61,22 +59,20 @@
 
         <!-- 库存流水 -->
         <el-tab-pane label="库存流水" name="log">
-          <el-form :inline="true" class="mt-2">
-            <el-form-item label="仓库">
+          <div class="tab-toolbar">
+            <div class="toolbar-fields">
               <el-select v-model="logQuery.warehouseId" placeholder="全部仓库" clearable style="width: 160px" @change="fetchLog">
                 <el-option v-for="w in warehouses" :key="w.ID" :label="w.name" :value="w.ID" />
               </el-select>
-            </el-form-item>
-            <el-form-item label="业务类型">
               <el-select v-model="logQuery.businessType" placeholder="全部类型" clearable style="width: 150px" @change="fetchLog">
                 <el-option v-for="t in bizTypes" :key="t.value" :label="t.label" :value="t.value" />
               </el-select>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" icon="Search" @click="fetchLog">查询</el-button>
-            </el-form-item>
-          </el-form>
-          <el-table :data="logList" v-loading="logLoading" border stripe>
+            </div>
+            <div class="toolbar-actions">
+              <el-button type="primary" :icon="Search" @click="fetchLog">查询</el-button>
+            </div>
+          </div>
+          <el-table :data="logList" v-loading="logLoading" border stripe class="pos-table">
             <el-table-column label="时间" prop="createdAt" width="170" />
             <el-table-column label="仓库" width="100">
               <template #default="{ row }">{{ warehouseName(row.warehouseId) }}</template>
@@ -84,14 +80,14 @@
             <el-table-column label="SKU" prop="skuId" width="80" align="center" />
             <el-table-column label="业务类型" width="110">
               <template #default="{ row }">
-                <el-tag size="small" :type="bizTag(row.businessType).type">{{ bizTag(row.businessType).text }}</el-tag>
+                <el-tag size="small" :type="bizTag(row.businessType).type" effect="light">{{ bizTag(row.businessType).text }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="业务单号" prop="businessNo" min-width="150" />
             <el-table-column label="变动前" prop="beforeQty" width="80" align="center" />
             <el-table-column label="变动" width="90" align="center">
               <template #default="{ row }">
-                <span :style="{ color: row.changeQty >= 0 ? '#67c23a' : '#f56c6c' }">{{ row.changeQty >= 0 ? '+' : '' }}{{ row.changeQty }}</span>
+                <b :style="{ color: row.changeQty >= 0 ? '#67c23a' : '#f56c6c' }">{{ row.changeQty >= 0 ? '+' : '' }}{{ row.changeQty }}</b>
               </template>
             </el-table-column>
             <el-table-column label="变动后" prop="afterQty" width="80" align="center" />
@@ -99,7 +95,7 @@
             <el-table-column label="备注" prop="remark" min-width="120" :show-overflow-tooltip="true" />
           </el-table>
           <el-pagination
-            class="mt-3 justify-end"
+            class="page-bar"
             background
             layout="total, sizes, prev, pager, next"
             :total="logTotal"
@@ -111,11 +107,11 @@
           />
         </el-tab-pane>
       </el-tabs>
-    </el-card>
+    </div>
 
     <!-- 直接出入库弹窗 -->
-    <el-dialog v-model="directVisible" :title="directMode === 'in' ? '直接入库' : '直接出库'" width="480px" destroy-on-close>
-      <el-form ref="directFormRef" :model="directForm" :rules="directRules" label-width="90px">
+    <el-dialog v-model="directVisible" :title="directMode === 'in' ? '直接入库' : '直接出库'" width="480px" destroy-on-close class="crud-dialog">
+      <el-form ref="directFormRef" :model="directForm" :rules="directRules" label-width="92px">
         <el-form-item label="仓库" prop="warehouseId">
           <el-select v-model="directForm.warehouseId" placeholder="选择仓库" style="width: 100%">
             <el-option v-for="w in warehouses" :key="w.ID" :label="w.name" :value="w.ID" />
@@ -127,15 +123,19 @@
           </el-select>
         </el-form-item>
         <el-form-item label="数量" prop="qty">
-          <el-input-number v-model="directForm.qty" :min="1" style="width: 100%" />
+          <el-input-number v-model="directForm.qty" :min="1" style="width: 100%" size="large" />
         </el-form-item>
         <el-form-item label="原因/备注">
           <el-input v-model="directForm.remark" type="textarea" :rows="2" :placeholder="directMode === 'in' ? '如：赠品入库、盘盈调整' : '如：损耗出库、盘亏调整'" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="directVisible = false">取消</el-button>
-        <el-button type="primary" :loading="directSaving" @click="handleDirect">确认{{ directMode === 'in' ? '入库' : '出库' }}</el-button>
+        <div class="dialog-footer">
+          <el-button size="large" @click="directVisible = false">取消</el-button>
+          <el-button :type="directMode === 'in' ? 'success' : 'warning'" size="large" class="btn-save" :loading="directSaving" @click="handleDirect">
+            确认{{ directMode === 'in' ? '入库' : '出库' }}
+          </el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -144,6 +144,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Search, Plus, Minus } from '@element-plus/icons-vue'
 import { getStockPage, getStockLogPage, directIn, directOut } from '@/api/jxc/stock'
 import { getWarehouseList } from '@/api/jxc/basic'
 import { getSkuList } from '@/api/jxc/goods'
@@ -260,8 +261,38 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.mb-4 { margin-bottom: 16px; }
-.mt-2 { margin-top: 8px; }
-.mt-3 { margin-top: 12px; }
-.justify-end { justify-content: flex-end; }
+/* ===== POS 设计语言 · 公共 ===== */
+.jxc-page { padding: 4px 0; }
+.crud-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 6px 16px 14px;
+  box-shadow: 0 2px 10px rgba(31, 45, 61, 0.05);
+}
+.pos-tabs :deep(.el-tabs__item) { font-size: 15px; font-weight: 600; }
+.pos-tabs :deep(.el-tabs__content) { overflow: visible; }
+.tab-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 0 14px;
+}
+.toolbar-fields { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.toolbar-actions { display: flex; gap: 10px; }
+.btn-create { height: 38px; font-weight: 600; }
+.pos-table { width: 100%; }
+.pos-table :deep(th.el-table__cell) { background: #f7f9fc; font-weight: 700; color: #303133; }
+.pos-table :deep(.el-table__cell) { padding: 9px 0; }
+.avail { font-weight: 700; color: #67c23a; font-variant-numeric: tabular-nums; }
+.avail.zero { color: #f56c6c; }
+.page-bar { margin-top: 14px; justify-content: flex-end; }
+
+/* ===== 弹窗 ===== */
+.crud-dialog :deep(.el-dialog__header) { padding-bottom: 8px; }
+.crud-dialog :deep(.el-dialog__title) { font-weight: 700; }
+.crud-dialog :deep(.el-dialog__body) { padding-top: 12px; }
+.dialog-footer { display: flex; justify-content: flex-end; gap: 10px; }
+.btn-save { min-width: 130px; font-weight: 600; }
 </style>
