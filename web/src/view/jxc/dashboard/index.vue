@@ -58,6 +58,13 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import VCharts from 'vue-echarts'
+// vue-echarts 7 为按需版，必须显式注册渲染器与图表组件
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { LineChart, BarChart, PieChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+
+use([CanvasRenderer, LineChart, BarChart, PieChart, GridComponent, TooltipComponent, LegendComponent])
 import {
   getDashboardOverview, getDashboardTrend, getDashboardTop,
   getDashboardStockAlert, getDashboardCategory,
