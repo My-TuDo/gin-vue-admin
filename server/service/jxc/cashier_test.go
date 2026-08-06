@@ -87,9 +87,9 @@ func TestCashierRefundableOrders(t *testing.T) {
 	if err != nil || len(list) != 2 {
 		t.Fatalf("应有 2 张可退换原单: %+v err=%v", list, err)
 	}
-	// A 剩余 3 排最前
-	if list[0].OrderNo != a.OrderNo || list[0].Remaining != 3 {
-		t.Errorf("A 应剩余 3 排最前: %+v", list[0])
+	// 最新创建的单排最前（B 后创建，剩余 2）
+	if list[0].OrderNo != b.OrderNo || list[0].Remaining != 2 {
+		t.Errorf("最新单 B 应排最前: %+v", list[0])
 	}
 	// 退掉 A 全部 → A 不再出现
 	// 退掉 A 全部 → A 不再出现
