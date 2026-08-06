@@ -18,6 +18,48 @@ const (
 	SaleTypeExchange = 3 // 换货（一张单含换出 qty<0 与换入 qty>0 明细, 联合确认）
 )
 
+// POSItem 收银明细
+type POSItem struct {
+	SkuID uint `json:"skuId" binding:"required" comment:"SKU ID"`
+	Qty   int  `json:"qty" binding:"required" comment:"数量"`
+}
+
+// POSCheckoutReq 收银结算请求（收款即出库）
+type POSCheckoutReq struct {
+	WarehouseID uint      `json:"warehouseId" binding:"required" comment:"收银仓库ID"`
+	CustomerID  *uint     `json:"customerId" comment:"客户ID（可选，散客为空）"`
+	PayMethod   string    `json:"payMethod" binding:"required" comment:"支付方式 cash/wechat/alipay"`
+	PaidAmount  float64   `json:"paidAmount" comment:"实收金额（现金找零用）"`
+	Items       []POSItem `json:"items" binding:"required" comment:"明细列表"`
+	Remark      string    `json:"remark" comment:"备注"`
+}
+
+// POSRefundReq 收银退款请求（生成退货单并直接确认入库）
+type POSRefundReq struct {
+	OriginalOrderID uint      `json:"originalOrderId" binding:"required" comment:"原销售单ID"`
+	Items           []POSItem `json:"items" binding:"required" comment:"退款明细（原单出过的商品）"`
+	Remark          string    `json:"remark" comment:"备注"`
+}
+
+// POSExchangeReq 收银换货请求（退回商品入库 + 换出商品出库，差额多退少补）
+type POSExchangeReq struct {
+	OriginalOrderID uint      `json:"originalOrderId" binding:"required" comment:"原销售单ID"`
+	WarehouseID     uint      `json:"warehouseId" comment:"换出仓库（默认原单仓库）"`
+	CustomerID      *uint     `json:"customerId" comment:"客户ID（可选）"`
+	PayMethod       string    `json:"payMethod" binding:"required" comment:"支付方式 cash/wechat/alipay"`
+	PaidAmount      float64   `json:"paidAmount" comment:"实收金额（差额为正时现金校验）"`
+	ReturnItems     []POSItem `json:"returnItems" binding:"required" comment:"退回商品（原单商品）"`
+	OutItems        []POSItem `json:"outItems" binding:"required" comment:"换出商品（新商品）"`
+	Remark          string    `json:"remark" comment:"备注"`
+}
+
+// POSExchangeResult 收银换货结果
+type POSExchangeResult struct {
+	ReturnOrder *SaleOrder `json:"returnOrder" comment:"退货单（已入库，金额为负）"`
+	OutOrder    *SaleOrder `json:"outOrder" comment:"销售单（已出库）"`
+	DiffAmount  float64    `json:"diffAmount" comment:"差额（正=应收，负=应退）"`
+}
+
 // SaleRemaining 原单剩余可退换件数（供前端数量上限钳制）
 type SaleRemaining struct {
 	OrderNo   string `json:"orderNo" gorm:"-" comment:"原单单号"`

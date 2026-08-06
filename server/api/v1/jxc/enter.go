@@ -9,6 +9,8 @@ type ApiGroup struct {
 	SaleApi
 	StockApi
 	StockCheckApi
+	CashierApi
+	DashboardApi
 }
 
 var (
@@ -18,4 +20,6 @@ var (
 	saleService     = service.ServiceGroupApp.JxcServiceGroup.SaleService
 	stockService    = service.ServiceGroupApp.JxcServiceGroup.StockService
 	stockCheckService = service.ServiceGroupApp.JxcServiceGroup.StockCheckService
+	cashierService  = service.ServiceGroupApp.JxcServiceGroup.CashierService
+	dashboardService = service.ServiceGroupApp.JxcServiceGroup.DashboardService
 )

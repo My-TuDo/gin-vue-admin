@@ -11,6 +11,8 @@ type RouterGroup struct {
 	SaleRouter
 	StockRouter
 	StockCheckRouter
+	CashierRouter
+	DashboardRouter
 }
 
 var (
@@ -20,4 +22,6 @@ var (
 	saleApi     = api.ApiGroupApp.JxcApiGroup.SaleApi
 	stockApi    = api.ApiGroupApp.JxcApiGroup.StockApi
 	stockCheckApi = api.ApiGroupApp.JxcApiGroup.StockCheckApi
+	cashierApi  = api.ApiGroupApp.JxcApiGroup.CashierApi
+	dashboardApi = api.ApiGroupApp.JxcApiGroup.DashboardApi
 )

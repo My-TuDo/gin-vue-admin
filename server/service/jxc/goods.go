@@ -93,7 +93,7 @@ func (s *GoodsService) GetSkuList(ctx context.Context, goodsId uint) (list []jxc
 	if goodsId > 0 {
 		db = db.Where("goods_id = ?", goodsId)
 	}
-	err = db.Order("id asc").Find(&list).Error
+	err = db.Preload("Goods").Order("id asc").Find(&list).Error
 	return
 }
 

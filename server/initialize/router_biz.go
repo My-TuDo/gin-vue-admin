@@ -23,6 +23,8 @@ func initBizRouter(routers ...*gin.RouterGroup) {
 	router.RouterGroupApp.Jxc.InitSaleRouter(publicGroup)
 	router.RouterGroupApp.Jxc.InitStockRouter(publicGroup)
 	router.RouterGroupApp.Jxc.InitStockCheckRouter(publicGroup)
+	router.RouterGroupApp.Jxc.InitCashierRouter(publicGroup)
+	router.RouterGroupApp.Jxc.InitDashboardRouter(publicGroup)
 
 	holder(publicGroup, privateGroup)
 

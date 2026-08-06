@@ -11,9 +11,12 @@
         border
         default-expand-all
         v-loading="loading"
+        class="pos-table"
       >
         <el-table-column label="编码" prop="code" width="120" />
-        <el-table-column label="分类名称" prop="name" min-width="150" />
+        <el-table-column label="分类名称" prop="name" min-width="150">
+          <template #default="{ row }"><span class="cell-name">{{ row.name }}</span></template>
+        </el-table-column>
         <el-table-column label="排序" prop="sort" width="80" align="center" />
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
@@ -26,24 +29,26 @@
         </el-table-column>
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="openDialog(row.ID)">编辑</el-button>
-            <el-button type="primary" link @click="openDialog(row.ID, 'child')">添加子分类</el-button>
-            <el-popconfirm title="确认删除该分类?" @confirm="handleDelete(row.ID)">
-              <template #reference>
-                <el-button type="danger" link>删除</el-button>
-              </template>
-            </el-popconfirm>
-            <el-popconfirm title="彻底删除不可恢复，确认?" @confirm="handleDeleteForever(row.ID)">
-              <template #reference>
-                <el-button type="danger" link>彻底删除</el-button>
-              </template>
-            </el-popconfirm>
+            <div class="op-group">
+              <el-button type="primary" link @click="openDialog(row.ID)">编辑</el-button>
+              <el-button type="primary" link @click="openDialog(row.ID, 'child')">添加子分类</el-button>
+              <el-popconfirm title="确认删除该分类?" @confirm="handleDelete(row.ID)">
+                <template #reference>
+                  <el-button type="danger" link>删除</el-button>
+                </template>
+              </el-popconfirm>
+              <el-popconfirm title="彻底删除不可恢复，确认?" @confirm="handleDeleteForever(row.ID)">
+                <template #reference>
+                  <el-button type="danger" link>彻底删除</el-button>
+                </template>
+              </el-popconfirm>
+            </div>
           </template>
         </el-table-column>
       </el-table>
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px" @closed="resetForm">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px" class="crud-dialog" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-form-item v-if="parentName" label="上级分类">
           <el-input :model-value="parentName" disabled />
@@ -62,8 +67,10 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitForm" :loading="submitLoading">保存</el-button>
+        <div class="dialog-footer">
+          <el-button size="large" @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" size="large" class="btn-save" @click="submitForm" :loading="submitLoading">保存</el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -177,3 +184,29 @@ async function toggleStatus(row) {
 
 onMounted(fetchData)
 </script>
+
+<style scoped>
+/* ===== POS 设计语言 · 覆盖 GVA 容器 ===== */
+.jxc-page { padding: 4px 0; }
+.gva-table-box {
+  background: #fff;
+  border-radius: 12px;
+  padding: 14px 14px 16px;
+  box-shadow: 0 2px 10px rgba(31, 45, 61, 0.05);
+}
+.gva-btn-list .el-button { height: 36px; font-weight: 600; }
+.pos-table { width: 100%; }
+.pos-table :deep(th.el-table__cell) { background: #f7f9fc; font-weight: 700; color: #303133; }
+.pos-table :deep(.el-table__cell) { padding: 9px 0; }
+.cell-name { font-weight: 600; color: #303133; }
+.op-group { display: flex; align-items: center; flex-wrap: nowrap; }
+.op-group .el-button { margin-left: 0 !important; }
+.op-group .el-button + .el-button { margin-left: 2px; }
+
+/* ===== 弹窗 ===== */
+.crud-dialog :deep(.el-dialog__header) { padding-bottom: 8px; }
+.crud-dialog :deep(.el-dialog__title) { font-weight: 700; }
+.crud-dialog :deep(.el-dialog__body) { padding-top: 12px; }
+.dialog-footer { display: flex; justify-content: flex-end; gap: 10px; }
+.btn-save { min-width: 110px; font-weight: 600; }
+</style>

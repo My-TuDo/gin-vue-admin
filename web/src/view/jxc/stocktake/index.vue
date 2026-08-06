@@ -1,55 +1,63 @@
 <template>
-  <div>
+  <div class="jxc-page">
     <!-- 搜索栏 -->
-    <el-card shadow="never" class="mb-4">
-      <el-form :inline="true">
-        <el-form-item label="盘点单号">
-          <el-input v-model="search.keyword" placeholder="输入单号搜索" clearable style="width: 200px" @keyup.enter="fetchData" @clear="fetchData" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" icon="Search" @click="fetchData">查询</el-button>
-          <el-button type="success" icon="Plus" @click="openCreate">新建盘点单</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <div class="crud-search">
+      <el-input
+        v-model="search.keyword"
+        placeholder="盘点单号搜索"
+        clearable
+        style="width: 230px"
+        @keyup.enter="fetchData"
+        @clear="fetchData"
+      />
+      <div class="search-actions">
+        <el-button type="primary" :icon="Search" @click="fetchData">查询</el-button>
+        <el-button type="success" class="btn-create" :icon="Plus" @click="openCreate">新建盘点单</el-button>
+      </div>
+    </div>
 
     <!-- 列表 -->
-    <el-card shadow="never">
-      <el-table :data="list" v-loading="loading" border stripe>
+    <div class="crud-table">
+      <el-table :data="list" v-loading="loading" border stripe class="pos-table">
         <el-table-column label="盘点单号" prop="checkNo" width="180" fixed="left" />
         <el-table-column label="仓库" min-width="110">
           <template #default="{ row }">{{ row.warehouse?.name || '-' }}</template>
         </el-table-column>
         <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
-            <el-tag :type="statusTag(row.status).type">{{ statusTag(row.status).text }}</el-tag>
+            <el-tag :type="statusTag(row.status).type" effect="light">{{ statusTag(row.status).text }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="盘点人" prop="checker" width="100" />
         <el-table-column label="备注" prop="remark" min-width="140" show-overflow-tooltip />
         <el-table-column label="创建时间" prop="createdAt" width="170" />
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="270" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-            <el-button v-if="row.status === 1" link type="warning" @click="openRecord(row)">录入盘点</el-button>
-            <el-button v-if="row.status === 1" link type="success" @click="handleComplete(row)">完成</el-button>
-            <el-button v-if="row.status === 1" link type="danger" @click="handleCancel(row)">取消</el-button>
+            <div class="op-group">
+              <el-button link type="primary" @click="openDetail(row)">详情</el-button>
+              <template v-if="row.status === 1">
+                <span class="op-sep"></span>
+                <el-button link type="warning" class="op-action" @click="openRecord(row)">录入盘点</el-button>
+                <el-button link type="success" @click="handleComplete(row)">完成</el-button>
+                <el-button link type="info" @click="handleCancel(row)">取消</el-button>
+              </template>
+            </div>
           </template>
         </el-table-column>
       </el-table>
       <el-pagination
+        class="page-bar"
         v-model:current-page="search.page"
         v-model:page-size="search.pageSize"
         :total="total"
         layout="total, prev, pager, next"
-        class="mt-3 justify-end"
         @current-change="fetchData"
       />
-    </el-card>
+    </div>
 
     <!-- 新建盘点单 -->
-    <el-dialog v-model="createVisible" title="新建盘点单" width="420px" destroy-on-close>
-      <el-form ref="createRef" :model="createForm" label-width="90px">
+    <el-dialog v-model="createVisible" title="新建盘点单" width="420px" destroy-on-close class="crud-dialog">
+      <el-form ref="createRef" :model="createForm" label-width="92px">
         <el-form-item label="盘点仓库" prop="warehouseId" :rules="[{ required: true, message: '请选择盘点仓库', trigger: 'change' }]">
           <el-select v-model="createForm.warehouseId" placeholder="选择仓库" style="width: 100%">
             <el-option v-for="w in warehouses" :key="w.ID" :label="w.name" :value="w.ID" />
@@ -63,15 +71,17 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleCreate">创建</el-button>
+        <div class="dialog-footer">
+          <el-button size="large" @click="createVisible = false">取消</el-button>
+          <el-button type="primary" size="large" class="btn-save" :loading="saving" @click="handleCreate">创建</el-button>
+        </div>
       </template>
     </el-dialog>
 
     <!-- 录入盘点数 -->
-    <el-dialog v-model="recordVisible" title="录入盘点数" width="720px" destroy-on-close>
-      <div class="mb-2 tip-text">录入各 SKU 的实盘数量，未录入的明细完成时按账存视为相符</div>
-      <el-table :data="recordItems" border size="small" max-height="420">
+    <el-dialog v-model="recordVisible" title="录入盘点数" width="760px" destroy-on-close class="crud-dialog">
+      <div class="tip-bar">录入各 SKU 的实盘数量，未录入的明细完成时按账存视为相符</div>
+      <el-table :data="recordItems" border size="small" max-height="420" class="pos-table">
         <el-table-column label="SKU 编码" width="150">
           <template #default="{ row }">{{ row.sku?.skuCode || row.skuId }}</template>
         </el-table-column>
@@ -82,30 +92,34 @@
           <template #default="{ row }">{{ (row.sku?.color || '') + ' / ' + (row.sku?.size || '') }}</template>
         </el-table-column>
         <el-table-column label="账存数量" width="90" align="right">
-          <template #default="{ row }">{{ row.systemQty }}</template>
+          <template #default="{ row }"><span class="sys-qty">{{ row.systemQty }}</span></template>
         </el-table-column>
-        <el-table-column label="实盘数量" width="130">
+        <el-table-column label="实盘数量" width="140">
           <template #default="{ row }">
-            <el-input-number v-model="row.actualQty" :min="0" style="width: 100%" />
+            <el-input-number v-model="row.actualQty" :min="0" style="width: 100%" size="large" />
           </template>
         </el-table-column>
       </el-table>
       <template #footer>
-        <el-button @click="recordVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSaveRecord">保存录入</el-button>
+        <div class="dialog-footer">
+          <el-button size="large" @click="recordVisible = false">取消</el-button>
+          <el-button type="primary" size="large" class="btn-save" :loading="saving" @click="handleSaveRecord">保存录入</el-button>
+        </div>
       </template>
     </el-dialog>
 
     <!-- 详情 -->
-    <el-dialog v-model="detailVisible" title="盘点单详情" width="760px" destroy-on-close>
-      <el-descriptions :column="2" border size="small" class="mb-3">
+    <el-dialog v-model="detailVisible" title="盘点单详情" width="780px" destroy-on-close class="crud-dialog">
+      <el-descriptions :column="2" border size="small" class="detail-desc">
         <el-descriptions-item label="盘点单号">{{ detail.checkNo }}</el-descriptions-item>
         <el-descriptions-item label="仓库">{{ detail.warehouse?.name || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{ statusTag(detail.status).text }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="statusTag(detail.status).type" effect="light">{{ statusTag(detail.status).text }}</el-tag>
+        </el-descriptions-item>
         <el-descriptions-item label="盘点人">{{ detail.checker }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ detail.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
-      <el-table :data="detail.items || []" border size="small" max-height="360">
+      <el-table :data="detail.items || []" border size="small" max-height="360" class="pos-table">
         <el-table-column label="SKU 编码" width="150">
           <template #default="{ row }">{{ row.sku?.skuCode || row.skuId }}</template>
         </el-table-column>
@@ -120,9 +134,9 @@
         </el-table-column>
         <el-table-column label="差异" width="90" align="right">
           <template #default="{ row }">
-            <span :style="{ color: row.diffQty > 0 ? '#67c23a' : row.diffQty < 0 ? '#f56c6c' : '#909399' }">
+            <b :style="{ color: row.diffQty > 0 ? '#67c23a' : row.diffQty < 0 ? '#f56c6c' : '#909399' }">
               {{ row.diffQty > 0 ? '+' : '' }}{{ row.diffQty }}
-            </span>
+            </b>
           </template>
         </el-table-column>
       </el-table>
@@ -133,6 +147,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search, Plus } from '@element-plus/icons-vue'
 import {
   getStockCheckPage, getStockCheckDetail, createStockCheck,
   updateStockCheckItems, completeStockCheck, cancelStockCheck,
@@ -256,10 +271,51 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.mb-2 { margin-bottom: 8px; }
-.mb-3 { margin-bottom: 12px; }
-.mb-4 { margin-bottom: 16px; }
-.mt-3 { margin-top: 12px; }
-.justify-end { justify-content: flex-end; }
-.tip-text { color: #909399; font-size: 12px; }
+/* ===== POS 设计语言 · 公共 ===== */
+.jxc-page { padding: 4px 0; }
+.crud-search {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: 0 2px 10px rgba(31, 45, 61, 0.05);
+  margin-bottom: 12px;
+}
+.search-actions { display: flex; gap: 10px; }
+.btn-create { height: 38px; font-weight: 600; }
+.crud-table {
+  background: #fff;
+  border-radius: 12px;
+  padding: 6px 14px 14px;
+  box-shadow: 0 2px 10px rgba(31, 45, 61, 0.05);
+}
+.pos-table { width: 100%; }
+.pos-table :deep(th.el-table__cell) { background: #f7f9fc; font-weight: 700; color: #303133; }
+.pos-table :deep(.el-table__cell) { padding: 9px 0; }
+.op-group { display: flex; align-items: center; flex-wrap: nowrap; }
+.op-sep { width: 1px; height: 14px; background: #e4e7ed; margin: 0 6px; flex-shrink: 0; }
+.op-action { font-weight: 600; }
+.page-bar { margin-top: 14px; justify-content: flex-end; }
+
+/* ===== 弹窗 ===== */
+.crud-dialog :deep(.el-dialog__header) { padding-bottom: 8px; }
+.crud-dialog :deep(.el-dialog__title) { font-weight: 700; }
+.crud-dialog :deep(.el-dialog__body) { padding-top: 12px; }
+.dialog-footer { display: flex; justify-content: flex-end; gap: 10px; }
+.btn-save { min-width: 120px; font-weight: 600; }
+.tip-bar {
+  background: #f0f9eb;
+  border: 1px solid #e1f3d8;
+  color: #67c23a;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.sys-qty { font-weight: 700; font-variant-numeric: tabular-nums; }
+.detail-desc { margin-bottom: 14px; }
 </style>
