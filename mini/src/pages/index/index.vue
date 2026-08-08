@@ -68,6 +68,12 @@ const alertError = ref('')
 let loadingAll = false
 let loadedOnce = false
 
+// 首页静默刷新「新鲜度缓存」：记录最近一次成功加载的时间戳。
+// 用模块变量而非响应式 data：避免无谓的 setter 与渲染触发（社区方法论第 3 条：
+// 非渲染数据不放响应式 data；onShow 防抖/去重/新鲜度缓存）。
+let lastFreshTime = 0
+const FRESH_TTL = 30 * 1000
+
 // 功能入口：type=tab 走 switchTab，type=page 走 navigateTo，disabled 为占位
 const menus = [
   { key: 'scan', name: '扫码查库存', icon: '📷', type: 'tab', url: '/pages/stock/stock' },
@@ -90,6 +96,8 @@ onLoad(() => {
 // 每次回到首页静默刷新，保证今日数据/预警徽标最新
 onShow(() => {
   if (!isLoggedIn() || !loadedOnce) return
+  // 新鲜度缓存：距上次成功加载 < 30s 时跳过静默刷新（仅限 onShow；下拉刷新/手动操作不受限）
+  if (Date.now() - lastFreshTime < FRESH_TTL) return
   loadAll(false)
 })
 
@@ -121,6 +129,7 @@ async function loadOverview() {
     // 容错：数组或 { list: [...] }
     const list = Array.isArray(data) ? data : data && Array.isArray(data.list) ? data.list : []
     const item = list.find((it) => it && it.label === '今日')
+    markFresh()
     today.value = item
       ? {
           sales: Number(item.sales) || 0,
@@ -139,11 +148,17 @@ async function loadAlerts() {
   try {
     const data = await get('/jxc/dashboard/stock-alert')
     const list = Array.isArray(data) ? data : data && Array.isArray(data.list) ? data.list : []
+    markFresh()
     alertCount.value = list.length
   } catch (e) {
     console.error('[index] stock-alert 请求失败', e)
     alertError.value = '库存预警加载失败'
   }
+}
+
+// 任一静默刷新接口成功即更新新鲜度时间戳；若全部失败则不更新，下次 onShow 仍会重试
+function markFresh() {
+  lastFreshTime = Date.now()
 }
 
 function goDashboard() {
