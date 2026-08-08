@@ -29,6 +29,18 @@
         />
       </view>
 
+      <view class="form-item captcha-row">
+        <input
+          class="form-input captcha-input"
+          v-model="form.captcha"
+          placeholder="验证码"
+          placeholder-class="ph"
+          :maxlength="8"
+        />
+        <image v-if="captchaImg" class="captcha-img" :src="captchaImg" mode="aspectFit" @click="loadCaptcha" />
+        <text v-else class="captcha-loading" @click="loadCaptcha">点击获取验证码</text>
+      </view>
+
       <button class="login-btn" :loading="loading" :disabled="loading" @click="handleLogin">
         登 录
       </button>
@@ -47,15 +59,34 @@ import { INDEX_PAGE } from '@/config'
 
 const form = reactive({
   username: '',
-  password: ''
+  password: '',
+  captcha: ''
 })
 const loading = ref(false)
+const captchaId = ref('')
+const captchaImg = ref('')
+
+// 加载验证码（GVA: POST /base/captcha → {captchaId, picPath(base64), openCaptcha}）
+async function loadCaptcha() {
+  try {
+    const data = await post('/base/captcha', {}, { silent: true })
+    if (data && data.captchaId) {
+      captchaId.value = data.captchaId
+      captchaImg.value = data.picPath
+      form.captcha = ''
+    }
+  } catch (e) {
+    // 验证码接口失败不阻塞登录页展示（openCaptcha=false 时后端不校验验证码）
+    console.error('[captcha] 获取验证码失败', e)
+  }
+}
 
 // 已登录直接进首页
 onLoad(() => {
   if (isLoggedIn()) {
     uni.reLaunch({ url: INDEX_PAGE })
   }
+  loadCaptcha()
 })
 
 async function handleLogin() {
@@ -66,10 +97,12 @@ async function handleLogin() {
   }
   loading.value = true
   try {
-    // 后端校验的是密码的 MD5（小写 hex）
+    // 后端校验的是密码的 MD5（小写 hex）；验证码按 GVA 约定提交 captcha/captchaId
     const data = await post('/base/login', {
       username,
-      password: md5(form.password)
+      password: md5(form.password),
+      captcha: form.captcha,
+      captchaId: captchaId.value
     })
     if (!data || !data.token) {
       throw new Error('登录响应缺少 token')
@@ -82,7 +115,8 @@ async function handleLogin() {
       uni.reLaunch({ url: INDEX_PAGE })
     }, 500)
   } catch (e) {
-    // request.js 已弹 toast，这里记录日志便于排查
+    // 登录失败刷新验证码（失败次数累计会触发验证码校验）
+    loadCaptcha()
     console.error('[login] 登录失败', e)
   } finally {
     loading.value = false
@@ -167,5 +201,34 @@ async function handleLogin() {
   font-size: 22rpx;
   color: #b2b2b2;
   text-align: center;
+}
+
+.captcha-row {
+  display: flex;
+  align-items: center;
+}
+
+.captcha-input {
+  flex: 1;
+}
+
+.captcha-img {
+  width: 200rpx;
+  height: 88rpx;
+  margin-left: 16rpx;
+  border-radius: 12rpx;
+  background: #f0f1f2;
+}
+
+.captcha-loading {
+  margin-left: 16rpx;
+  width: 200rpx;
+  height: 88rpx;
+  line-height: 88rpx;
+  text-align: center;
+  font-size: 22rpx;
+  color: #2b8a3e;
+  background: #f0f1f2;
+  border-radius: 12rpx;
 }
 </style>
