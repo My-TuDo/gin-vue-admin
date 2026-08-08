@@ -3,7 +3,7 @@
     <!-- 经营看板缩略卡片：点击进入看板详情页 -->
     <view class="dash-card" @click="goDashboard">
       <view class="dash-head">
-        <text class="dash-title">📊 经营看板</text>
+        <text class="dash-title">经营看板</text>
         <view v-if="alertCount > 0" class="badge">预警 {{ alertCount }}</view>
         <view v-else-if="alertError" class="badge badge-muted">预警 -</view>
       </view>
@@ -43,7 +43,7 @@
         :class="{ disabled: item.disabled }"
         @click="onMenu(item)"
       >
-        <view class="grid-icon">{{ item.icon }}</view>
+        <view class="grid-icon" :class="item.cls">{{ item.glyph }}</view>
         <text class="grid-name">{{ item.name }}</text>
         <text v-if="item.tag" class="grid-tag">{{ item.tag }}</text>
       </view>
@@ -75,13 +75,15 @@ let lastFreshTime = 0
 const FRESH_TTL = 30 * 1000
 
 // 功能入口：type=tab 走 switchTab，type=page 走 navigateTo，disabled 为占位
+// 图标方案（用户要求不用 emoji）：纯 CSS 圆角色块 + 1-2 个汉字（glyph），
+// cls 控制色块底色——可用入口用品牌绿（主色 #2b8a3e）深浅两色，占位入口统一灰色调。
 const menus = [
-  { key: 'scan', name: '扫码查库存', icon: '📷', type: 'tab', url: '/pages/stock/stock' },
-  { key: 'dashboard', name: '经营看板', icon: '📊', type: 'page', url: '/pages/dashboard/dashboard' },
-  { key: 'cashier', name: '收银', icon: '🧾', disabled: true, tag: '敬请期待' },
-  { key: 'check', name: '盘点', icon: '📋', disabled: true },
-  { key: 'io', name: '出入库', icon: '📦', disabled: true },
-  { key: 'sales', name: '销售记录', icon: '🛒', disabled: true }
+  { key: 'scan', name: '扫码查库存', glyph: '查', cls: 'tint-green', type: 'tab', url: '/pages/stock/stock' },
+  { key: 'dashboard', name: '经营看板', glyph: '板', cls: 'tint-green-deep', type: 'page', url: '/pages/dashboard/dashboard' },
+  { key: 'cashier', name: '收银', glyph: '收', cls: 'tint-gray', disabled: true, tag: '敬请期待' },
+  { key: 'check', name: '盘点', glyph: '盘', cls: 'tint-gray', disabled: true },
+  { key: 'io', name: '出入库', glyph: '库', cls: 'tint-gray', disabled: true },
+  { key: 'sales', name: '销售记录', glyph: '销', cls: 'tint-gray', disabled: true }
 ]
 
 onLoad(() => {
@@ -318,13 +320,30 @@ function fmtInt(n) {
 .grid-icon {
   width: 88rpx;
   height: 88rpx;
-  border-radius: 20rpx;
-  background: #f1f8f2;
+  border-radius: 24rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 44rpx;
+  font-size: 36rpx;
+  font-weight: 600;
+  line-height: 1;
   margin-bottom: 14rpx;
+}
+
+/* 色块底色：可用入口品牌绿深浅两色，占位入口灰色调（与主色 #2b8a3e 协调） */
+.tint-green {
+  background: #e8f5e9;
+  color: #2b8a3e;
+}
+
+.tint-green-deep {
+  background: #2b8a3e;
+  color: #ffffff;
+}
+
+.tint-gray {
+  background: #eef0ef;
+  color: #97a09c;
 }
 
 .grid-name {
