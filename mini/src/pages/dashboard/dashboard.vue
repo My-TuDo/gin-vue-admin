@@ -2,7 +2,7 @@
   <view class="page">
     <!-- 销售趋势（折线） -->
     <view class="card">
-      <view class="card-title">销售趋势（近 14 天）</view>
+      <view class="card-title">销售趋势（近 7 天）</view>
       <view v-if="trendLoading" class="block-tip">加载中…</view>
       <view v-else-if="trendError" class="err-box">
         <text class="err-text">{{ trendError }}</text>
@@ -13,7 +13,7 @@
         type="line"
         :chart-data="trendData"
         :height="300"
-        empty-text="近 14 天暂无销售数据"
+        empty-text="近 7 天暂无销售数据"
       />
     </view>
 
@@ -134,7 +134,7 @@ async function loadTrend() {
   trendLoading.value = true
   trendError.value = ''
   try {
-    const data = await get('/jxc/dashboard/trend', { days: 14 })
+    const data = await get('/jxc/dashboard/trend', { days: 7 })
     const list = normalize(data)
     trendData.value = {
       categories: list.map((it) => shortDate(it.date)),
@@ -219,7 +219,8 @@ function normalize(data) {
 
 function shortDate(d) {
   if (!d) return ''
-  const s = String(d)
+  // 兼容 ISO 时间戳（如 2026-08-04T00:00:00+08:00）：先截断 T 之前
+  const s = String(d).split('T')[0]
   const parts = s.split('-')
   if (parts.length === 3) return `${parts[1]}/${parts[2]}`
   return s.length > 5 ? s.slice(5) : s
