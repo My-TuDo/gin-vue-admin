@@ -111,15 +111,33 @@ async function initCanvas() {
   }
   canvasNode = res.node
   ctx = canvasNode.getContext('2d')
-  const sys = uni.getSystemInfoSync()
-  pixelRatio = (sys && sys.pixelRatio) || 1
+  pixelRatio = getPixelRatio()
   cssWidth = res.width
   cssHeight = res.height
+  // canvas 2d：drawing buffer 使用物理像素（CSS 尺寸 × dpr）
+  // 注意：这里不能 ctx.scale(pixelRatio, pixelRatio)。
+  // 已核查 node_modules/@qiun/ucharts/u-charts.js：库内部没有任何 ctx.scale/setTransform 调用，
+  // 而是把所有 fontSize/padding/area/线宽等数值 × opts.pixelRatio（opts.pix）手工放大后，
+  // 统一在【物理像素坐标系】中绘制（坐标基于物理像素的 width/height，见 buildOptions 注释）。
+  // 若此处再手动 scale，会造成双重缩放：字体/柱宽/轴标签被放大 dpr 倍而重叠溢出（本次 bug 根因）。
   canvasNode.width = cssWidth * pixelRatio
   canvasNode.height = cssHeight * pixelRatio
-  ctx.scale(pixelRatio, pixelRatio)
   inited = true
   draw()
+}
+
+// uni.getSystemInfoSync 已废弃，改用 uni.getWindowInfo（兼容低版本降级）
+function getPixelRatio() {
+  if (typeof uni.getWindowInfo === 'function') {
+    try {
+      const info = uni.getWindowInfo()
+      if (info && info.pixelRatio) return info.pixelRatio
+    } catch (e) {
+      // 低版本基础库可能不支持，继续走降级逻辑
+    }
+  }
+  const sys = uni.getSystemInfoSync()
+  return (sys && sys.pixelRatio) || 1
 }
 
 function buildOptions() {
@@ -130,9 +148,14 @@ function buildOptions() {
   return {
     type: props.type,
     context: ctx,
-    // uCharts 的 width/height 使用 CSS 逻辑像素，pixelRatio 单独传入
-    width: cssWidth,
-    height: cssHeight,
+    // uCharts 2.5.0（u-charts.js）内部不做 ctx.scale/setTransform（已核查源码：全文件无相关调用），
+    // 绘制坐标全部基于 opts.width/opts.height/opts.area，而 area=padding×pixelRatio、
+    // 字号/线宽/柱宽等全部 ×pixelRatio（见 u-charts.js 第 6420 行、7095 行、1500 行），
+    // 触摸坐标也 ×pixelRatio（第 497-506 行 getTouches），即库采用“物理像素坐标系”。
+    // 因此 width/height 必须传入物理像素（CSS 逻辑像素 × dpr），pixelRatio 单独传入 dpr，
+    // 外部禁止再手动 ctx.scale，否则与库内部 ×pix 构成双重缩放（真机图表错乱根因）。
+    width: cssWidth * pixelRatio,
+    height: cssHeight * pixelRatio,
     pixelRatio: pixelRatio,
     categories: categories,
     series: series,
