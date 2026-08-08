@@ -245,6 +245,25 @@ func (a *GoodsApi) CreateSku(c *gin.Context) {
 	response.OkWithDetailed(&sku, "创建成功", c)
 }
 
+// GetSkuByBarcode 按条码/SKU编码查 SKU（含各仓库库存）
+// @Tags     JxcSku
+// @Summary  按条码查SKU（小程序扫码）
+// @Security ApiKeyAuth
+// @Produce  application/json
+// @Param    barcode query string true "条码或SKU编码"
+// @Success  200 {object} response.Response{data=jxc.GoodsSku} "SKU及库存"
+// @Router   /jxc/goods/sku/by-barcode [get]
+func (a *GoodsApi) GetSkuByBarcode(c *gin.Context) {
+	keyword := c.Query("barcode")
+	sku, err := goodsService.GetSkuByBarcode(c.Request.Context(), keyword)
+	if err != nil {
+		global.GVA_LOG.Error("按条码查询SKU失败!", zap.Error(err))
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithDetailed(sku, "查询成功", c)
+}
+
 // UpdateSku 更新 SKU
 // @Tags     JxcSku
 // @Summary  更新SKU（归属与编码不可修改）

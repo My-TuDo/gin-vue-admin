@@ -1,53 +1,52 @@
 <template>
   <view class="page">
-    <!-- 概览卡片（今日/本周/本月） -->
-    <view class="section">
-      <view v-if="overviewLoading" class="block-tip">加载中…</view>
-      <view v-else-if="overviewError" class="error-box">
-        <text class="error-text">{{ overviewError }}</text>
-        <button class="retry-btn" size="mini" @click="loadOverview">重试</button>
+    <!-- 经营看板缩略卡片：点击进入看板详情页 -->
+    <view class="dash-card" @click="goDashboard">
+      <view class="dash-head">
+        <text class="dash-title">📊 经营看板</text>
+        <view v-if="alertCount > 0" class="badge">预警 {{ alertCount }}</view>
+        <view v-else-if="alertError" class="badge badge-muted">预警 -</view>
       </view>
-      <view v-else class="cards">
-        <view v-for="(item, idx) in overview" :key="idx" class="card">
-          <view class="card-title">{{ item.label }}</view>
-          <view class="card-row">
-            <text class="card-k">销售额</text>
-            <text class="card-v">¥{{ fmtMoney(item.sales) }}</text>
-          </view>
-          <view class="card-row">
-            <text class="card-k">订单数</text>
-            <text class="card-v">{{ fmtInt(item.orders) }} 单</text>
-          </view>
-          <view class="card-row">
-            <text class="card-k">毛利</text>
-            <text class="card-v" :class="{ warn: item.profit < 0 }">¥{{ fmtMoney(item.profit) }}</text>
-          </view>
+
+      <view v-if="overviewLoading" class="dash-tip">经营数据加载中…</view>
+      <view v-else-if="overviewError" class="dash-tip">
+        <text class="dash-error">{{ overviewError }}</text>
+      </view>
+      <view v-else-if="today" class="dash-grid">
+        <view class="dash-item">
+          <text class="dash-label">今日销售额</text>
+          <text class="dash-value">¥{{ fmtMoney(today.sales) }}</text>
         </view>
+        <view class="dash-item">
+          <text class="dash-label">今日订单</text>
+          <text class="dash-value">{{ fmtInt(today.orders) }} 单</text>
+        </view>
+        <view class="dash-item">
+          <text class="dash-label">今日毛利</text>
+          <text class="dash-value" :class="{ warn: today.profit < 0 }">¥{{ fmtMoney(today.profit) }}</text>
+        </view>
+      </view>
+      <view v-else class="dash-tip">暂无经营数据</view>
+
+      <view class="dash-foot">
+        <text class="dash-more">点击查看完整看板 ›</text>
       </view>
     </view>
 
-    <!-- 库存预警列表 -->
-    <view class="section">
-      <view class="section-title">库存预警</view>
-      <view v-if="alertLoading" class="block-tip">加载中…</view>
-      <view v-else-if="alertError" class="error-box">
-        <text class="error-text">{{ alertError }}</text>
-        <button class="retry-btn" size="mini" @click="loadAlerts">重试</button>
+    <!-- 功能九宫格（3 列） -->
+    <view class="section-title">功能</view>
+    <view class="grid">
+      <view
+        v-for="item in menus"
+        :key="item.key"
+        class="grid-item"
+        :class="{ disabled: item.disabled }"
+        @click="onMenu(item)"
+      >
+        <view class="grid-icon">{{ item.icon }}</view>
+        <text class="grid-name">{{ item.name }}</text>
+        <text v-if="item.tag" class="grid-tag">{{ item.tag }}</text>
       </view>
-      <view v-else-if="alerts.length" class="alert-list">
-        <view v-for="(item, idx) in alerts" :key="idx" class="alert-item">
-          <view class="alert-main">
-            <text class="alert-name">{{ item.goodsName || '未知商品' }}</text>
-            <text class="alert-sku">{{ item.skuCode || '' }}</text>
-          </view>
-          <view class="alert-qty">
-            <text class="qty-label">可售</text>
-            <text class="qty-num" :class="{ danger: item.available <= 0 }">{{ fmtInt(item.available) }}</text>
-            <text class="qty-safe">安全线 {{ fmtInt(item.safeStock) }}</text>
-          </view>
-        </view>
-      </view>
-      <view v-else class="empty">暂无库存预警</view>
     </view>
   </view>
 </template>
@@ -59,107 +58,108 @@ import { get } from '@/utils/request'
 import { isLoggedIn } from '@/utils/auth'
 import { LOGIN_PAGE } from '@/config'
 
-const overview = ref([])
 const overviewLoading = ref(false)
 const overviewError = ref('')
+const today = ref(null)
 
-const alerts = ref([])
-const alertLoading = ref(false)
+const alertCount = ref(0)
 const alertError = ref('')
 
-// 登录态守卫 + 首次加载
+let loadingAll = false
+let loadedOnce = false
+
+// 功能入口：type=tab 走 switchTab，type=page 走 navigateTo，disabled 为占位
+const menus = [
+  { key: 'scan', name: '扫码查库存', icon: '📷', type: 'tab', url: '/pages/stock/stock' },
+  { key: 'dashboard', name: '经营看板', icon: '📊', type: 'page', url: '/pages/dashboard/dashboard' },
+  { key: 'cashier', name: '收银', icon: '🧾', disabled: true, tag: '敬请期待' },
+  { key: 'check', name: '盘点', icon: '📋', disabled: true },
+  { key: 'io', name: '出入库', icon: '📦', disabled: true },
+  { key: 'sales', name: '销售记录', icon: '🛒', disabled: true }
+]
+
 onLoad(() => {
   if (!isLoggedIn()) {
     uni.reLaunch({ url: LOGIN_PAGE })
     return
   }
-  loadAll()
+  loadedOnce = true
+  loadAll(true)
 })
 
-// 从登录页回跳后刷新数据（避免 onLoad 尚未完成时重复请求）
+// 每次回到首页静默刷新，保证今日数据/预警徽标最新
 onShow(() => {
-  if (
-    isLoggedIn() &&
-    !overviewLoading.value &&
-    !alertLoading.value &&
-    overview.value.length === 0 &&
-    !overviewError.value
-  ) {
-    loadAll()
-  }
+  if (!isLoggedIn() || !loadedOnce) return
+  loadAll(false)
 })
 
 onPullDownRefresh(async () => {
-  await loadAll()
+  await loadAll(false)
   uni.stopPullDownRefresh()
 })
 
-async function loadAll() {
-  await Promise.all([loadOverview(), loadAlerts()])
-}
-
-async function loadOverview() {
-  overviewLoading.value = true
-  overviewError.value = ''
+async function loadAll(showLoading) {
+  if (loadingAll) return
+  loadingAll = true
   try {
-    const data = await get('/jxc/dashboard/overview')
-    // 容错：兼容 {label,sales,orders,profit} 数组；若返回空则给占位
-    const list = Array.isArray(data) ? data : data && Array.isArray(data.list) ? data.list : []
-    const labels = ['今日', '本周', '本月']
-    overview.value = list.map((it, i) => ({
-      label: it.label || labels[i] || `周期${i + 1}`,
-      sales: Number(it.sales) || 0,
-      orders: Number(it.orders) || 0,
-      profit: Number(it.profit) || 0
-    }))
-    if (!overview.value.length) {
-      overviewError.value = '暂无经营数据'
+    if (showLoading) {
+      overviewLoading.value = true
     }
+    await Promise.all([loadOverview(), loadAlerts()])
   } catch (e) {
-    console.error('[index] overview 请求失败', e)
-    overviewError.value = '概览数据加载失败'
+    console.error('[index] loadAll 失败', e)
   } finally {
+    loadingAll = false
     overviewLoading.value = false
   }
 }
 
-async function loadAlerts() {
-  alertLoading.value = true
-  alertError.value = ''
+async function loadOverview() {
+  overviewError.value = ''
   try {
-    const data = await get('/jxc/dashboard/stock-alert')
-    // 容错：接口可能返回数组或 { list: [...] }
-    const list = Array.isArray(data)
-      ? data
-      : data && Array.isArray(data.list)
-        ? data.list
-        : []
-    alerts.value = list.map((it) => ({
-      skuCode: it.skuCode || it.sku || '',
-      goodsName: it.goodsName || it.goods_name || it.name || '',
-      // 字段容错：available / quantity / stock；0 是合法值，不能用 || 串联
-      available: firstNumber(it, ['available', 'quantity', 'stock']),
-      safeStock: firstNumber(it, ['safeStock', 'safe_stock'])
-    }))
+    const data = await get('/jxc/dashboard/overview')
+    // 容错：数组或 { list: [...] }
+    const list = Array.isArray(data) ? data : data && Array.isArray(data.list) ? data.list : []
+    const item = list.find((it) => it && it.label === '今日')
+    today.value = item
+      ? {
+          sales: Number(item.sales) || 0,
+          orders: Number(item.orders) || 0,
+          profit: Number(item.profit) || 0
+        }
+      : null
   } catch (e) {
-    console.error('[index] stock-alert 请求失败', e)
-    alertError.value = '库存预警加载失败'
-  } finally {
-    alertLoading.value = false
+    console.error('[index] overview 请求失败', e)
+    overviewError.value = '经营数据加载失败'
   }
 }
 
-/** 按 keys 顺序取第一个非空数值（0 也会被保留） */
-function firstNumber(obj, keys) {
-  if (!obj) return 0
-  for (let i = 0; i < keys.length; i++) {
-    const v = obj[keys[i]]
-    if (v !== undefined && v !== null && v !== '') {
-      const n = Number(v)
-      return isNaN(n) ? 0 : n
-    }
+async function loadAlerts() {
+  alertError.value = ''
+  try {
+    const data = await get('/jxc/dashboard/stock-alert')
+    const list = Array.isArray(data) ? data : data && Array.isArray(data.list) ? data.list : []
+    alertCount.value = list.length
+  } catch (e) {
+    console.error('[index] stock-alert 请求失败', e)
+    alertError.value = '库存预警加载失败'
   }
-  return 0
+}
+
+function goDashboard() {
+  uni.navigateTo({ url: '/pages/dashboard/dashboard' })
+}
+
+function onMenu(item) {
+  if (item.disabled) {
+    uni.showToast({ title: item.tag || 'M3 开发中，敬请期待', icon: 'none' })
+    return
+  }
+  if (item.type === 'tab') {
+    uni.switchTab({ url: item.url })
+  } else {
+    uni.navigateTo({ url: item.url })
+  }
 }
 
 function fmtMoney(n) {
@@ -181,165 +181,150 @@ function fmtInt(n) {
   box-sizing: border-box;
 }
 
-.section {
-  margin-bottom: 32rpx;
-}
-
 .section-title {
   font-size: 30rpx;
   font-weight: 600;
   color: #222;
+  margin: 8rpx 0 20rpx;
+}
+
+/* ---- 看板缩略卡片 ---- */
+.dash-card {
+  background: linear-gradient(135deg, #2b8a3e 0%, #3fb45c 100%);
+  border-radius: 20rpx;
+  padding: 28rpx 28rpx 20rpx;
+  margin-bottom: 32rpx;
+  box-shadow: 0 8rpx 24rpx rgba(43, 138, 62, 0.25);
+}
+
+.dash-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 20rpx;
 }
 
-.block-tip {
-  padding: 60rpx 0;
-  text-align: center;
-  color: #999;
-  font-size: 26rpx;
+.dash-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #fff;
 }
 
-/* 概览卡片 */
-.cards {
+.badge {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 22rpx;
+  padding: 6rpx 18rpx;
+  border-radius: 999rpx;
+  font-weight: 600;
+}
+
+.badge-muted {
+  opacity: 0.7;
+}
+
+.dash-tip {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 26rpx;
+  padding: 30rpx 0;
+  text-align: center;
+}
+
+.dash-error {
+  font-size: 24rpx;
+}
+
+.dash-grid {
+  display: flex;
+}
+
+.dash-item {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  align-items: center;
 }
 
-.card {
+.dash-item + .dash-item {
+  border-left: 1rpx solid rgba(255, 255, 255, 0.25);
+}
+
+.dash-label {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 10rpx;
+}
+
+.dash-value {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #fff;
+
+  &.warn {
+    color: #ffd9d9;
+  }
+}
+
+.dash-foot {
+  margin-top: 20rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid rgba(255, 255, 255, 0.25);
+  text-align: right;
+}
+
+.dash-more {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* ---- 功能九宫格 ---- */
+.grid {
+  display: flex;
+  flex-wrap: wrap;
   background: #ffffff;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 20rpx;
+  border-radius: 20rpx;
+  padding: 12rpx 0;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
 }
 
-.card-title {
-  font-size: 26rpx;
-  color: #888;
-  margin-bottom: 16rpx;
-}
-
-.card-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8rpx 0;
-}
-
-.card-k {
-  font-size: 26rpx;
-  color: #999;
-}
-
-.card-v {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #222;
-
-  &.warn {
-    color: #e64340;
-  }
-}
-
-/* 库存预警 */
-.alert-list {
-  background: #ffffff;
-  border-radius: 16rpx;
-  overflow: hidden;
-}
-
-.alert-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 24rpx;
-  border-bottom: 1rpx solid #f0f0f0;
-
-  &:last-child {
-    border-bottom: none;
-  }
-}
-
-.alert-main {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  margin-right: 16rpx;
-}
-
-.alert-name {
-  font-size: 28rpx;
-  color: #222;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.alert-sku {
-  margin-top: 8rpx;
-  font-size: 22rpx;
-  color: #999;
-}
-
-.alert-qty {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.qty-label {
-  font-size: 20rpx;
-  color: #999;
-}
-
-.qty-num {
-  font-size: 34rpx;
-  font-weight: 600;
-  color: #e64340;
-
-  &.danger {
-    color: #e64340;
-  }
-}
-
-.qty-safe {
-  font-size: 20rpx;
-  color: #b2b2b2;
-}
-
-.empty {
-  padding: 60rpx 0;
-  text-align: center;
-  color: #999;
-  font-size: 26rpx;
-  background: #ffffff;
-  border-radius: 16rpx;
-}
-
-/* 错误占位 */
-.error-box {
+.grid-item {
+  width: 33.333%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 60rpx 0;
-  background: #ffffff;
-  border-radius: 16rpx;
+  padding: 30rpx 0 26rpx;
+  position: relative;
+
+  &.disabled {
+    opacity: 0.55;
+  }
 }
 
-.error-text {
-  font-size: 26rpx;
-  color: #999;
-  margin-bottom: 20rpx;
+.grid-icon {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 20rpx;
+  background: #f1f8f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 44rpx;
+  margin-bottom: 14rpx;
 }
 
-.retry-btn {
-  background: #2b8a3e;
-  color: #fff;
-  border-radius: 8rpx;
+.grid-name {
   font-size: 24rpx;
+  color: #333;
+}
 
-  &::after {
-    border: none;
-  }
+.grid-tag {
+  position: absolute;
+  top: 22rpx;
+  right: calc(33.333% / 2 - 60rpx);
+  font-size: 18rpx;
+  color: #e64340;
+  background: #fff1f0;
+  border-radius: 999rpx;
+  padding: 2rpx 10rpx;
 }
 </style>

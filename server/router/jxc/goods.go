@@ -23,6 +23,7 @@ func (r *GoodsRouter) InitGoodsRouter(Router *gin.RouterGroup) {
 
 	// ===== 商品 SKU =====
 	readOnlyGroup.GET("goods/sku/list", goodsApi.GetSkuList)
+	readOnlyGroup.GET("goods/sku/by-barcode", goodsApi.GetSkuByBarcode)
 	recordGroup.POST("goods/sku", goodsApi.CreateSku)
 	recordGroup.PUT("goods/sku", goodsApi.UpdateSku)
 	recordGroup.DELETE("goods/sku", goodsApi.DeleteSku)

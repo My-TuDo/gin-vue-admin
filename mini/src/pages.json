@@ -11,6 +11,23 @@
     {
       "path": "pages/index/index",
       "style": {
+        "navigationBarTitleText": "进销存",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/stock/stock",
+      "style": {
+        "navigationBarTitleText": "扫码查库存",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/dashboard/dashboard",
+      "style": {
         "navigationBarTitleText": "经营看板",
         "navigationBarBackgroundColor": "#ffffff",
         "navigationBarTextStyle": "black",
@@ -41,6 +58,10 @@
       {
         "pagePath": "pages/index/index",
         "text": "首页"
+      },
+      {
+        "pagePath": "pages/stock/stock",
+        "text": "库存"
       },
       {
         "pagePath": "pages/mine/mine",

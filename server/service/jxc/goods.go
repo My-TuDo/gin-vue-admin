@@ -1,13 +1,14 @@
 package jxc
 
 import (
-	"strings"
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/common/request"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/jxc"
+	"gorm.io/gorm"
 )
 
 type GoodsService struct{}
@@ -121,6 +122,32 @@ func (s *GoodsService) CreateSku(ctx context.Context, sku *jxc.GoodsSku) error {
 // UpdateSku 更新 SKU （归属与编码不可修改）
 func (s *GoodsService) UpdateSku(ctx context.Context, sku *jxc.GoodsSku) error {
 	return global.GVA_DB.WithContext(ctx).Omit("goods_id", "sku_code", "created_at", "status").Save(sku).Error
+}
+
+// GetSkuByBarcode 按条码/SKU编码查 SKU（含各仓库库存，供小程序扫码查库存）
+func (s *GoodsService) GetSkuByBarcode(ctx context.Context, keyword string) (*jxc.GoodsSku, error) {
+	if strings.TrimSpace(keyword) == "" {
+		return nil, errors.New("请输入条码或SKU编码")
+	}
+	db := global.GVA_DB.WithContext(ctx)
+	var sku jxc.GoodsSku
+	err := db.Preload("Goods").Where("barcode = ? OR sku_code = ?", keyword, keyword).First(&sku).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("未找到该条码/编码对应的SKU")
+		}
+		return nil, err
+	}
+	var rows []jxc.SkuStockRow
+	if err := db.Table("stock s").
+		Select("s.warehouse_id AS warehouse_id, w.name AS warehouse_name, s.quantity AS quantity, s.lock_quantity AS lock_quantity, (s.quantity - s.lock_quantity) AS available").
+		Joins("LEFT JOIN warehouse w ON w.id = s.warehouse_id").
+		Where("s.sku_id = ?", sku.ID).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	sku.Stocks = rows
+	return &sku, nil
 }
 
 // DeleteSku 删除 SKU
