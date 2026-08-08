@@ -2,7 +2,7 @@
   <view class="qiun-chart">
     <!-- canvas type="2d"：微信小程序端由 uCharts 绘制；数据为空或初始化失败时显示占位 -->
     <canvas
-      v-if="showCanvas"
+      v-show="showCanvas"
       :id="cid"
       :canvas-id="cid"
       type="2d"
@@ -12,7 +12,11 @@
       @touchmove="onTouchMove"
       @touchend="onTouchEnd"
     />
-    <view v-else class="qiun-empty">{{ emptyText }}</view>
+    <!-- 占位（空数据/初始化失败）：与 canvas 同用 v-show 切换。
+         Vue3 中 v-else 必须紧跟 v-if/v-else-if，无法与 v-show 配对（否则编译报错）；
+         双 v-show 只切换 display，canvas 节点常驻不复建 —— 图表初始化昂贵（canvas 2d 节点查询+
+         实例构造），避免反复销毁重建造成二次初始化的空白与卡顿（社区方法论第 2 条）。 -->
+    <view v-show="!showCanvas" class="qiun-empty">{{ emptyText }}</view>
   </view>
 </template>
 
@@ -36,7 +40,13 @@ const props = defineProps({
     default: () => ['#2b8a3e', '#f5a623', '#e64340', '#4a90d9', '#9b59b6', '#1abc9c', '#e67e22']
   },
   /** 空数据占位文案 */
-  emptyText: { type: String, default: '暂无数据' }
+  emptyText: { type: String, default: '暂无数据' },
+  /**
+   * 是否启用绘制动画，默认 false（社区方法论第 1 条）：
+   * uCharts 动画为逐帧重绘，在真机（iPhone）上触发逻辑层/视图层高频跨层通信造成卡顿；
+   * 关闭后整图一次性绘制，数据更新走 updateData 也不会逐帧。
+   */
+  animation: { type: Boolean, default: false }
 })
 
 const instance = getCurrentInstance()
@@ -62,17 +72,34 @@ const hasData = computed(() => {
 
 const showCanvas = computed(() => hasData.value && !initFailed.value)
 
+let initTimer = null
+
 onMounted(() => {
-  // 组件挂载后初始化 canvas（数据未就绪时由 watch 兜底）
-  initCanvas()
+  // 首绘延后约 150ms 执行，避开页面转场动画抢帧（社区方法论第 2 条：uCharts 官方 README
+  // 建议复杂 canvas 延后 100-300ms 渲染）。仅首绘延迟；watch 触发的数据更新不延迟。
+  initTimer = setTimeout(() => {
+    initTimer = null
+    initCanvas()
+  }, 150)
 })
 
 watch(
   () => props.chartData,
   () => {
     if (!hasData.value) return
-    if (canvasNode && ctx) {
-      draw()
+    if (chart && canvasNode && ctx) {
+      // 数据更新走 uCharts 增量路径：u-charts.js 第 7149 行 uCharts.prototype.updateData
+      // 实现为 this.opts = assign({}, this.opts, data) 后重走 drawCharts，复用同一实例与
+      // context，避免 new uCharts 全量重建（再次构造实例/解析默认 opts）。updateData 走的是
+      // 同一套 drawCharts 绘制管线，对 line/column/area/ring 均安全。显式传入 animation，
+      // 确保不启动逐帧动画（drawCharts 内 duration = opts.animation ? opts.duration : 0，
+      // 见 u-charts.js 第 6397 行）。
+      const data = props.chartData || {}
+      chart.updateData({
+        categories: Array.isArray(data.categories) ? data.categories : [],
+        series: Array.isArray(data.series) ? data.series : [],
+        animation: props.animation
+      })
     } else if (!initFailed.value) {
       initCanvas()
     }
@@ -159,7 +186,8 @@ function buildOptions() {
     pixelRatio: pixelRatio,
     categories: categories,
     series: series,
-    animation: true,
+    // animation 默认关闭（由 prop 控制）：开启时为逐帧动画，真机跨层通信开销大（社区方法论第 1 条）
+    animation: props.animation,
     background: '#FFFFFF',
     color: props.colors,
     padding: [12, 5, 0, 5],
@@ -225,6 +253,8 @@ function sleep(ms) {
 }
 
 onBeforeUnmount(() => {
+  if (initTimer) clearTimeout(initTimer)
+  initTimer = null
   chart = null
   ctx = null
   canvasNode = null

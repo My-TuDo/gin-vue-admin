@@ -113,8 +113,20 @@ onPullDownRefresh(async () => {
   uni.stopPullDownRefresh()
 })
 
+// 模块级防重锁：onLoad 与 onPullDownRefresh 可能并发触发（如数据加载中下拉刷新），
+// 去重避免并发重复请求（社区方法论第 3 条：onShow/下拉刷新与加载中标志去重）。
+let loadingAll = false
+
 async function loadAll() {
-  await Promise.all([loadTrend(), loadTop(), loadCat(), loadAlerts()])
+  if (loadingAll) return
+  loadingAll = true
+  try {
+    // 图表数据（trendData/topData/catData）为响应式绑定，更新后由 qiun-chart 组件内部
+    // 的 watch 自动走 uCharts updateData 增量路径重绘（配合 qiun-chart 优化，见其源码注释）。
+    await Promise.all([loadTrend(), loadTop(), loadCat(), loadAlerts()])
+  } finally {
+    loadingAll = false
+  }
 }
 
 // ---------- 销售趋势 ----------
