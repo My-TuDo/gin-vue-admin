@@ -1,0 +1,20 @@
+{
+  "name": "进销存小程序",
+  "appid": "",
+  "description": "进销存管理系统配套微信小程序（gin-vue-admin / JXC）",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "",
+    "setting": {
+      "urlCheck": false,
+      "es6": true,
+      "enhance": true,
+      "postcss": true,
+      "minified": true
+    },
+    "usingComponents": true,
+    "lazyCodeLoading": "requiredComponents"
+  }
+}

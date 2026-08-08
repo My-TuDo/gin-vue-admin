@@ -1,0 +1,25 @@
+{
+  "name": "jxc-mini",
+  "version": "1.0.0",
+  "description": "进销存微信小程序（gin-vue-admin 配套，uni-app Vue3 + Vite）",
+  "scripts": {
+    "dev:mp-weixin": "uni -p mp-weixin",
+    "build:mp-weixin": "uni build -p mp-weixin"
+  },
+  "dependencies": {
+    "@dcloudio/uni-app": "3.0.0-4060620250520001",
+    "@dcloudio/uni-components": "3.0.0-4060620250520001",
+    "@dcloudio/uni-mp-weixin": "3.0.0-4060620250520001",
+    "vue": "^3.4.21"
+  },
+  "devDependencies": {
+    "@dcloudio/types": "^3.4.8",
+    "@dcloudio/uni-cli-shared": "3.0.0-4060620250520001",
+    "@dcloudio/uni-stacktracey": "3.0.0-4060620250520001",
+    "@dcloudio/vite-plugin-uni": "3.0.0-4060620250520001",
+    "@vue/compiler-sfc": "^3.4.21",
+    "@vue/runtime-core": "^3.4.21",
+    "sass": "^1.77.8",
+    "vite": "5.2.8"
+  }
+}

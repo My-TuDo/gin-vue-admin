@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.hbuilderx/
+*.local
+.DS_Store
