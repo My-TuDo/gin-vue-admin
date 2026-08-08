@@ -3,3 +3,7 @@ dist/
 .hbuilderx/
 *.local
 .DS_Store
+
+# 微信开发者工具误在仓库根生成的配置
+/project.config.json
+/project.private.config.json
