@@ -78,6 +78,7 @@ async function loadCaptcha() {
   } catch (e) {
     // 验证码接口失败不阻塞登录页展示（openCaptcha=false 时后端不校验验证码）
     console.error('[captcha] 获取验证码失败', e)
+    uni.showToast({ title: '验证码加载失败，请检查后端服务', icon: 'none' })
   }
 }
 
