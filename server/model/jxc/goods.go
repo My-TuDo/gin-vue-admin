@@ -22,6 +22,15 @@ type Goods struct {
 
 func (Goods) TableName() string { return "goods" }
 
+// SkuStockRow 单个仓库库存行（扫码查库存用，非表字段）
+type SkuStockRow struct {
+	WarehouseID   uint   `json:"warehouseId" comment:"仓库ID"`
+	WarehouseName string `json:"warehouseName" comment:"仓库名称"`
+	Quantity      int    `json:"quantity" comment:"当前库存"`
+	LockQuantity  int    `json:"lockQuantity" comment:"锁定数量"`
+	Available     int    `json:"available" comment:"可售数量 quantity-lockQuantity"`
+}
+
 // GoodsSku 商品 SKU
 type GoodsSku struct {
 	global.GVA_MODEL
@@ -35,7 +44,8 @@ type GoodsSku struct {
 	SafeStock int     `json:"safeStock" gorm:"column:safe_stock;not null;default:0;comment:安全库存（0=不预警）"`
 	Status    int8    `json:"status" gorm:"column:status;not null;default:1;comment:状态 1启用 0停用"`
 
-	Goods *Goods `json:"goods" gorm:"foreignKey:GoodsID;references:ID"`
+	Goods *Goods         `json:"goods" gorm:"foreignKey:GoodsID;references:ID"`
+	Stocks []SkuStockRow `json:"stocks" gorm:"-" comment:"各仓库库存（扫码查库存时加载）"`
 }
 
 func (GoodsSku) TableName() string { return "goods_sku" }

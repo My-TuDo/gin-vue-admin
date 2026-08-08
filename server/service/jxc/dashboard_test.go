@@ -161,3 +161,16 @@ func TestDashboard(t *testing.T) {
 		t.Error("主表缺失历史统计应报错")
 	}
 }
+
+// TestTrimDateT 日期截断防御逻辑
+func TestTrimDateT(t *testing.T) {
+	if got := trimDateT("2026-08-04T00:00:00+08:00"); got != "2026-08-04" {
+		t.Fatalf("ISO 串截断失败: %s", got)
+	}
+	if got := trimDateT("2026-08-04"); got != "2026-08-04" {
+		t.Fatalf("纯日期被误改: %s", got)
+	}
+	if got := trimDateT(""); got != "" {
+		t.Fatalf("空串处理失败")
+	}
+}

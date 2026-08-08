@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
@@ -115,10 +116,22 @@ func (s *DashboardService) Trend(ctx context.Context, days int) ([]TrendPoint, e
 	from := time.Now().AddDate(0, 0, -(days - 1)).Format("2006-01-02")
 	var list []TrendPoint
 	err := db.Table("sale_order").
-		Select("DATE(created_at) AS date, COALESCE(SUM(total_amount),0) AS sales, COUNT(*) AS orders").
+		Select("SUBSTR(created_at, 1, 10) AS date, COALESCE(SUM(total_amount),0) AS sales, COUNT(*) AS orders").
 		Where("status = ? AND created_at >= ?", 2, from).
-		Group("DATE(created_at)").Order("date").Scan(&list).Error
+		Group("SUBSTR(created_at, 1, 10)").Order("date").Scan(&list).Error
+	// 防御：MySQL parseTime=True 时 DATE 列可能以 RFC3339 形式落到 string（如 2026-08-04T00:00:00+08:00），统一截断
+	for i := range list {
+		list[i].Date = trimDateT(list[i].Date)
+	}
 	return list, err
+}
+
+// trimDateT 截断日期字符串中的 T 之后部分（兼容 ISO 时间戳）
+func trimDateT(d string) string {
+	if idx := strings.IndexByte(d, 'T'); idx >= 0 {
+		return d[:idx]
+	}
+	return d
 }
 
 // Top 热销商品（正常销售 + 换出，按销量）
