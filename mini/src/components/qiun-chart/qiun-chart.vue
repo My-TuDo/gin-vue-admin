@@ -224,6 +224,17 @@ function buildOptions() {
       disableGrid: true,
       fontSize: 10,
       fontColor: '#999999',
+      // X 轴标签抽稀依据（@qiun/ucharts 2.5.0 u-charts.js 第 4545-4566 行）：
+      //   drawXAxis 中 labelCount 语义为「X 轴单屏最多标签数」。实现：未设 xAxis.itemCount 时
+      //   maxXAxisListLength = labelCount - 1（第 4550 行），ratio = ceil(categories.length /
+      //   maxXAxisListLength)，仅 i % ratio === 0 的索引绘制标签、其余置空（第 4559-4565 行），
+      //   且最后一个标签强制显示（第 4566 行）。
+      //   → 本页趋势传近 7 天（7 个分类）：labelCount=4 ⇒ max=3 ⇒ ratio=ceil(7/3)=3 ⇒
+      //     显示索引 0/3/6（首/中/尾）3 个日期标签，彼此间隔 3 个数据槽位，真机小屏不重叠。
+      //   注意：labelCount=7 并非全显，而是 max=6、ratio=ceil(7/6)=2 ⇒ 显示 0/2/4/6 共 4 个；
+      //   全显需 labelCount >= categories.length + 1（ratio 退化为 1）。7 天取 4 更直观。
+      //   另：labelCount 直接生效，无需配合 itemCount（仅 enableScroll 场景才需要）；rotateLabel
+      //   仅控制标签旋转绘制分支（第 4568/4591 行），与抽稀无关，保持 false 不旋转。
       labelCount: 4,
       rotateLabel: false,
       // 显示 X 轴线（柱子底边参照；uCharts 默认即 true，见 u-charts.js 第 7036 行）
