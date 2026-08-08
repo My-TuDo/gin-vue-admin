@@ -172,6 +172,26 @@ function buildOptions() {
   const categories = Array.isArray(data.categories) ? data.categories : []
   const series = Array.isArray(data.series) ? data.series : []
   const isPieLike = props.type === 'pie' || props.type === 'ring'
+  const isColumn = props.type === 'column'
+  // 柱状图柱子穿透 X 轴修复（真机现象）。源码依据 @qiun/ucharts/u-charts.js：
+  //  1) 柱子基线（底部 y）由 drawColumnDataPoints 按 0 轴位置计算（第 3000-3002 行）：
+  //       zeroHeight = (opts.height - area[0] - area[2]) * (0 - minRange) / (maxRange - minRange)
+  //       zeroPoints  = opts.height - Math.round(zeroHeight) - area[2]
+  //     柱子底边 = zeroPoints；X 轴线画在 opts.height - area[2]（drawXAxis 第 4646 行）。
+  //  2) y 轴刻度由 getYAxisTextList 自动计算（第 1953 行）：yAxis.data 为空时 minRange
+  //     取自 getDataRange/findRange（第 1952、425 行），对全正数据（如销售额）向下取整
+  //     但不为 0（数据 500~800 时 minRange≈500）。
+  //  3) 于是 minRange>0 时 zeroHeight<0，zeroPoints 大于 opts.height - area[2]（X 轴线
+  //     位置），柱子底边越界画到 X 轴线之下 → 真机柱子穿透 X 轴。
+  //  修复组合（仅 column 生效）：
+  //   a) yAxis.data = [{ min: 0 }]：calYAxisData（第 2000 行）会把 min 传入
+  //      getYAxisTextList，第 1953 行 minRange 取 0，zeroHeight=0，柱子底部恒等于
+  //      X 轴线位置，不再穿透；data 项内补 fontSize/fontColor 保持刻度样式不变
+  //      （走 data 分支后第 4733 行绘制回退 config.fontSize=13，需显式传 10）。
+  //   b) padding 底部给 6px（仅 column）：x 轴刻度区域（area[2] 含 xAxisHeight，
+  //      第 6487 行）之外再留白，避免柱底/刻度贴 canvas 底边。
+  //   c) xAxis.axisLine = true：显式打开轴线（uCharts 默认即 true，第 7036 行），
+  //      作为柱底参照；折线/饼图维持原配置不受影响。
   return {
     type: props.type,
     context: ctx,
@@ -190,7 +210,7 @@ function buildOptions() {
     animation: props.animation,
     background: '#FFFFFF',
     color: props.colors,
-    padding: [12, 5, 0, 5],
+    padding: [12, 5, isColumn ? 6 : 0, 5],
     dataLabel: false,
     enableScroll: false,
     legend: {
@@ -206,12 +226,16 @@ function buildOptions() {
       fontColor: '#999999',
       labelCount: 4,
       rotateLabel: false,
+      // 显示 X 轴线（柱子底边参照；uCharts 默认即 true，见 u-charts.js 第 7036 行）
+      axisLine: true,
       disabled: isPieLike
     },
     yAxis: {
       gridType: 'dash',
       dashLength: 2,
-      data: [],
+      // column：强制 y 轴从 0 开始（见 buildOptions 注释 a），柱子基线=绘图区底部=X 轴线；
+      // 其它类型保持 data:[] 自动刻度（折线图聚焦数据波动、保持现状）。
+      data: isColumn ? [{ min: 0, fontSize: 10, fontColor: '#999999' }] : [],
       fontSize: 10,
       fontColor: '#999999',
       splitNumber: 4,
