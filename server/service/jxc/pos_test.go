@@ -88,16 +88,22 @@ func TestPosScan(t *testing.T) {
 		t.Fatalf("会话2上架失败: %v", err)
 	}
 
-	// 4. 未找到条码
-	_, err = s.CreateScan(ctx, ss1.Code, "9999999999999", 0, 1)
-	if err == nil {
-		t.Fatal("未找到条码应报错")
+	// 4. 未找到条码 → 创建 error 记录入队（不返回错误），error 非空
+	errScan, err := s.CreateScan(ctx, ss1.Code, "9999999999999", 0, 1)
+	if err != nil {
+		t.Fatalf("未找到条码应入队错误而非报错: %v", err)
+	}
+	if errScan.Error == "" || errScan.SkuID != 0 {
+		t.Fatalf("错误记录异常: %+v", errScan)
 	}
 
-	// 4b. skuID 指定但不存在
-	_, err = s.CreateScan(ctx, ss1.Code, "", 99999, 1)
-	if err == nil {
-		t.Fatal("不存在的 skuID 应报错")
+	// 4b. skuID 指定但不存在 → 同样入队错误
+	errScan, err = s.CreateScan(ctx, ss1.Code, "", 99999, 1)
+	if err != nil {
+		t.Fatalf("无效 skuID 应入队错误而非报错: %v", err)
+	}
+	if errScan.Error == "" {
+		t.Fatalf("无效 skuID 错误记录缺失: %+v", errScan)
 	}
 
 	// 4c. skuID 指定成功路径
@@ -124,16 +130,29 @@ func TestPosScan(t *testing.T) {
 		t.Fatal("数量超限应报错")
 	}
 
-	// 6. 待处理列表（会话1：POS-A qty=5 + POS-B qty=1，共 2 条；会话2 的 1 条不可见）
+	// 6. 待处理列表（会话1：POS-A qty=5 + POS-B qty=1 + 错误记录×2，共 4 条；会话2 的 1 条不可见）
 	list, err := s.ListPending(ctx, ss1.Code)
 	if err != nil {
 		t.Fatalf("列表失败: %v", err)
 	}
-	if len(list) != 2 {
-		t.Fatalf("会话1待处理条数异常: 期望 2 实际 %d", len(list))
+	if len(list) != 4 {
+		t.Fatalf("会话1待处理条数异常: 期望 4 实际 %d", len(list))
 	}
 	if list[0].Sku == nil || list[0].Sku.SkuCode != "POS-A" || list[0].Sku.GoodsName != "扫码枪测试商品" {
 		t.Fatalf("SKU 摘要缺失: %+v", list[0].Sku)
+	}
+	// 6a. 错误记录在列表中（Sku=nil, Error 非空）
+	hasErr := false
+	for _, it := range list {
+		if it.Error != "" {
+			hasErr = true
+			if it.Sku != nil || it.Qty != 0 {
+				t.Fatalf("错误记录形态异常: %+v", it)
+			}
+		}
+	}
+	if !hasErr {
+		t.Fatal("错误记录未出现在待处理列表")
 	}
 	// 6b. 会话2 列表只有自己的 1 条
 	list2s, err := s.ListPending(ctx, ss2.Code)
@@ -157,8 +176,8 @@ func TestPosScan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("列表2失败: %v", err)
 	}
-	if len(list2) != 1 || list2[0].Sku.SkuCode != "POS-B" {
-		t.Fatalf("确认后待处理应只剩 POS-B: %+v", list2)
+	if len(list2) != 3 || list2[0].Sku.SkuCode != "POS-B" {
+		t.Fatalf("确认后待处理应只剩 POS-B + 2 条错误记录: %+v", list2)
 	}
 
 	// 8. 空 ids 确认报错
@@ -172,7 +191,7 @@ func TestPosScan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("列表3失败: %v", err)
 	}
-	if len(list3) != 1 || list3[0].Sku == nil || list3[0].Sku.GoodsName != "" {
+	if len(list3) != 3 || list3[0].Sku == nil || list3[0].Sku.GoodsName != "" {
 		t.Fatalf("商品删除后 GoodsName 应为空: %+v", list3)
 	}
 
@@ -182,7 +201,7 @@ func TestPosScan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("列表4失败: %v", err)
 	}
-	if len(list4) != 1 || list4[0].Sku != nil {
+	if len(list4) != 3 || list4[0].Sku != nil {
 		t.Fatalf("SKU 删除后摘要应为 nil: %+v", list4)
 	}
 

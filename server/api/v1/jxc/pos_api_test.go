@@ -77,10 +77,15 @@ func TestApiPosScan(t *testing.T) {
 		t.Fatalf("上架记录异常: %+v", scan)
 	}
 
-	// 2. 上架失败（条码不存在）
+	// 2. 条码不存在 → 商品类错误入队（code=0，data.error 非空），不报错
 	_, rb = doReq(t, posApi2.Scan, http.MethodPost, `{"session":"`+code+`","barcode":"9999999999999","qty":1}`)
-	if rb.Code == 0 {
-		t.Fatal("条码不存在应失败")
+	if rb.Code != 0 {
+		t.Fatalf("条码不存在应入队错误而非失败: code=%d msg=%s", rb.Code, rb.Msg)
+	}
+	var errScan jxc.PosScan
+	global.GVA_DB.Where("error != '' AND session = ?", code).First(&errScan)
+	if errScan.Error == "" {
+		t.Fatal("错误记录未入库")
 	}
 
 	// 3. 上架失败（空参数）

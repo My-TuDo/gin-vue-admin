@@ -10,6 +10,7 @@ type PosScan struct {
 	Session   string     `json:"session" gorm:"column:session;size:32;not null;index"`
 	SkuID     uint       `json:"skuId" gorm:"column:sku_id;not null;index"`
 	Qty       int        `json:"qty" gorm:"not null;default:1"`
+	Error     string     `json:"error" gorm:"column:error;size:255;comment:扫码错误信息（空=正常，非空=商品类错误，PC 端展示）"`
 	Status    int        `json:"status" gorm:"not null;default:0;index"`
 	CreatedAt time.Time  `json:"createdAt"`
 	HandledAt *time.Time `json:"handledAt"`

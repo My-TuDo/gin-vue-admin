@@ -68,6 +68,9 @@ func (s *PosScanService) DisableSession(ctx context.Context, code string) error 
 
 // CreateScan 小程序扫码上架：按条码/SKU编码 查 SKU，投递到指定收银台会话。
 // 同一 SKU 在同一会话已有未消费记录时数量累加（连续扫同款合并）。
+// 商品类错误（条码不存在/SKU 无效）不返回错误，而是创建 error 记录入队，
+// 由 PC 端轮询展示（扫码枪只负责录入，报错信息在 PC 展示）。
+// 仅会话类错误（码无效/作废）直接返回错误，小程序端提示重新绑定。
 func (s *PosScanService) CreateScan(ctx context.Context, session, barcode string, skuID uint, qty int) (*jxc.PosScan, error) {
 	if qty <= 0 {
 		qty = 1
@@ -80,20 +83,21 @@ func (s *PosScanService) CreateScan(ctx context.Context, session, barcode string
 		return nil, err
 	}
 	db := global.GVA_DB.WithContext(ctx)
+	session = strings.TrimSpace(session)
 
 	var sku jxc.GoodsSku
 	if skuID > 0 {
 		if err := db.First(&sku, skuID).Error; err != nil {
-			return nil, errors.New("SKU 不存在")
+			return s.enqueueError(ctx, session, "SKU 不存在")
 		}
 	} else {
 		keyword := strings.TrimSpace(barcode)
 		if keyword == "" {
-			return nil, errors.New("请提供条码或 SKU 编码")
+			return s.enqueueError(ctx, session, "条码为空")
 		}
 		if err := db.Where("barcode = ? OR sku_code = ?", keyword, keyword).First(&sku).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return nil, errors.New("未找到该条码对应的商品")
+				return s.enqueueError(ctx, session, "未找到该条码对应的商品："+keyword)
 			}
 			return nil, err
 		}
@@ -158,6 +162,24 @@ func (s *PosScanService) ListPending(ctx context.Context, session string) ([]jxc
 		details = append(details, d)
 	}
 	return details, nil
+}
+
+// enqueueError 商品类扫码错误入队：创建 error 记录（sku_id=0, qty=0），
+// PC 端轮询到后展示并自动消费。返回记录本身（error 非空）。
+func (s *PosScanService) enqueueError(ctx context.Context, session, msg string) (*jxc.PosScan, error) {
+	// 用 map 插入：struct 的 gorm default:1 会把零值 qty=0 覆盖成 1，map 不受影响；
+	// map 不会自动填 created_at，需显式写入（否则 NULL 在 ORDER BY created_at 时排最前）
+	if err := global.GVA_DB.WithContext(ctx).Model(&jxc.PosScan{}).Create(map[string]interface{}{
+		"session": session, "sku_id": 0, "qty": 0, "error": msg, "status": 0, "created_at": time.Now(),
+	}).Error; err != nil {
+		return nil, err
+	}
+	var scan jxc.PosScan
+	if err := global.GVA_DB.WithContext(ctx).Where("error = ? AND session = ?", msg, session).
+		Order("id DESC").First(&scan).Error; err != nil {
+		return nil, err
+	}
+	return &scan, nil
 }
 
 // ConfirmScan PC 收银台消费确认：批量标记已处理（自动加入购物车后）
