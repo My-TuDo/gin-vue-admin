@@ -1,6 +1,12 @@
 <template>
   <div class="cashier">
     <el-tabs v-model="activeTab" class="cashier-tabs" @tab-change="onTabChange">
+      <!-- 顶部工具区：扫码枪入口（badge 显示待处理总数，全确认后自动隐藏） -->
+      <template #extra>
+        <el-badge :value="posPendingCount" :hidden="posPendingCount <= 0" :max="99" class="pos-gun-badge">
+          <el-button :icon="Monitor" @click="posDrawerVisible = true">扫码枪</el-button>
+        </el-badge>
+      </template>
       <!-- ==================== 收款 ==================== -->
       <el-tab-pane label="收款" name="cash">
         <div class="pos-cash">
@@ -328,6 +334,48 @@
       </el-tab-pane>
     </el-tabs>
 
+    <!-- 扫码枪抽屉：打开时启动 3s 轮询，关闭时停止；新条目出现时播放提示音 -->
+    <el-drawer
+      v-model="posDrawerVisible"
+      title="扫码枪 · 待加入商品"
+      size="420px"
+      @open="startPosPolling"
+      @close="stopPosPolling"
+    >
+      <div class="pos-drawer-body">
+        <div class="pos-drawer-tip">店员在小程序扫码后自动出现在此，点击「加入」进入购物车并确认</div>
+        <div v-if="posPending.length" class="pos-list">
+          <div v-for="it in posPending" :key="it.id" class="pos-item">
+            <div class="pi-main">
+              <template v-if="it.sku">
+                <div class="pi-name">{{ it.sku.goodsName || it.sku.skuCode }}</div>
+                <div class="pi-spec">
+                  {{ it.sku.skuCode }}<template v-if="it.sku.color || it.sku.size"> · {{ it.sku.color }} / {{ it.sku.size }}</template>
+                </div>
+                <div class="pi-price">¥ {{ (it.sku.salePrice || 0).toFixed(2) }} × {{ it.qty }}</div>
+              </template>
+              <template v-else>
+                <div class="pi-name deleted">商品已删除</div>
+                <div class="pi-spec">SKU 已被删除，点击「移除」确认清理</div>
+              </template>
+            </div>
+            <el-button
+              v-if="it.sku"
+              size="small"
+              type="primary"
+              :disabled="(skuStock[it.sku.id] ?? 0) <= 0"
+              @click="handlePosAdd(it)"
+            >加入</el-button>
+            <el-button v-else size="small" type="danger" plain @click="handlePosRemove(it)">移除</el-button>
+          </div>
+        </div>
+        <el-empty v-else description="暂无待加入的扫码商品" :image-size="80" />
+        <div class="pos-drawer-foot">
+          <el-button type="success" size="large" :disabled="!posPending.length" @click="handlePosAddAll">全部加入</el-button>
+        </div>
+      </div>
+    </el-drawer>
+
     <!-- 成功结果弹窗 -->
     <ResultDialog v-model="doneVisible" :title="doneTitle" :lines="doneLines" />
   </div>
@@ -336,7 +384,8 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Delete, Refresh } from '@element-plus/icons-vue'
+import { Search, Delete, Refresh, Monitor } from '@element-plus/icons-vue'
+import service from '@/utils/request'
 import { checkout, refund, exchange, getRefundableOrders } from '@/api/jxc/cashier'
 import { getSalePage, getSaleDetail, getSaleRemaining } from '@/api/jxc/sale'
 import { getSkuList } from '@/api/jxc/goods'
@@ -581,6 +630,126 @@ const loadOptions = async () => {
   loadRefundOrders()
 }
 
+// ===== 扫码枪（M3）：小程序扫码队列轮询 + 加入购物车 =====
+const posDrawerVisible = ref(false)
+const posPending = ref([])      // 待处理扫码条目 [{id, skuId, qty, sku:{id,skuCode,goodsName,color,size,salePrice}}]
+const posPendingCount = ref(0)  // 待处理总数（抽屉按钮角标，全确认后隐藏）
+let posPollTimer = null         // 3s 轮询定时器句柄
+let posKnownIds = new Set()     // 上次已见条目 id 集合（用于检测"新出现"）
+let posFirstLoad = false        // 首次打开标记：首拉不提示音，避免打开瞬间轰炸
+
+// Web Audio API 生成短促 beep 提示音（无需音频文件）
+let posAudioCtx = null
+const playPosBeep = () => {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext
+    if (!Ctx) return
+    posAudioCtx = posAudioCtx || new Ctx()
+    if (posAudioCtx.state === 'suspended') posAudioCtx.resume()
+    const osc = posAudioCtx.createOscillator()
+    const gain = posAudioCtx.createGain()
+    osc.type = 'square'
+    osc.frequency.value = 880
+    gain.gain.setValueAtTime(0.001, posAudioCtx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.25, posAudioCtx.currentTime + 0.01)
+    gain.gain.exponentialRampToValueAtTime(0.001, posAudioCtx.currentTime + 0.2)
+    osc.connect(gain)
+    gain.connect(posAudioCtx.destination)
+    osc.start()
+    osc.stop(posAudioCtx.currentTime + 0.22)
+  } catch (e) {
+    console.warn('[pos] 提示音播放失败', e)
+  }
+}
+
+// 轮询加载待处理列表；isFirst=true 为打开抽屉时的首次拉取（不提示音）
+const loadPosPending = async (isFirst = false) => {
+  try {
+    const res = await service.get('/jxc/pos/scan/pending', { donNotShowLoading: true })
+    const list = Array.isArray(res.data) ? res.data : []
+    posPending.value = list
+    posPendingCount.value = list.length
+    // 提示音触发条件：非首次加载，且出现了上次未见过的条目 id
+    if (!isFirst && posFirstLoad) {
+      const fresh = list.filter((it) => !posKnownIds.has(it.id))
+      if (fresh.length) playPosBeep()
+    }
+    posKnownIds = new Set(list.map((it) => it.id))
+    posFirstLoad = true
+  } catch (e) {
+    // 轮询失败静默，不影响页面其它功能
+    console.warn('[pos] 扫码队列轮询失败', e)
+  }
+}
+
+// 面板打开：立即拉取一次并启动 3s 轮询；重复调用不叠加定时器
+const startPosPolling = () => {
+  if (posPollTimer) return
+  posFirstLoad = false
+  loadPosPending(true)
+  posPollTimer = setInterval(() => loadPosPending(false), 3000)
+}
+
+// 面板关闭 / 页面卸载：清理定时器，避免泄漏
+const stopPosPolling = () => {
+  if (posPollTimer) {
+    clearInterval(posPollTimer)
+    posPollTimer = null
+  }
+}
+
+// 扫码条目加入购物车：复用现有 cart 数据结构，同 SKU 合并数量（totalAmount 由 computed 自动更新）
+const posAddToCart = (it) => {
+  const sku = it.sku
+  if (!sku) return 0
+  const available = skuStock.value[sku.id] ?? 0
+  if (available <= 0) { ElMessage.warning('该 SKU 无可售库存'); return 0 }
+  const added = Math.min(it.qty, available)
+  const exist = cart.value.find((r) => r.skuId === sku.id)
+  if (exist) exist.qty = Math.min(exist.qty + added, exist.available)
+  else cart.value.push({ skuId: sku.id, skuCode: sku.skuCode, color: sku.color, size: sku.size, salePrice: sku.salePrice || 0, qty: added, available })
+  if (added < it.qty) ElMessage.warning(`库存不足，已加入 ${added} 件`)
+  return added
+}
+
+// 加入单条：加入购物车 → 调 confirm 标记已处理 → 刷新列表
+const handlePosAdd = async (it) => {
+  if (!it.sku) { await handlePosRemove(it); return }
+  if (posAddToCart(it) <= 0) return
+  try {
+    await service.put('/jxc/pos/scan/confirm', { ids: [it.id] })
+  } catch (e) {
+    console.warn('[pos] 确认扫码条目失败', e)
+  } finally {
+    loadPosPending(false)
+  }
+}
+
+// 移除（sku 为 null 的条目）：直接 confirm 掉，从队列清理
+const handlePosRemove = async (it) => {
+  try {
+    await service.put('/jxc/pos/scan/confirm', { ids: [it.id] })
+  } catch (e) {
+    console.warn('[pos] 移除扫码条目失败', e)
+  } finally {
+    loadPosPending(false)
+  }
+}
+
+// 全部加入：逐条加入购物车（含删除条目一并 confirm 清理）→ 批量确认 → 刷新
+const handlePosAddAll = async () => {
+  const ids = posPending.value.map((it) => it.id)
+  if (!ids.length) return
+  posPending.value.forEach((it) => { posAddToCart(it) })
+  try {
+    await service.put('/jxc/pos/scan/confirm', { ids })
+  } catch (e) {
+    console.warn('[pos] 批量确认扫码条目失败', e)
+  } finally {
+    loadPosPending(false)
+  }
+}
+
 // ===== POS 辅助（纯展示，不改业务逻辑） =====
 const searchRef = ref(null)
 const exchangeSearchRef = ref(null)
@@ -645,6 +814,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onGlobalKeydown)
+  stopPosPolling()
 })
 </script>
 
@@ -978,4 +1148,33 @@ onBeforeUnmount(() => {
 }
 .diff-line b { font-size: 15px; }
 .diff-line b i { font-style: normal; font-size: 12px; margin-left: 4px; }
+
+/* ===== 扫码枪抽屉 ===== */
+.pos-gun-badge { margin-left: 10px; }
+.pos-drawer-body { display: flex; flex-direction: column; height: 100%; }
+.pos-drawer-tip {
+  font-size: 12px;
+  color: #909399;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.pos-list { flex: 1; min-height: 0; overflow: auto; }
+.pos-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px dashed #f0f2f5;
+}
+.pos-item:last-child { border-bottom: none; }
+.pos-item .pi-main { min-width: 0; flex: 1; }
+.pos-item .pi-name { font-size: 14px; font-weight: 600; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pos-item .pi-name.deleted { color: #f56c6c; }
+.pos-item .pi-spec { font-size: 11px; color: #909399; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pos-item .pi-price { font-size: 13px; color: #ff5a1f; font-weight: 700; margin-top: 4px; }
+.pos-drawer-foot { margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f2f5; flex-shrink: 0; }
+.pos-drawer-foot .el-button { width: 100%; }
 </style>

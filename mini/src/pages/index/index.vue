@@ -80,6 +80,7 @@ const FRESH_TTL = 30 * 1000
 const menus = [
   { key: 'scan', name: '扫码查库存', glyph: '查', cls: 'tint-green', type: 'tab', url: '/pages/stock/stock' },
   { key: 'dashboard', name: '经营看板', glyph: '板', cls: 'tint-green-deep', type: 'page', url: '/pages/dashboard/dashboard' },
+  { key: 'pos', name: '扫码上架', glyph: '扫', cls: 'tint-green-deep', type: 'page', url: '/pages/pos/pos' },
   { key: 'cashier', name: '收银', glyph: '收', cls: 'tint-gray', disabled: true, tag: '敬请期待' },
   { key: 'check', name: '盘点', glyph: '盘', cls: 'tint-gray', disabled: true },
   { key: 'io', name: '出入库', glyph: '库', cls: 'tint-gray', disabled: true },

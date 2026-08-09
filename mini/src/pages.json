@@ -41,6 +41,14 @@
         "navigationBarBackgroundColor": "#ffffff",
         "navigationBarTextStyle": "black"
       }
+    },
+    {
+      "path": "pages/pos/pos",
+      "style": {
+        "navigationBarTitleText": "扫码上架",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black"
+      }
     }
   ],
   "globalStyle": {
