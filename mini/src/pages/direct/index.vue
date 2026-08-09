@@ -1,6 +1,6 @@
 <template>
   <view class="page">
-    <!-- 仓库选择 + 方向切换 -->
+    <!-- 表头区：仓库选择 + 方向切换 + 扫码添加 -->
     <view class="top-card">
       <picker :range="warehouseNames" :value="warehouseIndex" @change="onWarehouseChange">
         <view class="wh-pick">
@@ -14,44 +14,75 @@
       </view>
     </view>
 
-    <!-- 添加商品：扫码 / 手动输入 -->
+    <!-- 搜索 + 扫码 -->
     <view class="add-bar">
       <input
-        v-model="keyword"
+        v-model="listKeyword"
         class="add-input"
         type="text"
-        placeholder="输入条码或 SKU 编码，回车添加"
+        placeholder="搜索名称 / SKU编码 / 条码"
         confirm-type="search"
-        @confirm="addByKeyword"
       />
       <view class="scan-btn" @click="doScan">扫码添加</view>
     </view>
 
-    <!-- 待提交列表 -->
-    <view class="section-title">待{{ direction === 'in' ? '入库' : '出库' }}商品<text class="section-count">{{ rows.length }} 项</text></view>
-    <view v-if="!rows.length" class="empty-tip">请先扫码或输入商品编码添加</view>
-    <view v-else class="rows-list">
-      <view v-for="(r, idx) in rows" :key="r.skuId" class="row-item">
-        <view class="ri-main">
-          <text class="ri-name">{{ r.name }}</text>
-          <text class="ri-spec">
-            {{ r.skuCode }}<template v-if="r.color || r.size"> · {{ r.color }} / {{ r.size }}</template>
-          </text>
-        </view>
-        <view class="ri-right">
-          <view class="ri-stepper">
-            <view class="step-btn" @click="stepRow(r, -1)">−</view>
-            <view class="step-num">{{ r.qty }}</view>
-            <view class="step-btn plus" @click="stepRow(r, 1)">+</view>
+    <!-- SKU 列表区（可滚动） -->
+    <view class="list-head">
+      <text class="section-title">商品列表</text>
+      <text class="list-count">{{ skuList.length }} 条</text>
+    </view>
+    <scroll-view class="sku-scroll" scroll-y>
+      <view v-if="listLoading" class="block-tip">加载中…</view>
+      <view v-else-if="listError" class="err-box">
+        <text class="err-text">{{ listError }}</text>
+        <view class="retry-btn" @click="loadSkus">重试</view>
+      </view>
+      <view v-else-if="!skuList.length" class="block-tip">{{ skus.length ? '无匹配商品' : '暂无商品数据' }}</view>
+      <view v-else class="sku-list">
+        <view v-for="s in skuList" :key="s.ID" class="sku-item">
+          <view class="si-main">
+            <text class="si-code">{{ s.skuCode }}</text>
+            <text class="si-name">{{ s.name }}</text>
+            <text v-if="s.color || s.size" class="si-spec">{{ s.color }} / {{ s.size }}</text>
           </view>
-          <text class="ri-del" @click="rows.splice(idx, 1)">删</text>
+          <view class="si-right">
+            <text class="si-stock" :class="{ none: !s.available }">{{ s.available > 0 ? `可售 ${s.available}` : '无库存' }}</text>
+            <view class="si-add" @click="addSkuById(s)">+</view>
+          </view>
         </view>
       </view>
-    </view>
+    </scroll-view>
 
-    <!-- 提交 -->
-    <view class="submit-bar">
-      <view class="submit-btn" :class="{ disabled: submitting }" @click="submit">提交{{ direction === 'in' ? '入库' : '出库' }}（{{ rows.length }} 项）</view>
+    <!-- 明细区（底部固定）+ 提交 -->
+    <view class="detail-panel">
+      <view class="detail-head">
+        <text class="detail-title">待{{ direction === 'in' ? '入库' : '出库' }}（{{ rows.length }} 项）</text>
+        <text class="detail-total">共 {{ rowsTotal }} 件</text>
+      </view>
+      <scroll-view v-if="rows.length" class="detail-scroll" scroll-y>
+        <view v-for="(r, idx) in rows" :key="r.skuId" class="row-item">
+          <view class="ri-main">
+            <text class="ri-name">{{ r.name }}</text>
+            <text class="ri-spec">
+              {{ r.skuCode }}<template v-if="r.color || r.size"> · {{ r.color }} / {{ r.size }}</template>
+            </text>
+          </view>
+          <view class="ri-right">
+            <view class="ri-stepper">
+              <view class="step-btn" @click="stepRow(r, -1)">−</view>
+              <view class="step-num">{{ r.qty }}</view>
+              <view class="step-btn plus" @click="stepRow(r, 1)">+</view>
+            </view>
+            <text class="ri-del" @click="rows.splice(idx, 1)">删</text>
+          </view>
+        </view>
+      </scroll-view>
+      <view v-else class="detail-empty">请扫码或点选商品添加</view>
+      <view
+        class="submit-btn"
+        :class="{ disabled: submitting || !rows.length }"
+        @click="submit"
+      >提交{{ direction === 'in' ? '入库' : '出库' }}（{{ rows.length }} 项）</view>
     </view>
   </view>
 </template>
@@ -68,11 +99,41 @@ const warehouseIndex = ref(0)
 const warehouseId = ref(0)
 const warehouseName = ref('')
 const direction = ref('in') // 'in'=入库 | 'out'=出库
-const keyword = ref('')
 const rows = ref([]) // [{skuId, skuCode, name, color, size, qty}]
 const submitting = ref(false)
 
+// ===== SKU 列表区 =====
+const skus = ref([]) // 原始 SKU 列表 [{ID, skuCode, color, size, barcode, goods:{name}}]
+const stockMap = ref({}) // skuId -> available（当前仓库可售）
+const listKeyword = ref('') // 本地过滤词
+const listLoading = ref(false)
+const listError = ref('')
+
 const warehouseNames = computed(() => warehouses.value.map((w) => w.name || '未命名仓库'))
+
+// 合并 SKU 数据 + 库存并本地过滤：匹配 名称/SKU编码/条码
+const skuList = computed(() => {
+  const kw = listKeyword.value.trim().toLowerCase()
+  return skus.value
+    .filter((s) => {
+      if (!kw) return true
+      const name = ((s.goods && s.goods.name) || '').toLowerCase()
+      const code = (s.skuCode || '').toLowerCase()
+      const barcode = (s.barcode || '').toLowerCase()
+      return name.includes(kw) || code.includes(kw) || barcode.includes(kw)
+    })
+    .map((s) => ({
+      ID: s.ID,
+      skuCode: s.skuCode || '',
+      name: (s.goods && s.goods.name) || s.skuCode || '未知商品',
+      color: s.color || '',
+      size: s.size || '',
+      barcode: s.barcode || '',
+      available: stockMap.value[s.ID] ?? 0,
+    }))
+})
+
+const rowsTotal = computed(() => rows.value.reduce((s, r) => s + r.qty, 0))
 
 onLoad(() => {
   if (!isLoggedIn()) {
@@ -105,9 +166,64 @@ function onWarehouseChange(e) {
   const w = warehouses.value[i]
   warehouseId.value = w ? w.ID : 0
   warehouseName.value = w ? w.name : ''
+  // 仓库切换：重置过滤词并重新拉取该仓库可售库存
+  listKeyword.value = ''
+  loadStock()
 }
 
-// 扫码添加
+// SKU 列表（不依赖仓库，一次拉取）
+async function loadSkus() {
+  listLoading.value = true
+  listError.value = ''
+  try {
+    const data = await get('/jxc/goods/sku/list', { page: 1, pageSize: 999 }, { silent: true })
+    // normalize：兼容数组与 { list: [...] }
+    const list = Array.isArray(data) ? data : data && Array.isArray(data.list) ? data.list : []
+    skus.value = list
+  } catch (e) {
+    listError.value = (e && e.msg) || '商品列表加载失败'
+  } finally {
+    listLoading.value = false
+  }
+}
+
+// 当前仓库可售库存 → skuId -> available
+async function loadStock() {
+  if (!warehouseId.value) {
+    stockMap.value = {}
+    return
+  }
+  try {
+    const data = await get('/jxc/stock/page', { page: 1, pageSize: 999, warehouseId: warehouseId.value }, { silent: true })
+    const list = Array.isArray(data && data.list) ? data.list : []
+    const m = {}
+    list.forEach((it) => {
+      let avail = Number(it.available)
+      if (isNaN(avail)) avail = Number(it.quantity || 0) - Number(it.lockQuantity || 0)
+      m[it.skuId] = avail
+    })
+    stockMap.value = m
+  } catch (e) {
+    // 库存加载失败静默：可售列显示 0（提交时后端会兜底校验）
+    console.warn('[direct] 库存加载失败', e)
+    stockMap.value = {}
+  }
+}
+
+// 点选 SKU 加入明细（同 SKU 数量累加）
+function addSkuById(s) {
+  addRow({ skuId: s.ID, skuCode: s.skuCode, name: s.name, color: s.color, size: s.size })
+  uni.showToast({ title: `已添加 ${s.name}`, icon: 'none' })
+}
+
+// 公共加入明细逻辑
+function addRow({ skuId, skuCode, name, color, size }) {
+  const exist = rows.value.find((r) => r.skuId === skuId)
+  if (exist) exist.qty += 1
+  else rows.value.push({ skuId, skuCode, name, color, size, qty: 1 })
+}
+
+// 扫码添加（保留）：条码 → 查 SKU → 加入明细
 function doScan() {
   // #ifdef MP-WEIXIN
   uni.scanCode({
@@ -131,17 +247,6 @@ function doScan() {
   // #endif
 }
 
-// 手动输入添加
-async function addByKeyword() {
-  const kw = (keyword.value || '').trim()
-  if (!kw) {
-    uni.showToast({ title: '请输入条码或 SKU 编码', icon: 'none' })
-    return
-  }
-  addSku(kw)
-}
-
-// 按条码/编码查 SKU 并加入待提交列表（同 SKU 数量累加）
 async function addSku(barcode) {
   uni.showLoading({ title: '查询中…', mask: true })
   try {
@@ -151,19 +256,13 @@ async function addSku(barcode) {
       uni.showToast({ title: '未找到该条码对应的商品', icon: 'none' })
       return
     }
-    const exist = rows.value.find((r) => r.skuId === data.ID)
-    if (exist) exist.qty += 1
-    else {
-      rows.value.push({
-        skuId: data.ID,
-        skuCode: data.skuCode || '',
-        name: (data.goods && data.goods.name) || data.skuCode || '未知商品',
-        color: data.color || '',
-        size: data.size || '',
-        qty: 1,
-      })
-    }
-    keyword.value = ''
+    addRow({
+      skuId: data.ID,
+      skuCode: data.skuCode || '',
+      name: (data.goods && data.goods.name) || data.skuCode || '未知商品',
+      color: data.color || '',
+      size: data.size || '',
+    })
     uni.showToast({ title: '已添加', icon: 'success' })
   } catch (e) {
     uni.showToast({ title: (e && e.msg) || '未找到该条码对应的商品', icon: 'none' })
@@ -226,6 +325,8 @@ async function submit() {
   }
   uni.hideLoading()
   submitting.value = false
+  // 提交后刷新可售库存（列表可售列即时更新）
+  if (ok > 0) loadStock()
   if (ok > 0) uni.showToast({ title: `${dirText}成功 ${ok} 条${failMsgs.length ? `，失败 ${failMsgs.length} 条` : ''}`, icon: 'success' })
   if (failMsgs.length) {
     setTimeout(() => {
@@ -242,25 +343,18 @@ async function submit() {
 
 <style lang="scss" scoped>
 .page {
-  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
   padding: 24rpx;
-  padding-bottom: 160rpx;
+  padding-bottom: 12rpx;
   box-sizing: border-box;
 }
 
 .section-title {
-  display: flex;
-  align-items: baseline;
   font-size: 30rpx;
   font-weight: 600;
   color: #222;
-  margin: 28rpx 0 20rpx;
-}
-.section-count {
-  font-size: 22rpx;
-  color: #999;
-  font-weight: 400;
-  margin-left: 12rpx;
 }
 
 /* ===== 顶部卡片 ===== */
@@ -269,6 +363,7 @@ async function submit() {
   border-radius: 16rpx;
   padding: 20rpx 24rpx;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  flex-shrink: 0;
 }
 .wh-pick {
   display: flex;
@@ -296,8 +391,8 @@ async function submit() {
 }
 .dir-tab {
   flex: 1;
-  height: 76rpx;
-  line-height: 76rpx;
+  height: 72rpx;
+  line-height: 72rpx;
   text-align: center;
   background: #f5f6f7;
   color: #666;
@@ -312,15 +407,16 @@ async function submit() {
   }
 }
 
-/* ===== 添加栏 ===== */
+/* ===== 搜索栏 ===== */
 .add-bar {
   display: flex;
   align-items: center;
-  margin-top: 20rpx;
+  margin-top: 16rpx;
   background: #ffffff;
   border-radius: 16rpx;
   padding: 12rpx;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  flex-shrink: 0;
 }
 .add-input {
   flex: 1;
@@ -341,29 +437,141 @@ async function submit() {
   font-size: 28rpx;
   border-radius: 12rpx;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
-/* ===== 待提交列表 ===== */
-.empty-tip {
-  padding: 60rpx 0;
-  text-align: center;
-  color: #999;
-  font-size: 26rpx;
-  background: #ffffff;
-  border-radius: 16rpx;
+/* ===== SKU 列表区（可滚动） ===== */
+.list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 20rpx 4rpx 12rpx;
+  flex-shrink: 0;
 }
-.rows-list {
+.list-count {
+  font-size: 22rpx;
+  color: #999;
+}
+.sku-scroll {
+  flex: 1;
+  min-height: 0;
+}
+.sku-list {
   background: #ffffff;
   border-radius: 16rpx;
   overflow: hidden;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  padding-bottom: 2rpx;
 }
-.row-item {
+.sku-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 20rpx 24rpx;
   border-bottom: 1rpx solid #f0f0f0;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+.si-main {
+  flex: 1;
+  min-width: 0;
+  margin-right: 16rpx;
+}
+.si-code {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #2b8a3e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.si-name {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 26rpx;
+  color: #222;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.si-spec {
+  display: block;
+  margin-top: 2rpx;
+  font-size: 22rpx;
+  color: #999;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.si-right {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex-shrink: 0;
+}
+.si-stock {
+  font-size: 22rpx;
+  color: #2b8a3e;
+
+  &.none {
+    color: #b2b2b2;
+  }
+}
+.si-add {
+  width: 56rpx;
+  height: 56rpx;
+  line-height: 52rpx;
+  text-align: center;
+  background: linear-gradient(135deg, #2b8a3e 0%, #3fb45c 100%);
+  color: #fff;
+  font-size: 36rpx;
+  font-weight: 700;
+  border-radius: 14rpx;
+  box-shadow: 0 4rpx 12rpx rgba(43, 138, 62, 0.25);
+}
+
+/* ===== 明细区（底部固定） ===== */
+.detail-panel {
+  flex-shrink: 0;
+  margin-top: 16rpx;
+  background: #ffffff;
+  border-radius: 16rpx;
+  padding: 16rpx 24rpx 20rpx;
+  box-shadow: 0 -2rpx 16rpx rgba(0, 0, 0, 0.05);
+}
+.detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8rpx;
+}
+.detail-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #222;
+}
+.detail-total {
+  font-size: 22rpx;
+  color: #999;
+}
+.detail-scroll {
+  max-height: 260rpx;
+}
+.detail-empty {
+  padding: 24rpx 0;
+  text-align: center;
+  color: #b2b2b2;
+  font-size: 24rpx;
+}
+.row-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14rpx 0;
+  border-bottom: 1rpx dashed #f0f0f0;
 
   &:last-child {
     border-bottom: none;
@@ -376,7 +584,7 @@ async function submit() {
 }
 .ri-name {
   display: block;
-  font-size: 28rpx;
+  font-size: 26rpx;
   font-weight: 600;
   color: #222;
   overflow: hidden;
@@ -385,8 +593,8 @@ async function submit() {
 }
 .ri-spec {
   display: block;
-  margin-top: 4rpx;
-  font-size: 22rpx;
+  margin-top: 2rpx;
+  font-size: 20rpx;
   color: #999;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -404,16 +612,16 @@ async function submit() {
   gap: 8rpx;
   background: #f5f6f7;
   border-radius: 12rpx;
-  padding: 6rpx;
+  padding: 4rpx;
 }
 .step-btn {
-  width: 52rpx;
-  height: 52rpx;
-  line-height: 52rpx;
+  width: 48rpx;
+  height: 48rpx;
+  line-height: 48rpx;
   text-align: center;
   background: #ffffff;
   border-radius: 10rpx;
-  font-size: 30rpx;
+  font-size: 28rpx;
   font-weight: 700;
   color: #303133;
   box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.06);
@@ -423,28 +631,23 @@ async function submit() {
   }
 }
 .step-num {
-  min-width: 52rpx;
+  min-width: 48rpx;
   text-align: center;
-  font-size: 28rpx;
+  font-size: 26rpx;
   font-weight: 700;
   color: #222;
 }
 .ri-del {
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #e64340;
-  padding: 8rpx 12rpx;
+  padding: 8rpx 8rpx;
 }
 
-/* ===== 提交栏 ===== */
-.submit-bar {
-  position: fixed;
-  left: 24rpx;
-  right: 24rpx;
-  bottom: 20rpx;
-}
+/* ===== 提交 ===== */
 .submit-btn {
-  height: 96rpx;
-  line-height: 96rpx;
+  margin-top: 14rpx;
+  height: 88rpx;
+  line-height: 88rpx;
   text-align: center;
   background: linear-gradient(135deg, #2b8a3e 0%, #3fb45c 100%);
   color: #fff;
@@ -456,5 +659,31 @@ async function submit() {
   &.disabled {
     opacity: 0.5;
   }
+}
+
+/* ===== 状态提示 ===== */
+.block-tip {
+  padding: 80rpx 0;
+  text-align: center;
+  color: #999;
+  font-size: 26rpx;
+}
+.err-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80rpx 0;
+}
+.err-text {
+  font-size: 26rpx;
+  color: #999;
+  margin-bottom: 20rpx;
+}
+.retry-btn {
+  padding: 10rpx 40rpx;
+  background: #2b8a3e;
+  color: #fff;
+  font-size: 24rpx;
+  border-radius: 8rpx;
 }
 </style>
