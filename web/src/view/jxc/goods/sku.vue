@@ -2,8 +2,32 @@
   <div class="jxc-page">
     <div class="gva-table-box">
       <div class="gva-btn-list">
-        <el-button icon="arrow-left" @click="goBack">返回</el-button>
-        <el-button type="primary" icon="plus" @click="openDialog()">新增规格</el-button>
+        <div class="btn-list-left">
+          <el-button icon="arrow-left" @click="goBack">返回</el-button>
+          <el-button type="primary" icon="plus" @click="openDialog()">新增规格</el-button>
+        </div>
+        <div class="btn-list-right">
+          <el-select
+            v-model="barcodeFormat"
+            title="条码格式（列表/打印贴标生效）"
+            style="width: 130px"
+            @change="saveBarcodeFormat"
+          >
+            <el-option label="CODE128" value="CODE128" />
+            <el-option label="EAN13" value="EAN13" />
+            <el-option label="CODE39" value="CODE39" />
+            <el-option label="QR 码" value="QR" />
+          </el-select>
+          <el-button
+            type="primary"
+            plain
+            :icon="Printer"
+            :disabled="!selectedRows.length"
+            @click="openPrint(selectedRows)"
+          >
+            打印贴标{{ selectedRows.length ? `（${selectedRows.length}）` : '' }}
+          </el-button>
+        </div>
       </div>
       <div class="gva-search">
         <el-select v-if="!goodsId" v-model="form.goodsId" placeholder="选择所属商品" filterable style="width: 260px" @change="fetchData">
@@ -11,11 +35,19 @@
         </el-select>
         <span v-else class="goods-title">商品：{{ goodsName }}</span>
       </div>
-      <el-table :data="tableData" border v-loading="loading" class="pos-table">
-        <el-table-column label="SKU编码" prop="skuCode" min-width="160">
+      <el-table ref="tableRef" :data="tableData" border v-loading="loading" class="pos-table" @selection-change="onSelectionChange">
+        <el-table-column type="selection" width="46" align="center" />
+        <el-table-column label="SKU编码" prop="skuCode" min-width="150">
           <template #default="{ row }"><span class="cell-name">{{ row.skuCode }}</span></template>
         </el-table-column>
-        <el-table-column label="条码" prop="barcode" width="140" />
+        <el-table-column label="条码" prop="barcode" width="190">
+          <template #default="{ row }">
+            <!-- 条码可视化：无值用 SKU 编码兜底；点击打开放大预览（打印弹窗单行） -->
+            <div class="barcode-cell" title="点击放大预览" @click="openPrint([row])">
+              <Barcode :value="row.barcode || row.skuCode" :format="barcodeFormat" :width="150" :height="50" @fallback="onBarcodeFallback" />
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="颜色" prop="color" width="100" />
         <el-table-column label="尺码" prop="size" width="90" align="center" />
         <el-table-column label="成本价" width="120" align="right">
@@ -68,7 +100,9 @@
           </el-form-item>
         </div>
         <el-form-item label="条码" prop="barcode">
-          <el-input v-model="form.barcode" placeholder="可选" />
+          <el-input v-model="form.barcode" placeholder="可选" clearable>
+            <template #append><el-button @click="generateBarcodeFromCode">按编码生成</el-button></template>
+          </el-input>
         </el-form-item>
         <div class="form-row">
           <el-form-item label="成本价" prop="costPrice">
@@ -90,6 +124,26 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- 打印贴标弹窗：选中行 / 点击行条码进入；打印时仅打印该区域 -->
+    <el-dialog v-model="printVisible" title="打印贴标" width="780px" class="print-dialog" append-to-body @closed="onPrintClosed">
+      <div id="print-area" class="label-grid">
+        <div v-for="(row, i) in printRows" :key="row.ID ?? i" class="label-item">
+          <div class="label-name">{{ (row.goods && row.goods.name) || row.skuCode }}</div>
+          <div class="label-spec">
+            {{ row.skuCode }}<template v-if="row.color || row.size"> · {{ row.color }} / {{ row.size }}</template>
+          </div>
+          <Barcode :value="row.barcode || row.skuCode" :format="barcodeFormat" :width="200" :height="60" @fallback="onBarcodeFallback" />
+          <div class="label-price">¥ {{ (row.salePrice || 0).toFixed(2) }}</div>
+        </div>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button size="large" @click="printVisible = false">关闭</el-button>
+          <el-button type="primary" size="large" :icon="Printer" @click="doPrint">打印</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -97,6 +151,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
+import { Printer } from '@element-plus/icons-vue'
+import Barcode from '@/components/jxc/Barcode.vue'
 import { getSkuList, createSku, updateSku, deleteSku, deleteSkuForever, setSkuStatus } from '@/api/jxc/goods'
 import { getAllGoods } from '@/api/jxc/goods'
 
@@ -188,6 +244,50 @@ async function toggleStatus(row) {
   ElMessage.success(s === 1 ? '已启用' : '已停用')
 }
 
+// ===== 条码可视化 / 打印贴标（纯前端渲染，不影响业务逻辑） =====
+const BARCODE_FORMAT_KEY = 'jxc-barcode-format'
+// 条码格式选择：localStorage 持久化，进入页面时读取
+const barcodeFormat = ref(localStorage.getItem(BARCODE_FORMAT_KEY) || 'CODE128')
+const saveBarcodeFormat = () => localStorage.setItem(BARCODE_FORMAT_KEY, barcodeFormat.value)
+
+// 表格勾选行：打印贴标按钮按选中数启用
+const tableRef = ref(null)
+const selectedRows = ref([])
+const onSelectionChange = (rows) => { selectedRows.value = rows }
+
+// 打印弹窗：选中行批量 / 点击行条码单行预览
+const printVisible = ref(false)
+const printRows = ref([])
+const openPrint = (rows) => {
+  printRows.value = rows || []
+  printVisible.value = true
+}
+// 弹窗关闭后清空勾选，避免残留选中态
+const onPrintClosed = () => {
+  printRows.value = []
+  tableRef.value?.clearSelection()
+}
+const doPrint = () => window.print()
+
+// 表单条码输入辅助：把 SKU 编码填入条码字段（无编码时提示）
+const generateBarcodeFromCode = () => {
+  if (!form.skuCode) {
+    ElMessage.warning('SKU 编码为空，暂无法生成')
+    return
+  }
+  form.barcode = form.skuCode
+  ElMessage.success('已按 SKU 编码填入条码')
+}
+
+// fallback 节流提示：同一批（300ms 内）渲染失败只提示一次
+let fallbackAt = 0
+const onBarcodeFallback = () => {
+  const now = Date.now()
+  if (now - fallbackAt < 300) return
+  fallbackAt = now
+  ElMessage.warning('条码格式与内容不匹配，已按 CODE128 显示')
+}
+
 </script>
 
 <style scoped>
@@ -226,4 +326,71 @@ async function toggleStatus(row) {
 .tip-text { color: #909399; font-size: 12px; margin-top: 6px; }
 .dialog-footer { display: flex; justify-content: flex-end; gap: 10px; }
 .btn-save { min-width: 110px; font-weight: 600; }
+
+/* ===== 工具区：左右分组 ===== */
+.gva-btn-list { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+.btn-list-left,
+.btn-list-right { display: flex; align-items: center; gap: 10px; }
+
+/* ===== 条码可视化列 ===== */
+.barcode-cell { cursor: pointer; border-radius: 6px; transition: background 0.15s; }
+.barcode-cell:hover { background: #f5f8ff; }
+
+/* ===== 打印贴标弹窗 ===== */
+.print-dialog :deep(.el-dialog__body) { padding-top: 12px; }
+.label-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.label-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border: 1px dashed #999;
+  border-radius: 8px;
+  padding: 14px 10px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.label-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #303133;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.label-spec {
+  font-size: 11px;
+  color: #909399;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.label-price { font-size: 16px; font-weight: 700; color: #ff5a1f; }
+</style>
+
+<!-- 打印样式：非 scoped 保证全局命中（scoped 会给选择器加 data-v 后缀导致 body * 失效） -->
+<style>
+@media print {
+  body * { visibility: hidden; }
+  #print-area,
+  #print-area * { visibility: visible; }
+  #print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 12px;
+  }
+  #print-area .label-item {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}
 </style>
