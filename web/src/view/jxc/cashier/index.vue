@@ -372,7 +372,6 @@
       title="扫码枪 · 自动加购"
       size="420px"
       @open="onPosDrawerOpen"
-      @close="stopPosPolling"
     >
       <div class="pos-drawer-body">
         <div v-if="!posSession" class="pos-drawer-tip warn">
@@ -382,9 +381,9 @@
           <div class="pos-drawer-tip">
             已绑定收银台 {{ posSession }}。店员扫码的商品将自动加入购物车，本会话已自动加入 {{ posAutoCount }} 件。
           </div>
-          <!-- 轮询暂停态：连续空结果达上限自动停止，需手动恢复 -->
-          <div v-if="posPollPaused" class="pos-drawer-tip warn">
-            轮询已暂停（长时间无扫码），点击恢复
+          <!-- 轮询降频态：连续空结果达上限自动切 30s 低频保活，拉到条目自动恢复高频 -->
+          <div v-if="posPollSlow" class="pos-drawer-tip warn">
+            自动刷新已降频（长时间无扫码），点击恢复
             <el-button link type="primary" size="small" @click="resumePosPolling">恢复</el-button>
           </div>
           <div v-if="posPending.length" class="pos-list">
@@ -678,10 +677,12 @@ const posSession = ref(localStorage.getItem(POS_SESSION_KEY) || '')
 const posDrawerVisible = ref(false)
 const posPending = ref([])      // 当前轮询到的待消费条目（仅展示处理过程，消费后即消失）
 const posAutoCount = ref(0)     // 本次收银自动加入购物车件数（badge 展示，清空/收款后归零）
-let posPollTimer = null         // 3s 轮询定时器句柄
-const POS_POLL_MAX_EMPTY = 60   // 连续空结果次数上限（60 次 × 3s ≈ 3 分钟），超限自动暂停轮询，避免后端接口空转刷屏
-let posEmptyCount = 0           // 连续空结果计数：有内容清零，达上限触发暂停
-const posPollPaused = ref(false) // 轮询暂停态（长时间无扫码自动暂停，点击恢复按钮或重新打开抽屉恢复）
+let posPollTimer = null          // 轮询定时器句柄（页面级常驻，抽屉开关不启停）
+const POS_POLL_FAST_MS = 3000    // 高频轮询间隔：正常收银 3s 一次
+const POS_POLL_SLOW_MS = 30000   // 低频保活间隔：长时间无扫码 30s 一次（保活且不刷屏）
+const POS_POLL_MAX_EMPTY = 60    // 连续空结果次数上限（60 次 × 3s ≈ 3 分钟），超限自动降频
+let posEmptyCount = 0            // 连续空结果计数：有内容清零，达上限触发降频
+const posPollSlow = ref(false)   // 降频态：连续空结果后切 30s 低频保活，拉到任何条目立即恢复 3s 高频
 let posKnownIds = new Set()     // 已见条目 id 集合：新见=自动加购；滞留（上次 confirm 失败）=补 confirm 不加购
 let posFirstLoad = false        // 首次打开标记：首拉不提示音，避免打开瞬间轰炸
 
@@ -790,14 +791,19 @@ const loadPosPending = async (isFirst = false) => {
     }
     posKnownIds = new Set(list.map((it) => it.id))
     posFirstLoad = true
-    // 空结果计数：有内容清零；连续空结果达上限自动暂停轮询（停止后端接口刷屏）
+    // 空结果计数：有内容清零并恢复高频；连续空结果达上限自动降频（不清定时器，30s 保活不刷屏）
     if (list.length) {
       posEmptyCount = 0
-    } else {
+      if (posPollSlow.value) {
+        posPollSlow.value = false
+        applyPollInterval()
+      }
+    } else if (!posPollSlow.value) {
       posEmptyCount += 1
       if (posEmptyCount >= POS_POLL_MAX_EMPTY) {
-        posPollPaused.value = true
-        stopPosPolling()
+        posPollSlow.value = true
+        posEmptyCount = 0 // 重新计数：恢复高频后从零开始计时
+        applyPollInterval()
       }
     }
   } catch (e) {
@@ -806,30 +812,42 @@ const loadPosPending = async (isFirst = false) => {
   }
 }
 
-// 面板打开：清空暂停态并启动轮询（重复调用不叠加定时器；无收银台码不启动）
+// 轮询间隔切换：先 clear 再 set，复用 timer 变量，绝不叠加
+const applyPollInterval = () => {
+  const interval = posPollSlow.value ? POS_POLL_SLOW_MS : POS_POLL_FAST_MS
+  if (posPollTimer) {
+    clearInterval(posPollTimer)
+    posPollTimer = null
+  }
+  posPollTimer = setInterval(() => loadPosPending(false), interval)
+}
+
+// 抽屉打开：不启停轮询（页面级常驻），仅重置计数并立即刷新一次列表（首拉基线保留）
 const onPosDrawerOpen = () => {
   posEmptyCount = 0
-  posPollPaused.value = false
-  startPosPolling()
+  loadPosPending(true)
 }
 
-// 暂停后恢复：清空计数 + 立即拉一次 + 重启定时器（startPosPolling 幂等，先停后启不叠加）
+// 手动恢复高频：清空计数 + 立即拉一次 + 切回 3s（applyPollInterval 幂等，不叠加）
 const resumePosPolling = () => {
   posEmptyCount = 0
-  posPollPaused.value = false
-  startPosPolling()
+  if (posPollSlow.value) {
+    posPollSlow.value = false
+    applyPollInterval()
+  }
+  loadPosPending(true)
 }
 
-// 面板打开：立即拉取一次并启动 3s 轮询；重复调用不叠加定时器；无收银台码不启动
+// 页面级启动：立即拉取一次并启动轮询；重复调用不叠加定时器；无收银台码不启动
 const startPosPolling = () => {
   if (posPollTimer) return
   if (!posSession.value) return
   posFirstLoad = false
   loadPosPending(true)
-  posPollTimer = setInterval(() => loadPosPending(false), 3000)
+  applyPollInterval()
 }
 
-// 面板关闭 / 页面卸载：清理定时器，避免泄漏
+// 页面卸载：清理定时器，避免泄漏
 const stopPosPolling = () => {
   if (posPollTimer) {
     clearInterval(posPollTimer)
@@ -898,6 +916,8 @@ onMounted(() => {
   loadOptions()
   window.addEventListener('keydown', onGlobalKeydown)
   searchRef.value?.focus()
+  // 页面级常驻轮询：有收银台码即启动（抽屉开关不影响，随时接收扫码）；无码不轮询（设置弹窗提示生成）
+  if (posSession.value) startPosPolling()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onGlobalKeydown)
