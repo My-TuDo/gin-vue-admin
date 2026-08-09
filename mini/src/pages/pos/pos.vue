@@ -1,10 +1,17 @@
 <template>
   <view class="page">
-    <!-- 顶部大按钮：扫码上架（微信扫条码 → 入 PC 待处理队列） -->
+    <!-- 收银台绑定状态条：未绑定时不可扫码，点击跳「我的」绑定 -->
+    <view class="session-bar" :class="{ 'no-session': !posSession }" @click="goMine">
+      <text class="session-label">{{ posSession ? '收银台' : '未绑定收银台' }}</text>
+      <text class="session-code">{{ posSession || '请先在「我的」中绑定' }}</text>
+      <text class="session-arrow">›</text>
+    </view>
+
+    <!-- 顶部大按钮：扫码加购（微信扫条码 → 自动加入 PC 收银台购物车） -->
     <view class="scan-hero" @click="doScan">
       <text class="hero-glyph">扫</text>
-      <text class="hero-text">扫码上架</text>
-      <text class="hero-sub">扫描商品条码，自动加入 PC 收银台待确认</text>
+      <text class="hero-text">扫码加购</text>
+      <text class="hero-sub">扫描商品条码，自动加入 PC 收银台购物车</text>
     </view>
 
     <!-- 条码手动输入（无扫码枪 / 真机调试用） -->
@@ -17,17 +24,17 @@
         confirm-type="send"
         @confirm="doManualScan"
       />
-      <view class="manual-btn" @click="doManualScan">上 架</view>
+      <view class="manual-btn" @click="doManualScan">加 购</view>
     </view>
 
     <!-- 已扫列表：PC 已确认的条目会自动消失（后端 status=0 过滤） -->
     <view class="section-title">
-      待收银台确认
+      已加入收银台
       <text class="section-count">{{ pendingList.length }} 条</text>
     </view>
 
     <view v-if="listLoading" class="block-tip">加载中…</view>
-    <view v-else-if="!pendingList.length" class="empty-tip">暂无扫码上架的商品</view>
+    <view v-else-if="!pendingList.length" class="empty-tip">暂无扫码加购的商品</view>
     <view v-else class="pending-list">
       <view v-for="it in pendingList" :key="it.id" class="pending-item">
         <view class="pi-main">
@@ -60,9 +67,13 @@ import { get, post } from '@/utils/request'
 import { isLoggedIn } from '@/utils/auth'
 import { LOGIN_PAGE } from '@/config'
 
+const POS_SESSION_KEY = 'posSession'
+
 const barcode = ref('')
 const pendingList = ref([])
 const listLoading = ref(false)
+// 当前绑定的收银台码（本地 storage）；未绑定则扫码按钮不可用
+const posSession = ref(uni.getStorageSync(POS_SESSION_KEY) || '')
 
 // 3s 轮询定时器句柄；onShow 启动、onHide/onUnmounted 停止，避免后台空转
 let pollTimer = null
@@ -75,13 +86,15 @@ onLoad(() => {
   }
 })
 
-// 页面显示：立即刷新一次并启动轮询；隐藏：停止轮询
+// 页面显示：刷新本地绑定码；已绑定才启动轮询，未绑定停止（无码时后端返回会话无效）
 onShow(() => {
   if (!isLoggedIn()) {
     uni.reLaunch({ url: LOGIN_PAGE })
     return
   }
-  startPolling()
+  posSession.value = uni.getStorageSync(POS_SESSION_KEY) || ''
+  if (posSession.value) startPolling()
+  else stopPolling()
 })
 
 onHide(() => {
@@ -105,11 +118,12 @@ function stopPolling() {
   }
 }
 
-// 拉取待处理列表；PC 收银台确认后条目自动消失
+// 拉取待处理列表；PC 收银台确认后条目自动消失；请求携带当前收银台码
 async function loadPending() {
+  if (!posSession.value) return
   listLoading.value = true
   try {
-    const data = await get('/jxc/pos/scan/pending', {}, { silent: true })
+    const data = await get('/jxc/pos/scan/pending', { session: posSession.value }, { silent: true })
     pendingList.value = Array.isArray(data) ? data : []
   } catch (e) {
     // 轮询失败静默，不打断页面
@@ -119,8 +133,10 @@ async function loadPending() {
   }
 }
 
-// 微信扫码：onlyFromCamera:false 允许相册识别；成功后直接上架
+// 微信扫码：onlyFromCamera:false 允许相册识别；成功后直接加购到收银台
 function doScan() {
+  // 未绑定收银台：提示并引导去「我的」绑定
+  if (!requireSession()) return
   // #ifdef MP-WEIXIN
   uni.scanCode({
     onlyFromCamera: false,
@@ -144,8 +160,9 @@ function doScan() {
   // #endif
 }
 
-// 手动输入上架（无扫码枪调试）
+// 手动输入加购（无扫码枪调试）
 function doManualScan() {
+  if (!requireSession()) return
   const kw = (barcode.value || '').trim()
   if (!kw) {
     uni.showToast({ title: '请输入条码或 SKU 编码', icon: 'none' })
@@ -154,16 +171,43 @@ function doManualScan() {
   submitScan(kw)
 }
 
-// 提交扫码：小程序扫码固定 qty=1（后端同 SKU 待处理数量自动累加）
+// 绑定检查：已绑定返回 true；未绑定提示并跳转「我的」页绑定
+function requireSession() {
+  if (posSession.value) return true
+  uni.showModal({
+    title: '提示',
+    content: '请先在「我的」中绑定收银台',
+    success: (res) => {
+      if (res.confirm) goMine()
+    }
+  })
+  return false
+}
+
+// 跳转「我的」tab 页
+function goMine() {
+  uni.switchTab({ url: '/pages/mine/mine' })
+}
+
+// 提交扫码：固定 qty=1（后端同 SKU 待处理数量自动累加）；body 携带当前收银台码
 async function submitScan(barcodeStr) {
   try {
-    await post('/jxc/pos/scan', { barcode: barcodeStr, qty: 1 })
+    await post('/jxc/pos/scan', { barcode: barcodeStr, qty: 1, session: posSession.value }, { silent: true })
     barcode.value = ''
-    uni.showToast({ title: '已加入收银台待确认', icon: 'success' })
+    uni.showToast({ title: '已加入收银台购物车', icon: 'success' })
     loadPending()
   } catch (e) {
-    // 失败提示由 request 封装统一弹 toast（icon: none），此处兜底记录
-    console.warn('[pos] 扫码上架失败', e)
+    // 收银台码被 PC 端作废/重置：清除本地绑定，引导重新绑定
+    if ((e && e.code) === 7 || ((e && e.msg) || '').indexOf('无效') >= 0) {
+      uni.removeStorageSync(POS_SESSION_KEY)
+      posSession.value = ''
+      stopPolling()
+      uni.showToast({ title: '收银台码已失效，请重新绑定', icon: 'none' })
+      return
+    }
+    // 其余失败展示后端 msg
+    uni.showToast({ title: (e && e.msg) || '扫码加购失败', icon: 'none' })
+    console.warn('[pos] 扫码加购失败', e)
   }
 }
 
@@ -179,6 +223,50 @@ function fmtMoney(n) {
   min-height: 100vh;
   padding: 24rpx;
   box-sizing: border-box;
+}
+
+/* 收银台绑定状态条 */
+.session-bar {
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  border-radius: 16rpx;
+  padding: 18rpx 28rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+.session-label {
+  font-size: 24rpx;
+  color: #2b8a3e;
+  background: #e8f5e9;
+  border-radius: 20rpx;
+  padding: 4rpx 18rpx;
+  flex-shrink: 0;
+}
+.session-code {
+  flex: 1;
+  margin-left: 20rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+  letter-spacing: 4rpx;
+  color: #222;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-arrow {
+  color: #b2b2b2;
+  font-size: 30rpx;
+  flex-shrink: 0;
+}
+.session-bar.no-session .session-label {
+  color: #e64340;
+  background: #fdf0ef;
+}
+.session-bar.no-session .session-code {
+  color: #e64340;
+  font-weight: 400;
+  letter-spacing: 0;
 }
 
 /* 顶部大按钮 */

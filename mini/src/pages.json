@@ -45,7 +45,7 @@
     {
       "path": "pages/pos/pos",
       "style": {
-        "navigationBarTitleText": "扫码上架",
+        "navigationBarTitleText": "扫码加购",
         "navigationBarBackgroundColor": "#ffffff",
         "navigationBarTextStyle": "black"
       }

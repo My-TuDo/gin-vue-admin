@@ -3,7 +3,7 @@ package jxc
 import (
 	"context"
 	"errors"
-	"math/rand"
+	"math/rand/v2"
 	"strings"
 	"time"
 
@@ -171,12 +171,13 @@ func (s *PosScanService) ConfirmScan(ctx context.Context, ids []uint) error {
 		Updates(map[string]interface{}{"status": 1, "handled_at": &now}).Error
 }
 
-// randomCode 生成 n 位不混淆字符收银台码
+// randomCode 生成 n 位不混淆字符收银台码。
+// 用 math/rand/v2 顶层函数：自动随机种子（并发安全），避免时间种子在
+// Windows 时钟粒度下快速连续调用产生相同码（曾导致测试/生产碰撞）。
 func randomCode(n int) string {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = sessionCodeChars[r.Intn(len(sessionCodeChars))]
+		b[i] = sessionCodeChars[rand.IntN(len(sessionCodeChars))]
 	}
 	return string(b)
 }
