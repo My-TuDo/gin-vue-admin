@@ -279,13 +279,13 @@ const generateBarcodeFromCode = () => {
   ElMessage.success('已按 SKU 编码填入条码')
 }
 
-// fallback 节流提示：同一批（300ms 内）渲染失败只提示一次
+// fallback 节流提示：同一批（300ms 内）渲染失败只提示一次；展示组件给出的具体原因（如「内容含中文」「EAN13 需 12/13 位数字」）
 let fallbackAt = 0
-const onBarcodeFallback = () => {
+const onBarcodeFallback = (info) => {
   const now = Date.now()
   if (now - fallbackAt < 300) return
   fallbackAt = now
-  ElMessage.warning('条码格式与内容不匹配，已按 CODE128 显示')
+  ElMessage.warning((info && info.reason) || '条码格式与内容不匹配')
 }
 
 </script>
