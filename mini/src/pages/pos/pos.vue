@@ -27,10 +27,10 @@
       <view class="manual-btn" @click="doManualScan">加 购</view>
     </view>
 
-    <!-- 轮询暂停提示：连续空结果达上限自动停止，点击恢复刷新 -->
-    <view v-if="pollPaused" class="poll-paused-bar">
-      <text class="pp-text">自动刷新已暂停（长时间无扫码）</text>
-      <text class="pp-btn" @click="resumePolling">恢复刷新</text>
+    <!-- 轮询降频提示：连续空结果达上限自动切低频保活，拉到条目自动恢复高频 -->
+    <view v-if="pollSlow" class="poll-paused-bar">
+      <text class="pp-text">自动刷新已降频（长时间无扫码）</text>
+      <text class="pp-btn" @click="resumePolling">恢复高频</text>
     </view>
 
     <!-- 已扫列表：PC 已确认的条目会自动消失（后端 status=0 过滤） -->
@@ -81,12 +81,13 @@ const listLoading = ref(false)
 // 当前绑定的收银台码（本地 storage）；未绑定则扫码按钮不可用
 const posSession = ref(uni.getStorageSync(POS_SESSION_KEY) || '')
 
-// 3s 轮询定时器句柄；onShow 启动、onHide/onUnmounted 停止，避免后台空转
+// 轮询定时器句柄；onShow 启动、onHide/onUnmounted 停止，避免后台空转
 let pollTimer = null
-const POLL_INTERVAL = 3000
-const POS_POLL_MAX_EMPTY = 60 // 连续空结果次数上限（60 次 × 3s ≈ 3 分钟），超限自动暂停轮询，避免后端接口空转刷屏
-let emptyCount = 0 // 连续空结果计数：有内容清零，达上限触发暂停
-const pollPaused = ref(false) // 轮询暂停态（长时间无扫码自动暂停，点击恢复或重新进入页面/扫码后恢复）
+const POS_POLL_FAST_MS = 3000  // 高频轮询间隔：正常收银 3s 一次
+const POS_POLL_SLOW_MS = 30000 // 低频保活间隔：长时间无扫码 30s 一次（保活且不刷屏）
+const POS_POLL_MAX_EMPTY = 60 // 连续空结果次数上限（60 次 × 3s ≈ 3 分钟），超限自动降频
+let emptyCount = 0 // 连续空结果计数：有内容清零，达上限触发降频
+const pollSlow = ref(false) // 降频态：连续空结果后切 30s 低频保活，拉到任何条目立即恢复 3s 高频
 
 onLoad(() => {
   if (!isLoggedIn()) {
@@ -95,7 +96,7 @@ onLoad(() => {
   }
 })
 
-// 页面显示：刷新本地绑定码；重置空计数与暂停态；已绑定才启动轮询，未绑定停止（无码时后端返回会话无效）
+// 页面显示：刷新本地绑定码；重置空计数与降频态（高频）；已绑定才启动轮询，未绑定停止（无码时后端返回会话无效）
 onShow(() => {
   if (!isLoggedIn()) {
     uni.reLaunch({ url: LOGIN_PAGE })
@@ -103,7 +104,7 @@ onShow(() => {
   }
   posSession.value = uni.getStorageSync(POS_SESSION_KEY) || ''
   emptyCount = 0
-  pollPaused.value = false
+  pollSlow.value = false
   if (posSession.value) startPolling()
   else stopPolling()
 })
@@ -116,10 +117,20 @@ onUnmounted(() => {
   stopPolling()
 })
 
+// 轮询间隔切换：先 clear 再 set，复用 timer 变量，绝不叠加
+function applyPollInterval() {
+  const interval = pollSlow.value ? POS_POLL_SLOW_MS : POS_POLL_FAST_MS
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+  pollTimer = setInterval(loadPending, interval)
+}
+
 function startPolling() {
   if (pollTimer) return
   loadPending()
-  pollTimer = setInterval(loadPending, POLL_INTERVAL)
+  applyPollInterval()
 }
 
 function stopPolling() {
@@ -137,14 +148,19 @@ async function loadPending() {
     const data = await get('/jxc/pos/scan/pending', { session: posSession.value }, { silent: true })
     const list = Array.isArray(data) ? data : []
     pendingList.value = list
-    // 空结果计数：有内容清零；连续空结果达上限自动暂停轮询（停止后端接口刷屏）
+    // 空结果计数：有内容清零并恢复高频；连续空结果达上限自动降频（不清定时器，30s 保活不刷屏）
     if (list.length) {
       emptyCount = 0
-    } else {
+      if (pollSlow.value) {
+        pollSlow.value = false
+        applyPollInterval()
+      }
+    } else if (!pollSlow.value) {
       emptyCount += 1
       if (emptyCount >= POS_POLL_MAX_EMPTY) {
-        pollPaused.value = true
-        stopPolling()
+        pollSlow.value = true
+        emptyCount = 0 // 重新计数：恢复高频后从零开始计时
+        applyPollInterval()
       }
     }
   } catch (e) {
@@ -155,11 +171,14 @@ async function loadPending() {
   }
 }
 
-// 暂停后恢复：清空计数 + 立即拉一次 + 重启定时器（startPolling 幂等，先停后启不叠加）
+// 手动恢复高频：清空计数 + 立即拉一次 + 切回 3s（applyPollInterval 幂等，不叠加）
 function resumePolling() {
   emptyCount = 0
-  pollPaused.value = false
-  startPolling()
+  if (pollSlow.value) {
+    pollSlow.value = false
+    applyPollInterval()
+  }
+  loadPending()
 }
 
 // 微信扫码：onlyFromCamera:false 允许相册识别；成功后直接加购到收银台
@@ -224,8 +243,8 @@ async function submitScan(barcodeStr) {
     await post('/jxc/pos/scan', { barcode: barcodeStr, qty: 1, session: posSession.value }, { silent: true })
     barcode.value = ''
     uni.showToast({ title: '已加入收银台购物车', icon: 'success' })
-    // 扫码成功说明有人在用：若处于暂停态则自动恢复轮询，否则按原逻辑刷新
-    if (pollPaused.value) resumePolling()
+    // 扫码成功说明有人在用：若处于降频态则恢复高频，否则按原逻辑刷新
+    if (pollSlow.value) resumePolling()
     else loadPending()
   } catch (e) {
     // 收银台码被 PC 端作废/重置：清除本地绑定，引导重新绑定
