@@ -1,13 +1,24 @@
 <template>
   <div class="cashier">
-    <el-tabs v-model="activeTab" class="cashier-tabs" @tab-change="onTabChange">
-      <!-- 顶部工具区：收银台设置 + 扫码枪入口（badge 显示本次自动加入件数，自动加购后累加） -->
-      <template #extra>
+    <!-- 顶部工具条：收银台设置 + 扫码枪入口（独立于 tabs，避免插槽渲染不可靠） -->
+    <div class="pos-toolbar">
+      <div class="pos-toolbar-left">
+        <span class="pos-toolbar-title">收银台</span>
+        <span v-if="posSession" class="pos-session-chip">
+          <el-icon><Monitor /></el-icon> 收银台码 {{ posSession }}
+        </span>
+        <span v-else class="pos-session-chip warn">
+          <el-icon><Warning /></el-icon> 未生成收银台码，店员无法扫码加购
+        </span>
+      </div>
+      <div class="pos-toolbar-right">
         <el-button :icon="Setting" @click="posSettingsVisible = true">收银台设置</el-button>
-        <el-badge :value="posAutoCount" :hidden="posAutoCount <= 0" :max="999" class="pos-gun-badge">
+        <el-badge :value="posAutoCount" :hidden="posAutoCount <= 0" :max="999">
           <el-button :icon="Monitor" @click="posDrawerVisible = true">扫码枪</el-button>
         </el-badge>
-      </template>
+      </div>
+    </div>
+    <el-tabs v-model="activeTab" class="cashier-tabs" @tab-change="onTabChange">
       <!-- ==================== 收款 ==================== -->
       <el-tab-pane label="收款" name="cash">
         <div class="pos-cash">
@@ -403,7 +414,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Delete, Refresh, Monitor, Setting } from '@element-plus/icons-vue'
+import { Search, Delete, Refresh, Monitor, Setting, Warning } from '@element-plus/icons-vue'
 import service from '@/utils/request'
 import { checkout, refund, exchange, getRefundableOrders } from '@/api/jxc/cashier'
 import { getSalePage, getSaleDetail, getSaleRemaining } from '@/api/jxc/sale'
@@ -865,6 +876,32 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .cashier { padding: 2px 0; }
+/* 顶部工具条：收银台设置 + 扫码枪入口 */
+.pos-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 0 2px;
+}
+.pos-toolbar-left { display: flex; align-items: center; gap: 10px; }
+.pos-toolbar-title { font-size: 16px; font-weight: 700; color: var(--el-text-color-primary); }
+.pos-session-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: var(--el-color-success-light-9);
+  color: var(--el-color-success);
+  border: 1px solid var(--el-color-success-light-5);
+}
+.pos-session-chip.warn {
+  background: var(--el-color-warning-light-9);
+  color: var(--el-color-warning);
+  border-color: var(--el-color-warning-light-5);
+}
 .cashier-tabs {
   height: calc(100vh - 150px);
   min-height: 540px;
