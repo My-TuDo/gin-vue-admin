@@ -1,6 +1,6 @@
 <template>
   <div class="cashier">
-    <!-- 头部行：收款/退款/换货 tabs 与 收银台设置/扫码枪 同级别同行（flex，不依赖任何插槽） -->
+    <!-- 头部容器：tabs 占满宽度；收银台设置/扫码枪操作区悬浮 tab 栏右侧（绝对定位，不依赖任何插槽） -->
     <div class="cashier-header">
       <el-tabs v-model="activeTab" class="cashier-tabs" @tab-change="onTabChange">
         <!-- ==================== 收款 ==================== -->
@@ -875,17 +875,23 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .cashier { padding: 2px 0; }
-/* 头部行：tabs 与操作区同级别同行 */
-.cashier-header { display: flex; align-items: flex-start; gap: 12px; }
-.cashier-tabs { flex: 1; min-width: 0; }
-/* 与 tabs 同行的操作区 */
+/* 头部容器：tabs 占满宽度，操作区绝对定位悬浮 tab 栏右侧（不挤占内容区） */
+.cashier-header { position: relative; height: calc(100vh - 150px); }
+.cashier-tabs { height: 100%; }
+/* 与 tab 栏同高的操作区：主题背景遮住 tabs 底部分隔线，视觉上与 tab 栏融为一体 */
 .pos-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 40px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-top: 4px;
+  padding: 0 4px;
+  background: var(--el-bg-color);
+  border-bottom: 1px solid var(--el-border-color-light);
+  z-index: 10;
   white-space: nowrap;
-  flex-shrink: 0;
 }
 /* 收银台码状态 chip */
 .pos-session-chip {
@@ -893,12 +899,11 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  padding: 2px 10px;
-  border-radius: 10px;
+  padding: 5px 12px;
+  border-radius: 12px;
   background: var(--el-color-success-light-9);
   color: var(--el-color-success);
   border: 1px solid var(--el-color-success-light-5);
-  margin-right: 8px;
 }
 .pos-session-chip.warn {
   background: var(--el-color-warning-light-9);
@@ -906,7 +911,7 @@ onBeforeUnmount(() => {
   border-color: var(--el-color-warning-light-5);
 }
 .cashier-tabs {
-  height: calc(100vh - 150px);
+  height: 100%;
   min-height: 540px;
   display: flex;
   flex-direction: column;
@@ -917,9 +922,9 @@ onBeforeUnmount(() => {
 .cashier-tabs :deep(.el-tabs__item) { font-size: 15px; font-weight: 600; }
 
 /* ===== 布局骨架 ===== */
-.pos-cash { height: 100%; display: flex; gap: 12px; }
+.pos-cash { height: 100%; display: flex; gap: 10px; }
 .pos-left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.pos-right { width: 436px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.pos-right { width: 452px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 
 .search-bar { background: #fff; border-radius: 12px; padding: 12px; box-shadow: 0 2px 10px rgba(31, 45, 61, 0.05); }
 .search-bar :deep(.el-input__wrapper) { border-radius: 8px; }
@@ -939,21 +944,22 @@ onBeforeUnmount(() => {
 .goods-scroll { flex: 1; min-height: 0; overflow: auto; }
 
 /* ===== 商品卡片 ===== */
-.goods-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px; padding: 2px 4px 6px; }
+.goods-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); gap: 9px; padding: 2px 4px 6px; }
 .goods-card {
   position: relative;
   background: #fff;
   border: 1px solid #e8ecf1;
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 9px 11px;
   cursor: pointer;
   transition: all 0.18s;
   display: flex;
   flex-direction: column;
   gap: 3px;
-  min-height: 92px;
+  min-height: 88px;
 }
-.goods-card:hover { border-color: #409eff; box-shadow: 0 4px 14px rgba(64, 158, 255, 0.18); transform: translateY(-2px); }
+/* 高频点选场景：hover 仅增强边框/阴影，不做位移，避免鼠标移动引起卡片抖动 */
+.goods-card:hover { border-color: #409eff; box-shadow: 0 3px 10px rgba(64, 158, 255, 0.16); }
 .goods-card:active { transform: scale(0.98); }
 .goods-card.disabled { opacity: 0.45; cursor: not-allowed; }
 .goods-card.disabled:hover { transform: none; box-shadow: none; border-color: #e8ecf1; }
@@ -1016,14 +1022,14 @@ onBeforeUnmount(() => {
 }
 .cart-title { font-size: 15px; font-weight: 700; color: #303133; }
 .cart-title i { font-style: normal; color: #909399; font-size: 13px; font-weight: 500; margin-left: 4px; }
-.cart-scroll { flex: 1; min-height: 0; overflow: auto; padding: 4px 8px; }
+.cart-scroll { flex: 1; min-height: 0; overflow: auto; padding: 4px 6px; }
 .cart-scroll :deep(.el-empty) { padding: 26px 0; }
 .cart-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  padding: 9px 8px;
+  gap: 8px;
+  padding: 8px 6px;
   border-bottom: 1px dashed #f0f2f5;
 }
 .cart-item:last-child { border-bottom: none; }
@@ -1031,34 +1037,42 @@ onBeforeUnmount(() => {
 .ci-main { min-width: 0; flex: 1; }
 .ci-name { font-size: 13px; font-weight: 600; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ci-spec { font-size: 11px; color: #909399; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ci-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.ci-price { font-size: 13px; color: #606266; width: 66px; text-align: right; }
-.ci-sub { font-size: 14px; font-weight: 700; color: #ff5a1f; width: 72px; text-align: right; }
-.ci-del { color: #c0c4cc; cursor: pointer; transition: color 0.15s; }
+.ci-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.ci-price { font-size: 13px; color: #606266; width: 58px; text-align: right; flex-shrink: 0; }
+.ci-sub { font-size: 14px; font-weight: 700; color: #ff5a1f; width: 70px; text-align: right; flex-shrink: 0; }
+.ci-del { color: #c0c4cc; cursor: pointer; transition: color 0.15s; flex-shrink: 0; }
 .ci-del:hover { color: #f56c6c; }
 
 /* ===== 结算区 ===== */
 .settle {
   background: #fff;
   border-radius: 12px;
-  padding: 12px 14px 14px;
+  padding: 10px 14px 14px;
   box-shadow: 0 2px 10px rgba(31, 45, 61, 0.05);
 }
-.total-line { display: flex; justify-content: space-between; align-items: flex-end; padding: 2px 0 4px; }
-.total-line > span { color: #606266; font-weight: 600; font-size: 14px; padding-bottom: 3px; }
-.total-amount { color: #ff5a1f; font-size: 27px; font-weight: 800; line-height: 1.15; }
-.total-amount .int { font-size: 27px; }
-.total-amount .dec { font-size: 15px; }
+/* 应收合计区：虚线分隔，与下方结算表单形成层次 */
+.total-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 2px 0 8px;
+  border-bottom: 1px dashed #f0f2f5;
+  margin-bottom: 10px;
+}
+.total-line > span { color: #606266; font-weight: 600; font-size: 14px; padding-bottom: 4px; }
+.total-amount { color: #ff5a1f; font-size: 30px; font-weight: 800; line-height: 1.1; }
+.total-amount .int { font-size: 30px; }
+.total-amount .dec { font-size: 16px; }
 .total-amount .dec::before { content: '.'; }
 
-.settle-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.settle-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .field :deep(.el-select) { width: 100%; }
 .field :deep(.el-input-number) { width: 100%; }
 .f-label { font-size: 12px; color: #606266; font-weight: 500; }
 .f-label .req { color: #f56c6c; font-size: 12px; }
 
-.pay-methods { margin-top: 12px; }
+.pay-methods { margin-top: 10px; }
 .pay-methods .f-label { display: block; margin-bottom: 6px; }
 .pay-radio { display: flex; width: 100%; gap: 8px; }
 .pay-radio :deep(.el-radio-button) { flex: 1; }
@@ -1087,7 +1101,7 @@ onBeforeUnmount(() => {
 }
 .pay-radio :deep(.el-radio-button.is-active .el-radio-button__inner em) { opacity: 0.85; }
 
-.cash-row { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
+.cash-row { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
 .cash-row .field { flex: 1; }
 .cash-row :deep(.el-input-number) { width: 100%; }
 .change-box { width: 116px; text-align: center; background: #fdf6ec; border-radius: 10px; padding: 6px 0; flex-shrink: 0; }
@@ -1185,10 +1199,11 @@ onBeforeUnmount(() => {
 .refund-total b { color: #f56c6c; font-size: 22px; margin-left: 8px; }
 
 /* ===== 换货 ===== */
+/* 换货顶部：与退款 top 保持一致的卡片内距 */
 .exchange-top {
   background: #fff;
   border-radius: 12px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   box-shadow: 0 2px 10px rgba(31, 45, 61, 0.05);
   display: flex;
   gap: 12px;
@@ -1262,7 +1277,6 @@ onBeforeUnmount(() => {
 .ps-btns { display: flex; gap: 10px; }
 
 /* ===== 扫码枪抽屉 ===== */
-.pos-gun-badge { margin-left: 10px; }
 .pos-drawer-body { display: flex; flex-direction: column; height: 100%; }
 .pos-drawer-tip {
   font-size: 12px;
@@ -1298,5 +1312,31 @@ onBeforeUnmount(() => {
   border-radius: 20px;
   padding: 3px 10px;
   flex-shrink: 0;
+}
+
+/* ===== 小屏兜底 =====
+   <1280px：收紧右列与商品卡密度；<1024px：收银区改纵向堆叠，
+   由外层 gva-container2（overflow:auto）接管滚动，保证功能可达 */
+@media (max-width: 1280px) {
+  .pos-right { width: 400px; }
+  .pos-cash { gap: 8px; }
+  .goods-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  .cashier-header { height: calc(100vh - 140px); }
+}
+
+@media (max-width: 1024px) {
+  .cashier-header { height: auto; }
+  .cashier-tabs { height: auto; }
+  /* 操作区回到文档流，置于 tab 栏上方 */
+  .pos-actions {
+    position: static;
+    height: auto;
+    border-bottom: none;
+    padding: 0 0 10px;
+    background: transparent;
+  }
+  .pos-cash { flex-direction: column; }
+  .pos-left { min-height: 360px; }
+  .pos-right { width: 100%; }
 }
 </style>

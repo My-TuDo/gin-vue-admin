@@ -25,6 +25,7 @@ func initBizRouter(routers ...*gin.RouterGroup) {
 	router.RouterGroupApp.Jxc.InitStockCheckRouter(publicGroup)
 	router.RouterGroupApp.Jxc.InitCashierRouter(publicGroup)
 	router.RouterGroupApp.Jxc.InitDashboardRouter(publicGroup)
+	router.RouterGroupApp.Jxc.InitPosRouter(publicGroup)
 
 	holder(publicGroup, privateGroup)
 
