@@ -704,18 +704,38 @@ const playPosBeep = () => {
   }
 }
 
+// 库存不足提示节流：同 SKU 1s 内只提示一次（防 3 连扫 3 连弹）
+const posWarnAtMap = {} // skuId -> 上次「库存不足」提示时间戳
+const warnStockLimit = (skuId, text) => {
+  const now = Date.now()
+  if (now - (posWarnAtMap[skuId] || 0) < 1000) return
+  posWarnAtMap[skuId] = now
+  ElMessage.warning(text)
+}
+
 // 扫码条目加入购物车：复用现有 cart 数据结构，同 SKU 合并数量（totalAmount 由 computed 自动更新）；
-// 返回实际加入件数（库存不足时截断），供累计 badge 使用
+// 返回真实新增件数（扣减购物车已有后按库存截断），供 posAutoCount 累计与购物车变化严格一致
 const posAddToCart = (it) => {
   const sku = it.sku
   if (!sku) return 0
   const available = skuStock.value[sku.id] ?? 0
-  if (available <= 0) { ElMessage.warning('该 SKU 无可售库存'); return 0 }
-  const added = Math.min(it.qty, available)
   const exist = cart.value.find((r) => r.skuId === sku.id)
-  if (exist) exist.qty = Math.min(exist.qty + added, exist.available)
+  if (available <= 0) {
+    // 库存为 0：保持原「无可售库存」语义
+    warnStockLimit(sku.id, '该 SKU 无可售库存')
+    return 0
+  }
+  // 真实可增量 = 库存快照 − 购物车已有（同 SKU 合并后不可超过库存）
+  const canAdd = Math.max(available - (exist ? exist.qty : 0), 0)
+  if (canAdd <= 0) {
+    // 购物车已有数量已达库存上限：不加购、不计数
+    if (it.qty > 0) warnStockLimit(sku.id, '库存不足，无法再加购')
+    return 0
+  }
+  const added = Math.min(it.qty, canAdd)
+  if (exist) exist.qty += added // canAdd 已保证合并后不超库存，无需再截断
   else cart.value.push({ skuId: sku.id, skuCode: sku.skuCode, color: sku.color, size: sku.size, salePrice: sku.salePrice || 0, qty: added, available })
-  if (added < it.qty) ElMessage.warning(`库存不足，已加入 ${added} 件`)
+  if (added < it.qty) warnStockLimit(sku.id, `库存不足，已加入 ${added} 件`)
   return added
 }
 
