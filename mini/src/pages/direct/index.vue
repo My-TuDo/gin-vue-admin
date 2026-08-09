@@ -20,34 +20,33 @@
         v-model="listKeyword"
         class="add-input"
         type="text"
-        placeholder="搜索名称 / SKU编码 / 条码"
+        placeholder="搜索商品名称 / 款号"
         confirm-type="search"
       />
       <view class="scan-btn" @click="doScan">扫码添加</view>
     </view>
 
-    <!-- SKU 列表区（可滚动） -->
+    <!-- 商品列表区（可滚动）：浏览商品 → 点选进入 SKU 选择 -->
     <view class="list-head">
       <text class="section-title">商品列表</text>
-      <text class="list-count">{{ skuList.length }} 条</text>
+      <text class="list-count">{{ goodsListFiltered.length }} 条</text>
     </view>
     <scroll-view class="sku-scroll" scroll-y>
       <view v-if="listLoading" class="block-tip">加载中…</view>
       <view v-else-if="listError" class="err-box">
         <text class="err-text">{{ listError }}</text>
-        <view class="retry-btn" @click="loadSkus">重试</view>
+        <view class="retry-btn" @click="retryLoad">重试</view>
       </view>
-      <view v-else-if="!skuList.length" class="block-tip">{{ skus.length ? '无匹配商品' : '暂无商品数据' }}</view>
-      <view v-else class="sku-list">
-        <view v-for="s in skuList" :key="s.ID" class="sku-item">
-          <view class="si-main">
-            <text class="si-code">{{ s.skuCode }}</text>
-            <text class="si-name">{{ s.name }}</text>
-            <text v-if="s.color || s.size" class="si-spec">{{ s.color }} / {{ s.size }}</text>
+      <view v-else-if="!goodsListFiltered.length" class="block-tip">{{ goodsList.length ? '无匹配商品' : '暂无商品数据' }}</view>
+      <view v-else class="goods-list">
+        <view v-for="g in goodsListFiltered" :key="g.ID" class="goods-item" @click="openSkuPop(g)">
+          <view class="gi-main">
+            <text class="gi-name">{{ g.name }}</text>
+            <text v-if="g.code" class="gi-code">{{ g.code }}</text>
           </view>
-          <view class="si-right">
-            <text class="si-stock" :class="{ none: !s.available }">{{ s.available > 0 ? `可售 ${s.available}` : '无库存' }}</text>
-            <view class="si-add" @click="addSkuById(s)">+</view>
+          <view class="gi-right">
+            <text class="gi-count">{{ g.skuCount }} 个规格</text>
+            <text class="gi-arrow">›</text>
           </view>
         </view>
       </view>
@@ -84,6 +83,34 @@
         @click="submit"
       >提交{{ direction === 'in' ? '入库' : '出库' }}（{{ rows.length }} 项）</view>
     </view>
+
+    <!-- SKU 选择弹层（自绘半屏，无 uni-popup 依赖） -->
+    <view v-if="skuPopVisible" class="pop-mask" @click="skuPopVisible = false">
+      <view class="pop-panel" @click.stop>
+        <view class="pop-head">
+          <text class="pop-title">{{ currentGoods.name }}</text>
+          <text v-if="currentGoods.code" class="pop-code">{{ currentGoods.code }}</text>
+          <view class="pop-close" @click="skuPopVisible = false">×</view>
+        </view>
+        <view v-if="!popSkus.length" class="pop-empty">该商品暂无 SKU，请先在电脑端商品中心添加</view>
+        <scroll-view v-else class="pop-scroll" scroll-y>
+          <view v-for="(x, idx) in popSkus" :key="x.skuId" class="pop-sku-row">
+            <view class="ps-main">
+              <text class="ps-spec">{{ specText(x) }}</text>
+              <text class="ps-stock" :class="{ none: !x.stock }">{{ x.stock > 0 ? `库存 ${x.stock} · 可售 ${x.avail}` : '无库存' }}</text>
+            </view>
+            <view class="ps-stepper">
+              <view class="step-btn" @click="popStep(x, -1)">−</view>
+              <view class="step-num">{{ x.qty }}</view>
+              <view class="step-btn plus" @click="popStep(x, 1)">+</view>
+            </view>
+          </view>
+        </scroll-view>
+        <view class="pop-foot">
+          <view class="pop-add-btn" :class="{ disabled: !popTotal }" @click="addFromPop">加入明细（合计 {{ popTotal }} 件）</view>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -102,38 +129,44 @@ const direction = ref('in') // 'in'=入库 | 'out'=出库
 const rows = ref([]) // [{skuId, skuCode, name, color, size, qty}]
 const submitting = ref(false)
 
-// ===== SKU 列表区 =====
-const skus = ref([]) // 原始 SKU 列表 [{ID, skuCode, color, size, barcode, goods:{name}}]
-const stockMap = ref({}) // skuId -> available（当前仓库可售）
-const listKeyword = ref('') // 本地过滤词
+// ===== 商品列表区 =====
+const goodsList = ref([]) // 商品列表 [{ID, name, code?}]（/jxc/goods/page）
+const skus = ref([]) // SKU 列表 [{ID, skuCode, color, size, barcode, goodsId?, goods:{ID,name}}]（/jxc/goods/sku/list）
+const stockMap = ref({}) // skuId -> { qty: 总库存, avail: 可售 }（当前仓库）
+const listKeyword = ref('') // 本地过滤词（匹配商品名称/款号）
 const listLoading = ref(false)
 const listError = ref('')
 
+// ===== SKU 选择弹层状态 =====
+const skuPopVisible = ref(false)
+const currentGoods = ref({})
+const popSkus = ref([]) // [{skuId, skuCode, color, size, qty, stock, avail}]
+
 const warehouseNames = computed(() => warehouses.value.map((w) => w.name || '未命名仓库'))
 
-// 合并 SKU 数据 + 库存并本地过滤：匹配 名称/SKU编码/条码
-const skuList = computed(() => {
+// SKU 所属商品 id 兼容：goodsId 直取 或 关联 goods 对象
+const skuGoodsId = (s) => Number(s.goodsId || (s.goods && (s.goods.ID || s.goods.id)))
+
+// 商品列表 + 规格数统计 + 本地过滤（名称/款号）
+const goodsListFiltered = computed(() => {
   const kw = listKeyword.value.trim().toLowerCase()
-  return skus.value
-    .filter((s) => {
+  return goodsList.value
+    .filter((g) => {
       if (!kw) return true
-      const name = ((s.goods && s.goods.name) || '').toLowerCase()
-      const code = (s.skuCode || '').toLowerCase()
-      const barcode = (s.barcode || '').toLowerCase()
-      return name.includes(kw) || code.includes(kw) || barcode.includes(kw)
+      const name = (g.name || '').toLowerCase()
+      const code = (g.code || g.skuCode || g.goodsCode || '').toLowerCase()
+      return name.includes(kw) || code.includes(kw)
     })
-    .map((s) => ({
-      ID: s.ID,
-      skuCode: s.skuCode || '',
-      name: (s.goods && s.goods.name) || s.skuCode || '未知商品',
-      color: s.color || '',
-      size: s.size || '',
-      barcode: s.barcode || '',
-      available: stockMap.value[s.ID] ?? 0,
+    .map((g) => ({
+      ID: g.ID,
+      name: g.name || '未命名商品',
+      code: g.code || g.skuCode || g.goodsCode || '',
+      skuCount: skus.value.filter((s) => skuGoodsId(s) === Number(g.ID)).length,
     }))
 })
 
 const rowsTotal = computed(() => rows.value.reduce((s, r) => s + r.qty, 0))
+const popTotal = computed(() => popSkus.value.reduce((s, x) => s + x.qty, 0))
 
 onLoad(() => {
   if (!isLoggedIn()) {
@@ -141,6 +174,8 @@ onLoad(() => {
     return
   }
   loadWarehouses()
+  loadGoods()
+  loadSkus() // SKU 用于规格数统计与弹层选择，与商品/仓库无依赖，并行拉取
 })
 
 onShow(() => {
@@ -171,15 +206,14 @@ function onWarehouseChange(e) {
   loadStock()
 }
 
-// SKU 列表（不依赖仓库，一次拉取）
-async function loadSkus() {
+// 商品列表（不依赖仓库，一次拉取）
+async function loadGoods() {
   listLoading.value = true
   listError.value = ''
   try {
-    const data = await get('/jxc/goods/sku/list', { page: 1, pageSize: 999 }, { silent: true })
-    // normalize：兼容数组与 { list: [...] }
-    const list = Array.isArray(data) ? data : data && Array.isArray(data.list) ? data.list : []
-    skus.value = list
+    const data = await get('/jxc/goods/page', { page: 1, pageSize: 999 }, { silent: true })
+    const list = Array.isArray(data && data.list) ? data.list : []
+    goodsList.value = list
   } catch (e) {
     listError.value = (e && e.msg) || '商品列表加载失败'
   } finally {
@@ -187,7 +221,26 @@ async function loadSkus() {
   }
 }
 
-// 当前仓库可售库存 → skuId -> available
+// SKU 列表（不依赖仓库，一次拉取；用于规格数统计与弹层选择）
+async function loadSkus() {
+  try {
+    const data = await get('/jxc/goods/sku/list', { page: 1, pageSize: 999 }, { silent: true })
+    // normalize：兼容数组与 { list: [...] }
+    const list = Array.isArray(data) ? data : data && Array.isArray(data.list) ? data.list : []
+    skus.value = list
+  } catch (e) {
+    // SKU 加载失败静默：商品行规格数显示 0，弹层无 SKU（可重试进入弹层）
+    console.warn('[direct] SKU 列表加载失败', e)
+  }
+}
+
+// 重试：商品与 SKU 一并重拉
+function retryLoad() {
+  loadGoods()
+  loadSkus()
+}
+
+// 当前仓库库存 → skuId -> { qty, avail }（qty=总库存, avail=可售）
 async function loadStock() {
   if (!warehouseId.value) {
     stockMap.value = {}
@@ -198,32 +251,70 @@ async function loadStock() {
     const list = Array.isArray(data && data.list) ? data.list : []
     const m = {}
     list.forEach((it) => {
+      const qty = Number(it.quantity) || 0 // 总库存（NaN/空兜底 0）
       let avail = Number(it.available)
-      if (isNaN(avail)) avail = Number(it.quantity || 0) - Number(it.lockQuantity || 0)
-      m[it.skuId] = avail
+      if (isNaN(avail)) avail = qty - Number(it.lockQuantity || 0) // 可售缺省时按 总库存-锁定 退化计算
+      m[it.skuId] = { qty, avail }
     })
     stockMap.value = m
   } catch (e) {
-    // 库存加载失败静默：可售列显示 0（提交时后端会兜底校验）
+    // 库存加载失败静默：库存列显示无库存（提交时后端会兜底校验）
     console.warn('[direct] 库存加载失败', e)
     stockMap.value = {}
   }
 }
 
-// 点选 SKU 加入明细（同 SKU 数量累加）
-function addSkuById(s) {
-  addRow({ skuId: s.ID, skuCode: s.skuCode, name: s.name, color: s.color, size: s.size })
-  uni.showToast({ title: `已添加 ${s.name}`, icon: 'none' })
+// 打开商品 SKU 选择弹层：按当前商品过滤 SKU，初始化数量为 1
+function openSkuPop(g) {
+  currentGoods.value = g
+  popSkus.value = skus.value
+    .filter((s) => skuGoodsId(s) === Number(g.ID))
+    .map((s) => {
+      const st = stockMap.value[s.ID]
+      return {
+        skuId: s.ID,
+        skuCode: s.skuCode || '',
+        color: s.color || '',
+        size: s.size || '',
+        qty: 1,
+        stock: st ? st.qty : 0,
+        avail: st ? st.avail : 0,
+      }
+    })
+  skuPopVisible.value = true
 }
 
-// 公共加入明细逻辑
-function addRow({ skuId, skuCode, name, color, size }) {
+function specText(x) {
+  const parts = [x.color, x.size].filter(Boolean)
+  return parts.length ? parts.join(' / ') : '默认规格'
+}
+
+// 弹层内 stepper：下限 1
+function popStep(x, d) {
+  const next = x.qty + d
+  if (next < 1) return
+  x.qty = next
+}
+
+// 加入明细：该商品每个 SKU 按所选数量累加（addRow 兼容 qty 参数），关闭弹层
+function addFromPop() {
+  const g = currentGoods.value
+  popSkus.value.forEach((x) => {
+    if (!x.qty) return
+    addRow({ skuId: x.skuId, skuCode: x.skuCode, name: g.name || x.skuCode, color: x.color, size: x.size }, x.qty)
+  })
+  skuPopVisible.value = false
+  uni.showToast({ title: '已加入明细', icon: 'success' })
+}
+
+// 公共加入明细逻辑：同 SKU 数量累加；qty 参数缺省为 1（扫码/点选兼容）
+function addRow({ skuId, skuCode, name, color, size }, qty = 1) {
   const exist = rows.value.find((r) => r.skuId === skuId)
-  if (exist) exist.qty += 1
-  else rows.value.push({ skuId, skuCode, name, color, size, qty: 1 })
+  if (exist) exist.qty += qty
+  else rows.value.push({ skuId, skuCode, name, color, size, qty })
 }
 
-// 扫码添加（保留）：条码 → 查 SKU → 加入明细
+// 扫码添加（保留）：条码 → 查 SKU → 加入明细（与商品点选二选一）
 function doScan() {
   // #ifdef MP-WEIXIN
   uni.scanCode({
@@ -325,7 +416,7 @@ async function submit() {
   }
   uni.hideLoading()
   submitting.value = false
-  // 提交后刷新可售库存（列表可售列即时更新）
+  // 提交后刷新可售库存（弹层/明细可售数据即时更新）
   if (ok > 0) loadStock()
   if (ok > 0) uni.showToast({ title: `${dirText}成功 ${ok} 条${failMsgs.length ? `，失败 ${failMsgs.length} 条` : ''}`, icon: 'success' })
   if (failMsgs.length) {
@@ -440,7 +531,7 @@ async function submit() {
   flex-shrink: 0;
 }
 
-/* ===== SKU 列表区（可滚动） ===== */
+/* ===== 商品列表区（可滚动） ===== */
 .list-head {
   display: flex;
   justify-content: space-between;
@@ -456,81 +547,60 @@ async function submit() {
   flex: 1;
   min-height: 0;
 }
-.sku-list {
+.goods-list {
   background: #ffffff;
   border-radius: 16rpx;
   overflow: hidden;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
   padding-bottom: 2rpx;
 }
-.sku-item {
+.goods-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20rpx 24rpx;
+  padding: 22rpx 24rpx;
   border-bottom: 1rpx solid #f0f0f0;
 
   &:last-child {
     border-bottom: none;
   }
 }
-.si-main {
+.gi-main {
   flex: 1;
   min-width: 0;
   margin-right: 16rpx;
 }
-.si-code {
+.gi-name {
   display: block;
-  font-size: 28rpx;
-  font-weight: 700;
-  color: #2b8a3e;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.si-name {
-  display: block;
-  margin-top: 4rpx;
-  font-size: 26rpx;
+  font-size: 29rpx;
+  font-weight: 600;
   color: #222;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.si-spec {
+.gi-code {
   display: block;
-  margin-top: 2rpx;
+  margin-top: 4rpx;
   font-size: 22rpx;
-  color: #999;
+  color: #2b8a3e;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.si-right {
+.gi-right {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 12rpx;
   flex-shrink: 0;
 }
-.si-stock {
+.gi-count {
   font-size: 22rpx;
-  color: #2b8a3e;
-
-  &.none {
-    color: #b2b2b2;
-  }
+  color: #999;
 }
-.si-add {
-  width: 56rpx;
-  height: 56rpx;
-  line-height: 52rpx;
-  text-align: center;
-  background: linear-gradient(135deg, #2b8a3e 0%, #3fb45c 100%);
-  color: #fff;
-  font-size: 36rpx;
-  font-weight: 700;
-  border-radius: 14rpx;
-  box-shadow: 0 4rpx 12rpx rgba(43, 138, 62, 0.25);
+.gi-arrow {
+  font-size: 32rpx;
+  color: #c0c4cc;
 }
 
 /* ===== 明细区（底部固定） ===== */
@@ -685,5 +755,132 @@ async function submit() {
   color: #fff;
   font-size: 24rpx;
   border-radius: 8rpx;
+}
+
+/* ===== SKU 选择弹层（自绘半屏） ===== */
+.pop-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.pop-panel {
+  background: #ffffff;
+  border-radius: 24rpx 24rpx 0 0;
+  height: 70vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom);
+  animation: popUp 0.25s ease;
+}
+@keyframes popUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.pop-head {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 28rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+  flex-shrink: 0;
+}
+.pop-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #222;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pop-code {
+  font-size: 22rpx;
+  color: #2b8a3e;
+  margin-right: 12rpx;
+}
+.pop-close {
+  font-size: 40rpx;
+  line-height: 1;
+  color: #999;
+  padding: 0 4rpx;
+  flex-shrink: 0;
+}
+.pop-scroll {
+  flex: 1;
+  min-height: 0;
+}
+.pop-empty {
+  padding: 100rpx 0;
+  text-align: center;
+  color: #999;
+  font-size: 26rpx;
+}
+.pop-sku-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 22rpx 28rpx;
+  border-bottom: 1rpx dashed #f0f0f0;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+.ps-main {
+  flex: 1;
+  min-width: 0;
+  margin-right: 16rpx;
+}
+.ps-spec {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #222;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ps-stock {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: #2b8a3e;
+
+  &.none {
+    color: #b2b2b2;
+  }
+}
+.ps-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  background: #f5f6f7;
+  border-radius: 12rpx;
+  padding: 4rpx;
+  flex-shrink: 0;
+}
+.pop-foot {
+  padding: 16rpx 24rpx 20rpx;
+  border-top: 1rpx solid #f0f0f0;
+  flex-shrink: 0;
+}
+.pop-add-btn {
+  height: 88rpx;
+  line-height: 88rpx;
+  text-align: center;
+  background: linear-gradient(135deg, #2b8a3e 0%, #3fb45c 100%);
+  color: #fff;
+  font-size: 30rpx;
+  font-weight: 700;
+  border-radius: 16rpx;
+  box-shadow: 0 8rpx 24rpx rgba(43, 138, 62, 0.25);
+
+  &.disabled {
+    opacity: 0.5;
+  }
 }
 </style>
