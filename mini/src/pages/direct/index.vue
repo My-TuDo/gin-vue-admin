@@ -100,7 +100,7 @@
               <text class="ps-stock" :class="{ none: !x.stock }">{{ x.stock > 0 ? `库存 ${x.stock} · 可售 ${x.avail}` : '无库存' }}</text>
             </view>
             <view class="ps-stepper">
-              <view class="step-btn" @click="popStep(x, -1)">−</view>
+              <view class="step-btn" :class="{ disabled: !x.qty }" @click="popStep(x, -1)">−</view>
               <view class="step-num">{{ x.qty }}</view>
               <view class="step-btn plus" @click="popStep(x, 1)">+</view>
             </view>
@@ -264,7 +264,7 @@ async function loadStock() {
   }
 }
 
-// 打开商品 SKU 选择弹层：按当前商品过滤 SKU，初始化数量为 1
+// 打开商品 SKU 选择弹层：按当前商品过滤 SKU，初始化数量为 0（用户显式点 + 才加数量）
 function openSkuPop(g) {
   currentGoods.value = g
   popSkus.value = skus.value
@@ -276,7 +276,7 @@ function openSkuPop(g) {
         skuCode: s.skuCode || '',
         color: s.color || '',
         size: s.size || '',
-        qty: 1,
+        qty: 0,
         stock: st ? st.qty : 0,
         avail: st ? st.avail : 0,
       }
@@ -289,10 +289,10 @@ function specText(x) {
   return parts.length ? parts.join(' / ') : '默认规格'
 }
 
-// 弹层内 stepper：下限 1
+// 弹层内 stepper：下限 0（qty=0 时 − 置灰且不再减少）
 function popStep(x, d) {
   const next = x.qty + d
-  if (next < 1) return
+  if (next < 0) return
   x.qty = next
 }
 
@@ -698,6 +698,12 @@ async function submit() {
 
   &.plus {
     color: #2b8a3e;
+  }
+
+  &.disabled {
+    color: #c0c4cc;
+    background: #f5f6f7;
+    opacity: 0.6;
   }
 }
 .step-num {
