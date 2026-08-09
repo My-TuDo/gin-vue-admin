@@ -27,6 +27,12 @@
       <view class="manual-btn" @click="doManualScan">加 购</view>
     </view>
 
+    <!-- 轮询暂停提示：连续空结果达上限自动停止，点击恢复刷新 -->
+    <view v-if="pollPaused" class="poll-paused-bar">
+      <text class="pp-text">自动刷新已暂停（长时间无扫码）</text>
+      <text class="pp-btn" @click="resumePolling">恢复刷新</text>
+    </view>
+
     <!-- 已扫列表：PC 已确认的条目会自动消失（后端 status=0 过滤） -->
     <view class="section-title">
       已加入收银台
@@ -78,6 +84,9 @@ const posSession = ref(uni.getStorageSync(POS_SESSION_KEY) || '')
 // 3s 轮询定时器句柄；onShow 启动、onHide/onUnmounted 停止，避免后台空转
 let pollTimer = null
 const POLL_INTERVAL = 3000
+const POS_POLL_MAX_EMPTY = 60 // 连续空结果次数上限（60 次 × 3s ≈ 3 分钟），超限自动暂停轮询，避免后端接口空转刷屏
+let emptyCount = 0 // 连续空结果计数：有内容清零，达上限触发暂停
+const pollPaused = ref(false) // 轮询暂停态（长时间无扫码自动暂停，点击恢复或重新进入页面/扫码后恢复）
 
 onLoad(() => {
   if (!isLoggedIn()) {
@@ -86,13 +95,15 @@ onLoad(() => {
   }
 })
 
-// 页面显示：刷新本地绑定码；已绑定才启动轮询，未绑定停止（无码时后端返回会话无效）
+// 页面显示：刷新本地绑定码；重置空计数与暂停态；已绑定才启动轮询，未绑定停止（无码时后端返回会话无效）
 onShow(() => {
   if (!isLoggedIn()) {
     uni.reLaunch({ url: LOGIN_PAGE })
     return
   }
   posSession.value = uni.getStorageSync(POS_SESSION_KEY) || ''
+  emptyCount = 0
+  pollPaused.value = false
   if (posSession.value) startPolling()
   else stopPolling()
 })
@@ -124,13 +135,31 @@ async function loadPending() {
   listLoading.value = true
   try {
     const data = await get('/jxc/pos/scan/pending', { session: posSession.value }, { silent: true })
-    pendingList.value = Array.isArray(data) ? data : []
+    const list = Array.isArray(data) ? data : []
+    pendingList.value = list
+    // 空结果计数：有内容清零；连续空结果达上限自动暂停轮询（停止后端接口刷屏）
+    if (list.length) {
+      emptyCount = 0
+    } else {
+      emptyCount += 1
+      if (emptyCount >= POS_POLL_MAX_EMPTY) {
+        pollPaused.value = true
+        stopPolling()
+      }
+    }
   } catch (e) {
-    // 轮询失败静默，不打断页面
+    // 轮询失败静默，不打断页面（失败不计入空结果计数）
     console.warn('[pos] 拉取扫码队列失败', e)
   } finally {
     listLoading.value = false
   }
+}
+
+// 暂停后恢复：清空计数 + 立即拉一次 + 重启定时器（startPolling 幂等，先停后启不叠加）
+function resumePolling() {
+  emptyCount = 0
+  pollPaused.value = false
+  startPolling()
 }
 
 // 微信扫码：onlyFromCamera:false 允许相册识别；成功后直接加购到收银台
@@ -195,7 +224,9 @@ async function submitScan(barcodeStr) {
     await post('/jxc/pos/scan', { barcode: barcodeStr, qty: 1, session: posSession.value }, { silent: true })
     barcode.value = ''
     uni.showToast({ title: '已加入收银台购物车', icon: 'success' })
-    loadPending()
+    // 扫码成功说明有人在用：若处于暂停态则自动恢复轮询，否则按原逻辑刷新
+    if (pollPaused.value) resumePolling()
+    else loadPending()
   } catch (e) {
     // 收银台码被 PC 端作废/重置：清除本地绑定，引导重新绑定
     if ((e && e.code) === 7 || ((e && e.msg) || '').indexOf('无效') >= 0) {
@@ -336,6 +367,29 @@ function fmtMoney(n) {
   font-size: 28rpx;
   border-radius: 12rpx;
   font-weight: 600;
+}
+
+/* 轮询暂停提示条 */
+.poll-paused-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fdf6ec;
+  border-radius: 12rpx;
+  padding: 16rpx 24rpx;
+  margin-top: 24rpx;
+}
+.pp-text {
+  font-size: 24rpx;
+  color: #e6a23c;
+}
+.pp-btn {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #2b8a3e;
+  padding: 4rpx 20rpx;
+  background: #ffffff;
+  border-radius: 24rpx;
 }
 
 /* 列表标题 */

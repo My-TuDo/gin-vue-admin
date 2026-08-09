@@ -371,7 +371,7 @@
       v-model="posDrawerVisible"
       title="扫码枪 · 自动加购"
       size="420px"
-      @open="startPosPolling"
+      @open="onPosDrawerOpen"
       @close="stopPosPolling"
     >
       <div class="pos-drawer-body">
@@ -381,6 +381,11 @@
         <template v-else>
           <div class="pos-drawer-tip">
             已绑定收银台 {{ posSession }}。店员扫码的商品将自动加入购物车，本会话已自动加入 {{ posAutoCount }} 件。
+          </div>
+          <!-- 轮询暂停态：连续空结果达上限自动停止，需手动恢复 -->
+          <div v-if="posPollPaused" class="pos-drawer-tip warn">
+            轮询已暂停（长时间无扫码），点击恢复
+            <el-button link type="primary" size="small" @click="resumePosPolling">恢复</el-button>
           </div>
           <div v-if="posPending.length" class="pos-list">
             <div v-for="it in posPending" :key="it.id" class="pos-item">
@@ -674,6 +679,9 @@ const posDrawerVisible = ref(false)
 const posPending = ref([])      // 当前轮询到的待消费条目（仅展示处理过程，消费后即消失）
 const posAutoCount = ref(0)     // 本次收银自动加入购物车件数（badge 展示，清空/收款后归零）
 let posPollTimer = null         // 3s 轮询定时器句柄
+const POS_POLL_MAX_EMPTY = 60   // 连续空结果次数上限（60 次 × 3s ≈ 3 分钟），超限自动暂停轮询，避免后端接口空转刷屏
+let posEmptyCount = 0           // 连续空结果计数：有内容清零，达上限触发暂停
+const posPollPaused = ref(false) // 轮询暂停态（长时间无扫码自动暂停，点击恢复按钮或重新打开抽屉恢复）
 let posKnownIds = new Set()     // 已见条目 id 集合：新见=自动加购；滞留（上次 confirm 失败）=补 confirm 不加购
 let posFirstLoad = false        // 首次打开标记：首拉不提示音，避免打开瞬间轰炸
 
@@ -782,10 +790,34 @@ const loadPosPending = async (isFirst = false) => {
     }
     posKnownIds = new Set(list.map((it) => it.id))
     posFirstLoad = true
+    // 空结果计数：有内容清零；连续空结果达上限自动暂停轮询（停止后端接口刷屏）
+    if (list.length) {
+      posEmptyCount = 0
+    } else {
+      posEmptyCount += 1
+      if (posEmptyCount >= POS_POLL_MAX_EMPTY) {
+        posPollPaused.value = true
+        stopPosPolling()
+      }
+    }
   } catch (e) {
-    // 轮询失败静默，不影响页面其它功能
+    // 轮询失败静默，不影响页面其它功能（失败不计入空结果计数）
     console.warn('[pos] 扫码队列轮询失败', e)
   }
+}
+
+// 面板打开：清空暂停态并启动轮询（重复调用不叠加定时器；无收银台码不启动）
+const onPosDrawerOpen = () => {
+  posEmptyCount = 0
+  posPollPaused.value = false
+  startPosPolling()
+}
+
+// 暂停后恢复：清空计数 + 立即拉一次 + 重启定时器（startPosPolling 幂等，先停后启不叠加）
+const resumePosPolling = () => {
+  posEmptyCount = 0
+  posPollPaused.value = false
+  startPosPolling()
 }
 
 // 面板打开：立即拉取一次并启动 3s 轮询；重复调用不叠加定时器；无收银台码不启动
