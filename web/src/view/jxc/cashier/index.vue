@@ -1,24 +1,19 @@
 <template>
   <div class="cashier">
-    <!-- 顶部工具条：收银台设置 + 扫码枪入口（独立于 tabs，避免插槽渲染不可靠） -->
-    <div class="pos-toolbar">
-      <div class="pos-toolbar-left">
-        <span class="pos-toolbar-title">收银台</span>
+    <el-tabs v-model="activeTab" class="cashier-tabs" @tab-change="onTabChange">
+      <!-- 顶部工具区（与 tabs 同行）：收银台码状态 + 设置 + 扫码枪入口 -->
+      <template #extra>
         <span v-if="posSession" class="pos-session-chip">
           <el-icon><Monitor /></el-icon> 收银台码 {{ posSession }}
         </span>
         <span v-else class="pos-session-chip warn">
-          <el-icon><Warning /></el-icon> 未生成收银台码，店员无法扫码加购
+          <el-icon><Warning /></el-icon> 未生成收银台码
         </span>
-      </div>
-      <div class="pos-toolbar-right">
         <el-button :icon="Setting" @click="posSettingsVisible = true">收银台设置</el-button>
         <el-badge :value="posAutoCount" :hidden="posAutoCount <= 0" :max="999">
           <el-button :icon="Monitor" @click="posDrawerVisible = true">扫码枪</el-button>
         </el-badge>
-      </div>
-    </div>
-    <el-tabs v-model="activeTab" class="cashier-tabs" @tab-change="onTabChange">
+      </template>
       <!-- ==================== 收款 ==================== -->
       <el-tab-pane label="收款" name="cash">
         <div class="pos-cash">
@@ -876,16 +871,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .cashier { padding: 2px 0; }
-/* 顶部工具条：收银台设置 + 扫码枪入口 */
-.pos-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-  padding: 0 2px;
-}
-.pos-toolbar-left { display: flex; align-items: center; gap: 10px; }
-.pos-toolbar-title { font-size: 16px; font-weight: 700; color: var(--el-text-color-primary); }
+/* 收银台码状态 chip（位于 tabs 头部右侧工具区） */
 .pos-session-chip {
   display: inline-flex;
   align-items: center;
@@ -896,6 +882,7 @@ onBeforeUnmount(() => {
   background: var(--el-color-success-light-9);
   color: var(--el-color-success);
   border: 1px solid var(--el-color-success-light-5);
+  margin-right: 8px;
 }
 .pos-session-chip.warn {
   background: var(--el-color-warning-light-9);
