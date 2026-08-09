@@ -1,6 +1,13 @@
 <template>
   <div class="cashier">
     <el-tabs v-model="activeTab" class="cashier-tabs" @tab-change="onTabChange">
+      <!-- 顶部工具区：收银台设置 + 扫码枪入口（badge 显示本次自动加入件数，自动加购后累加） -->
+      <template #extra>
+        <el-button :icon="Setting" @click="posSettingsVisible = true">收银台设置</el-button>
+        <el-badge :value="posAutoCount" :hidden="posAutoCount <= 0" :max="999" class="pos-gun-badge">
+          <el-button :icon="Monitor" @click="posDrawerVisible = true">扫码枪</el-button>
+        </el-badge>
+      </template>
       <!-- ==================== 收款 ==================== -->
       <el-tab-pane label="收款" name="cash">
         <div class="pos-cash">
@@ -328,6 +335,66 @@
       </el-tab-pane>
     </el-tabs>
 
+    <!-- 收银台设置弹窗：生成/重置收银台码，供小程序「我的-绑定收银台」绑定 -->
+    <el-dialog v-model="posSettingsVisible" title="收银台设置" width="500px" append-to-body>
+      <div class="pos-settings">
+        <div class="pos-settings-row">
+          <span class="ps-label">当前收银台码</span>
+          <span class="ps-code">{{ posSession || '未生成' }}</span>
+        </div>
+        <div class="ps-tip">
+          绑定流程：本页「生成收银台码」→ 店员在小程序「我的-绑定收银台」输入该码 → 之后店员扫码的商品将自动加入本收银台购物车。
+        </div>
+        <div class="ps-btns">
+          <el-button type="primary" :loading="posSessionCreating" @click="createPosSession">
+            {{ posSession ? '重新生成' : '生成收银台码' }}
+          </el-button>
+          <el-button v-if="posSession" type="danger" plain :loading="posSessionResetting" @click="resetPosSession">
+            重置（作废旧码）
+          </el-button>
+        </div>
+      </div>
+    </el-dialog>
+
+    <!-- 扫码枪抽屉：打开时 3s 轮询；新扫码条目自动加入购物车（无需人工确认） -->
+    <el-drawer
+      v-model="posDrawerVisible"
+      title="扫码枪 · 自动加购"
+      size="420px"
+      @open="startPosPolling"
+      @close="stopPosPolling"
+    >
+      <div class="pos-drawer-body">
+        <div v-if="!posSession" class="pos-drawer-tip warn">
+          未生成收银台码。请先点击「收银台设置」生成，再让店员在小程序绑定。
+        </div>
+        <template v-else>
+          <div class="pos-drawer-tip">
+            已绑定收银台 {{ posSession }}。店员扫码的商品将自动加入购物车，本会话已自动加入 {{ posAutoCount }} 件。
+          </div>
+          <div v-if="posPending.length" class="pos-list">
+            <div v-for="it in posPending" :key="it.id" class="pos-item">
+              <div class="pi-main">
+                <template v-if="it.sku">
+                  <div class="pi-name">{{ it.sku.goodsName || it.sku.skuCode }}</div>
+                  <div class="pi-spec">
+                    {{ it.sku.skuCode }}<template v-if="it.sku.color || it.sku.size"> · {{ it.sku.color }} / {{ it.sku.size }}</template>
+                  </div>
+                  <div class="pi-price">¥ {{ (it.sku.salePrice || 0).toFixed(2) }} × {{ it.qty }}</div>
+                </template>
+                <template v-else>
+                  <div class="pi-name deleted">商品已删除（自动清理）</div>
+                  <div class="pi-spec">SKU 已被删除，不会加入购物车</div>
+                </template>
+              </div>
+              <span class="pi-status">自动加入中…</span>
+            </div>
+          </div>
+          <el-empty v-else description="等待扫码加购（店员扫码后自动进入购物车）" :image-size="80" />
+        </template>
+      </div>
+    </el-drawer>
+
     <!-- 成功结果弹窗 -->
     <ResultDialog v-model="doneVisible" :title="doneTitle" :lines="doneLines" />
   </div>
@@ -336,7 +403,8 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Delete, Refresh } from '@element-plus/icons-vue'
+import { Search, Delete, Refresh, Monitor, Setting } from '@element-plus/icons-vue'
+import service from '@/utils/request'
 import { checkout, refund, exchange, getRefundableOrders } from '@/api/jxc/cashier'
 import { getSalePage, getSaleDetail, getSaleRemaining } from '@/api/jxc/sale'
 import { getSkuList } from '@/api/jxc/goods'
@@ -404,7 +472,11 @@ const addToCart = (sku) => {
   cart.value.push({ skuId: sku.ID, skuCode: sku.skuCode, color: sku.color, size: sku.size, salePrice: sku.salePrice || 0, qty: 1, available: sku.available })
 }
 
-const clearCart = () => { cart.value = []; paidAmount.value = 0 }
+const clearCart = () => {
+  cart.value = []
+  paidAmount.value = 0
+  posAutoCount.value = 0 // 清空购物车视为本次收银结束，自动加购累计数归零
+}
 const totalAmount = computed(() => cart.value.reduce((s, it) => s + it.salePrice * it.qty, 0))
 const change = computed(() => paidAmount.value - totalAmount.value)
 
@@ -581,6 +653,148 @@ const loadOptions = async () => {
   loadRefundOrders()
 }
 
+// ===== 扫码枪（M3）：收银台码生成/重置 + 扫码条目轮询 → 自动加购 =====
+const POS_SESSION_KEY = 'posSession'
+const posSettingsVisible = ref(false)
+const posSessionCreating = ref(false)
+const posSessionResetting = ref(false)
+// 当前收银台码（localStorage 持久化）；无码时不轮询，小程序扫码无法加购
+const posSession = ref(localStorage.getItem(POS_SESSION_KEY) || '')
+const posDrawerVisible = ref(false)
+const posPending = ref([])      // 当前轮询到的待消费条目（仅展示处理过程，消费后即消失）
+const posAutoCount = ref(0)     // 本次收银自动加入购物车件数（badge 展示，清空/收款后归零）
+let posPollTimer = null         // 3s 轮询定时器句柄
+let posKnownIds = new Set()     // 已见条目 id 集合：新见=自动加购；滞留（上次 confirm 失败）=补 confirm 不加购
+let posFirstLoad = false        // 首次打开标记：首拉不提示音，避免打开瞬间轰炸
+
+// 生成收银台码：POST 创建并把码写入 localStorage（小程序凭此码绑定）
+const createPosSession = async (silent = false) => {
+  posSessionCreating.value = true
+  try {
+    const res = await service.post('/jxc/pos/session', { remark: 'PC 收银台' }, { donNotShowLoading: true })
+    if (res && res.code !== 0) return
+    const code = (res.data && res.data.code) || ''
+    if (!code) { ElMessage.error('生成收银台码失败'); return }
+    localStorage.setItem(POS_SESSION_KEY, code)
+    posSession.value = code
+    if (!silent) ElMessage.success(`收银台码已生成：${code}`)
+  } catch (e) {
+    ElMessage.error('生成收银台码失败')
+    console.warn('[pos] 生成收银台码失败', e)
+  } finally {
+    posSessionCreating.value = false
+  }
+}
+
+// 重置收银台码：作废旧码 → 生成新码；旧码作废后小程序需重新绑定
+const resetPosSession = async () => {
+  const old = posSession.value
+  if (!old) return
+  posSessionResetting.value = true
+  try {
+    await service.put('/jxc/pos/session/disable', { code: old }, { donNotShowLoading: true })
+  } catch (e) {
+    console.warn('[pos] 作废收银台码失败', e)
+  } finally {
+    posSessionResetting.value = false
+    localStorage.removeItem(POS_SESSION_KEY)
+    posSession.value = ''
+  }
+  // 作废后立即生成新码，保证收银台持续可用
+  await createPosSession(true)
+  if (posSession.value) ElMessage.info('旧码已作废，小程序需重新绑定')
+}
+
+// Web Audio API 生成短促 beep 提示音（无需音频文件；自动加购时播放）
+let posAudioCtx = null
+const playPosBeep = () => {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext
+    if (!Ctx) return
+    posAudioCtx = posAudioCtx || new Ctx()
+    if (posAudioCtx.state === 'suspended') posAudioCtx.resume()
+    const osc = posAudioCtx.createOscillator()
+    const gain = posAudioCtx.createGain()
+    osc.type = 'square'
+    osc.frequency.value = 880
+    gain.gain.setValueAtTime(0.001, posAudioCtx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.25, posAudioCtx.currentTime + 0.01)
+    gain.gain.exponentialRampToValueAtTime(0.001, posAudioCtx.currentTime + 0.2)
+    osc.connect(gain)
+    gain.connect(posAudioCtx.destination)
+    osc.start()
+    osc.stop(posAudioCtx.currentTime + 0.22)
+  } catch (e) {
+    console.warn('[pos] 提示音播放失败', e)
+  }
+}
+
+// 扫码条目加入购物车：复用现有 cart 数据结构，同 SKU 合并数量（totalAmount 由 computed 自动更新）；
+// 返回实际加入件数（库存不足时截断），供累计 badge 使用
+const posAddToCart = (it) => {
+  const sku = it.sku
+  if (!sku) return 0
+  const available = skuStock.value[sku.id] ?? 0
+  if (available <= 0) { ElMessage.warning('该 SKU 无可售库存'); return 0 }
+  const added = Math.min(it.qty, available)
+  const exist = cart.value.find((r) => r.skuId === sku.id)
+  if (exist) exist.qty = Math.min(exist.qty + added, exist.available)
+  else cart.value.push({ skuId: sku.id, skuCode: sku.skuCode, color: sku.color, size: sku.size, salePrice: sku.salePrice || 0, qty: added, available })
+  if (added < it.qty) ElMessage.warning(`库存不足，已加入 ${added} 件`)
+  return added
+}
+
+// 轮询加载待消费条目并自动加购：
+// - 新见条目（posKnownIds 未见）→ 自动加入购物车 + confirm
+// - 滞留条目（上次 confirm 失败）→ 补 confirm 不加购，避免重复加购
+// - sku=null 条目 → 只 confirm 清理，不入购物车
+const loadPosPending = async (isFirst = false) => {
+  if (!posSession.value) return
+  try {
+    const res = await service.get('/jxc/pos/scan/pending', { params: { session: posSession.value }, donNotShowLoading: true })
+    const list = Array.isArray(res.data) ? res.data : []
+    posPending.value = list
+    const fresh = list.filter((it) => !posKnownIds.has(it.id))   // 本次新见条目
+    const stale = list.filter((it) => posKnownIds.has(it.id))    // 滞留条目（上次 confirm 未成功）
+    // 提示音：非首次拉取且出现新有效条目（自动加购时响）
+    if (!isFirst && posFirstLoad && fresh.some((it) => it.sku)) playPosBeep()
+    // 自动加购（核心语义：无人工确认，扫码即进购物车）
+    fresh.filter((it) => it.sku).forEach((it) => { posAutoCount.value += posAddToCart(it) })
+    // confirm：新见条目 + 滞留条目；sku=null 的不加购但一并清理
+    const ids = [...fresh.map((it) => it.id), ...stale.map((it) => it.id)]
+    if (ids.length) {
+      try {
+        await service.put('/jxc/pos/scan/confirm', { ids }, { donNotShowLoading: true })
+      } catch (e) {
+        // confirm 失败：条目留待下次轮询补 confirm（posKnownIds 已收录，不会重复加购）
+        console.warn('[pos] 确认扫码条目失败', e)
+      }
+    }
+    posKnownIds = new Set(list.map((it) => it.id))
+    posFirstLoad = true
+  } catch (e) {
+    // 轮询失败静默，不影响页面其它功能
+    console.warn('[pos] 扫码队列轮询失败', e)
+  }
+}
+
+// 面板打开：立即拉取一次并启动 3s 轮询；重复调用不叠加定时器；无收银台码不启动
+const startPosPolling = () => {
+  if (posPollTimer) return
+  if (!posSession.value) return
+  posFirstLoad = false
+  loadPosPending(true)
+  posPollTimer = setInterval(() => loadPosPending(false), 3000)
+}
+
+// 面板关闭 / 页面卸载：清理定时器，避免泄漏
+const stopPosPolling = () => {
+  if (posPollTimer) {
+    clearInterval(posPollTimer)
+    posPollTimer = null
+  }
+}
+
 // ===== POS 辅助（纯展示，不改业务逻辑） =====
 const searchRef = ref(null)
 const exchangeSearchRef = ref(null)
@@ -645,6 +859,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onGlobalKeydown)
+  stopPosPolling()
 })
 </script>
 
@@ -978,4 +1193,70 @@ onBeforeUnmount(() => {
 }
 .diff-line b { font-size: 15px; }
 .diff-line b i { font-style: normal; font-size: 12px; margin-left: 4px; }
+
+/* ===== 收银台设置弹窗 ===== */
+.pos-settings { display: flex; flex-direction: column; gap: 14px; }
+.pos-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.ps-label { font-size: 13px; color: #606266; flex-shrink: 0; }
+.ps-code {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 5px;
+  color: #409eff;
+}
+.ps-tip {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.7;
+  background: #fdf6ec;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.ps-btns { display: flex; gap: 10px; }
+
+/* ===== 扫码枪抽屉 ===== */
+.pos-gun-badge { margin-left: 10px; }
+.pos-drawer-body { display: flex; flex-direction: column; height: 100%; }
+.pos-drawer-tip {
+  font-size: 12px;
+  color: #909399;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.pos-drawer-tip.warn {
+  color: #e6a23c;
+  background: #fdf6ec;
+}
+.pos-list { flex: 1; min-height: 0; overflow: auto; }
+.pos-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px dashed #f0f2f5;
+}
+.pos-item:last-child { border-bottom: none; }
+.pos-item .pi-main { min-width: 0; flex: 1; }
+.pos-item .pi-name { font-size: 14px; font-weight: 600; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pos-item .pi-name.deleted { color: #f56c6c; }
+.pos-item .pi-spec { font-size: 11px; color: #909399; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pos-item .pi-price { font-size: 13px; color: #ff5a1f; font-weight: 700; margin-top: 4px; }
+.pi-status {
+  font-size: 11px;
+  color: #67c23a;
+  background: #f0f9eb;
+  border-radius: 20px;
+  padding: 3px 10px;
+  flex-shrink: 0;
+}
 </style>
