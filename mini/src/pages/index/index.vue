@@ -81,9 +81,9 @@ const menus = [
   { key: 'scan', name: '扫码查库存', glyph: '查', cls: 'tint-green', type: 'tab', url: '/pages/stock/stock' },
   { key: 'dashboard', name: '经营看板', glyph: '板', cls: 'tint-green-deep', type: 'page', url: '/pages/dashboard/dashboard' },
   { key: 'pos', name: '扫码加购', glyph: '扫', cls: 'tint-green-deep', type: 'action' },
+  { key: 'stocktake', name: '扫码盘点', glyph: '盘', cls: 'tint-green-deep', type: 'page', url: '/pages/stocktake/index' },
+  { key: 'direct', name: '出入库', glyph: '库', cls: 'tint-green-deep', type: 'page', url: '/pages/direct/index' },
   { key: 'cashier', name: '收银', glyph: '收', cls: 'tint-gray', disabled: true, tag: '敬请期待' },
-  { key: 'check', name: '盘点', glyph: '盘', cls: 'tint-gray', disabled: true },
-  { key: 'io', name: '出入库', glyph: '库', cls: 'tint-gray', disabled: true },
   { key: 'sales', name: '销售记录', glyph: '销', cls: 'tint-gray', disabled: true }
 ]
 
