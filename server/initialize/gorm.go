@@ -97,6 +97,7 @@ func RegisterTables() {
 	jxc.SaleOrder{},
 	jxc.SaleItem{},
 	jxc.PosScan{},
+	jxc.PosSession{},
 	)
 	if err != nil {
 		logger.Bg().Mod("system").Err(err).Error("register table failed")

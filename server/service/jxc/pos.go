@@ -3,6 +3,7 @@ package jxc
 import (
 	"context"
 	"errors"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -14,14 +15,69 @@ import (
 // PosScanService 扫码枪队列服务
 type PosScanService struct{}
 
-// CreateScan 小程序扫码上架：按条码/SKU编码 查 SKU 并入待处理队列。
-// 同一 SKU 已有待处理记录时数量累加（连续扫同款合并）。
-func (s *PosScanService) CreateScan(ctx context.Context, barcode string, skuID uint, qty int) (*jxc.PosScan, error) {
+const sessionCodeChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // 去掉易混淆的 I/O/0/1
+
+// CreateSession 生成新的收银台码（PC 收银台设置页）
+func (s *PosScanService) CreateSession(ctx context.Context, remark string) (*jxc.PosSession, error) {
+	db := global.GVA_DB.WithContext(ctx)
+	for i := 0; i < 10; i++ {
+		code := randomCode(6)
+		// 唯一碰撞重试
+		var cnt int64
+		if err := db.Model(&jxc.PosSession{}).Where("code = ?", code).Count(&cnt).Error; err != nil {
+			return nil, err
+		}
+		if cnt == 0 {
+			ss := jxc.PosSession{Code: code, Remark: strings.TrimSpace(remark), Status: 1}
+			if err := db.Create(&ss).Error; err != nil {
+				return nil, err
+			}
+			return &ss, nil
+		}
+	}
+	return nil, errors.New("生成收银台码失败，请重试")
+}
+
+// CheckSession 校验收银台码是否有效（小程序绑定用）
+func (s *PosScanService) CheckSession(ctx context.Context, code string) (*jxc.PosSession, error) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return nil, errors.New("请输入收银台码")
+	}
+	var ss jxc.PosSession
+	err := global.GVA_DB.WithContext(ctx).Where("code = ? AND status = 1", code).First(&ss).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("收银台码无效，请核对后在 PC 收银台设置中获取")
+		}
+		return nil, err
+	}
+	return &ss, nil
+}
+
+// DisableSession 作废收银台码（PC 重置：旧码立即失效，小程序需重新绑定）
+func (s *PosScanService) DisableSession(ctx context.Context, code string) error {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return errors.New("收银台码不能为空")
+	}
+	return global.GVA_DB.WithContext(ctx).Model(&jxc.PosSession{}).
+		Where("code = ? AND status = 1", code).
+		Updates(map[string]interface{}{"status": 0}).Error
+}
+
+// CreateScan 小程序扫码上架：按条码/SKU编码 查 SKU，投递到指定收银台会话。
+// 同一 SKU 在同一会话已有未消费记录时数量累加（连续扫同款合并）。
+func (s *PosScanService) CreateScan(ctx context.Context, session, barcode string, skuID uint, qty int) (*jxc.PosScan, error) {
 	if qty <= 0 {
 		qty = 1
 	}
 	if qty > 99 {
 		return nil, errors.New("单次扫码数量不能超过 99")
+	}
+	// 会话必须有效
+	if _, err := s.CheckSession(ctx, session); err != nil {
+		return nil, err
 	}
 	db := global.GVA_DB.WithContext(ctx)
 
@@ -43,9 +99,10 @@ func (s *PosScanService) CreateScan(ctx context.Context, barcode string, skuID u
 		}
 	}
 
-	// 同 SKU 待处理记录数量累加
+	// 同会话同 SKU 未消费记录数量累加
+	session = strings.TrimSpace(session)
 	var scan jxc.PosScan
-	err := db.Where("sku_id = ? AND status = 0", sku.ID).First(&scan).Error
+	err := db.Where("session = ? AND sku_id = ? AND status = 0", session, sku.ID).First(&scan).Error
 	if err == nil {
 		scan.Qty += qty
 		if err := db.Save(&scan).Error; err != nil {
@@ -56,18 +113,26 @@ func (s *PosScanService) CreateScan(ctx context.Context, barcode string, skuID u
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
-	scan = jxc.PosScan{SkuID: sku.ID, Qty: qty, Status: 0}
+	scan = jxc.PosScan{Session: session, SkuID: sku.ID, Qty: qty, Status: 0}
 	if err := db.Create(&scan).Error; err != nil {
 		return nil, err
 	}
 	return &scan, nil
 }
 
-// ListPending 待处理扫码条目（PC 收银台轮询），附带 SKU 摘要
-func (s *PosScanService) ListPending(ctx context.Context) ([]jxc.PosScanDetail, error) {
+// ListPending 指定收银台会话的未消费扫码条目（PC 轮询），附带 SKU 摘要
+func (s *PosScanService) ListPending(ctx context.Context, session string) ([]jxc.PosScanDetail, error) {
+	session = strings.TrimSpace(session)
+	if session == "" {
+		return nil, errors.New("收银台码不能为空")
+	}
+	// 会话必须有效（作废/不存在 → 前端提示重新生成绑定）
+	if _, err := s.CheckSession(ctx, session); err != nil {
+		return nil, err
+	}
 	db := global.GVA_DB.WithContext(ctx)
 	var list []jxc.PosScan
-	if err := db.Where("status = 0").Order("created_at ASC").Find(&list).Error; err != nil {
+	if err := db.Where("session = ? AND status = 0", session).Order("created_at ASC").Find(&list).Error; err != nil {
 		return nil, err
 	}
 	details := make([]jxc.PosScanDetail, 0, len(list))
@@ -95,7 +160,7 @@ func (s *PosScanService) ListPending(ctx context.Context) ([]jxc.PosScanDetail, 
 	return details, nil
 }
 
-// ConfirmScan PC 收银台确认：批量标记已处理（加入购物车后）
+// ConfirmScan PC 收银台消费确认：批量标记已处理（自动加入购物车后）
 func (s *PosScanService) ConfirmScan(ctx context.Context, ids []uint) error {
 	if len(ids) == 0 {
 		return errors.New("请选择要确认的扫码条目")
@@ -104,4 +169,14 @@ func (s *PosScanService) ConfirmScan(ctx context.Context, ids []uint) error {
 	return global.GVA_DB.WithContext(ctx).Model(&jxc.PosScan{}).
 		Where("id IN ? AND status = 0", ids).
 		Updates(map[string]interface{}{"status": 1, "handled_at": &now}).Error
+}
+
+// randomCode 生成 n 位不混淆字符收银台码
+func randomCode(n int) string {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = sessionCodeChars[r.Intn(len(sessionCodeChars))]
+	}
+	return string(b)
 }
