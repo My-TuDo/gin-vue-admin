@@ -1,20 +1,9 @@
 <template>
   <div class="cashier">
-    <el-tabs v-model="activeTab" class="cashier-tabs" @tab-change="onTabChange">
-      <!-- 顶部工具区（与 tabs 同行）：收银台码状态 + 设置 + 扫码枪入口 -->
-      <template #extra>
-        <span v-if="posSession" class="pos-session-chip">
-          <el-icon><Monitor /></el-icon> 收银台码 {{ posSession }}
-        </span>
-        <span v-else class="pos-session-chip warn">
-          <el-icon><Warning /></el-icon> 未生成收银台码
-        </span>
-        <el-button :icon="Setting" @click="posSettingsVisible = true">收银台设置</el-button>
-        <el-badge :value="posAutoCount" :hidden="posAutoCount <= 0" :max="999">
-          <el-button :icon="Monitor" @click="posDrawerVisible = true">扫码枪</el-button>
-        </el-badge>
-      </template>
-      <!-- ==================== 收款 ==================== -->
+    <!-- 头部行：收款/退款/换货 tabs 与 收银台设置/扫码枪 同级别同行（flex，不依赖任何插槽） -->
+    <div class="cashier-header">
+      <el-tabs v-model="activeTab" class="cashier-tabs" @tab-change="onTabChange">
+        <!-- ==================== 收款 ==================== -->
       <el-tab-pane label="收款" name="cash">
         <div class="pos-cash">
           <!-- 左侧：搜索 + 商品网格 -->
@@ -340,6 +329,21 @@
         </div>
       </el-tab-pane>
     </el-tabs>
+
+    <!-- 与 tabs 同行的操作区：收银台码状态 + 收银台设置 + 扫码枪 -->
+    <div class="pos-actions">
+      <span v-if="posSession" class="pos-session-chip">
+        <el-icon><Monitor /></el-icon> 收银台码 {{ posSession }}
+      </span>
+      <span v-else class="pos-session-chip warn">
+        <el-icon><Warning /></el-icon> 未生成收银台码
+      </span>
+      <el-button :icon="Setting" @click="posSettingsVisible = true">收银台设置</el-button>
+      <el-badge :value="posAutoCount" :hidden="posAutoCount <= 0" :max="999">
+        <el-button :icon="Monitor" @click="posDrawerVisible = true">扫码枪</el-button>
+      </el-badge>
+    </div>
+    </div>
 
     <!-- 收银台设置弹窗：生成/重置收银台码，供小程序「我的-绑定收银台」绑定 -->
     <el-dialog v-model="posSettingsVisible" title="收银台设置" width="500px" append-to-body>
@@ -871,7 +875,19 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .cashier { padding: 2px 0; }
-/* 收银台码状态 chip（位于 tabs 头部右侧工具区） */
+/* 头部行：tabs 与操作区同级别同行 */
+.cashier-header { display: flex; align-items: flex-start; gap: 12px; }
+.cashier-tabs { flex: 1; min-width: 0; }
+/* 与 tabs 同行的操作区 */
+.pos-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+/* 收银台码状态 chip */
 .pos-session-chip {
   display: inline-flex;
   align-items: center;
