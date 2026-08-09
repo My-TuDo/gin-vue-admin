@@ -330,7 +330,7 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 与 tabs 同行的操作区：收银台码状态 + 收银台设置 + 扫码枪 -->
+    <!-- 与 tabs 同行的操作区：收银台码状态 + 自动加购计数 + 收银台设置 + 降频恢复 -->
     <div class="pos-actions">
       <span v-if="posSession" class="pos-session-chip">
         <el-icon><Monitor /></el-icon> 收银台码 {{ posSession }}
@@ -338,10 +338,11 @@
       <span v-else class="pos-session-chip warn">
         <el-icon><Warning /></el-icon> 未生成收银台码
       </span>
+      <span v-if="posAutoCount > 0" class="pos-session-chip count">
+        <el-icon><ShoppingCart /></el-icon> 已自动加入 {{ posAutoCount }} 件
+      </span>
       <el-button :icon="Setting" @click="posSettingsVisible = true">收银台设置</el-button>
-      <el-badge :value="posAutoCount" :hidden="posAutoCount <= 0" :max="999">
-        <el-button :icon="Monitor" @click="posDrawerVisible = true">扫码枪</el-button>
-      </el-badge>
+      <el-button v-if="posPollSlow" link type="warning" :icon="Refresh" @click="resumePosPolling">自动刷新已降频，点击恢复</el-button>
     </div>
     </div>
 
@@ -366,49 +367,6 @@
       </div>
     </el-dialog>
 
-    <!-- 扫码枪抽屉：打开时 3s 轮询；新扫码条目自动加入购物车（无需人工确认） -->
-    <el-drawer
-      v-model="posDrawerVisible"
-      title="扫码枪 · 自动加购"
-      size="420px"
-      @open="onPosDrawerOpen"
-    >
-      <div class="pos-drawer-body">
-        <div v-if="!posSession" class="pos-drawer-tip warn">
-          未生成收银台码。请先点击「收银台设置」生成，再让店员在小程序绑定。
-        </div>
-        <template v-else>
-          <div class="pos-drawer-tip">
-            已绑定收银台 {{ posSession }}。店员扫码的商品将自动加入购物车，本会话已自动加入 {{ posAutoCount }} 件。
-          </div>
-          <!-- 轮询降频态：连续空结果达上限自动切 30s 低频保活，拉到条目自动恢复高频 -->
-          <div v-if="posPollSlow" class="pos-drawer-tip warn">
-            自动刷新已降频（长时间无扫码），点击恢复
-            <el-button link type="primary" size="small" @click="resumePosPolling">恢复</el-button>
-          </div>
-          <div v-if="posPending.length" class="pos-list">
-            <div v-for="it in posPending" :key="it.id" class="pos-item">
-              <div class="pi-main">
-                <template v-if="it.sku">
-                  <div class="pi-name">{{ it.sku.goodsName || it.sku.skuCode }}</div>
-                  <div class="pi-spec">
-                    {{ it.sku.skuCode }}<template v-if="it.sku.color || it.sku.size"> · {{ it.sku.color }} / {{ it.sku.size }}</template>
-                  </div>
-                  <div class="pi-price">¥ {{ (it.sku.salePrice || 0).toFixed(2) }} × {{ it.qty }}</div>
-                </template>
-                <template v-else>
-                  <div class="pi-name deleted">商品已删除（自动清理）</div>
-                  <div class="pi-spec">SKU 已被删除，不会加入购物车</div>
-                </template>
-              </div>
-              <span class="pi-status">自动加入中…</span>
-            </div>
-          </div>
-          <el-empty v-else description="等待扫码加购（店员扫码后自动进入购物车）" :image-size="80" />
-        </template>
-      </div>
-    </el-drawer>
-
     <!-- 成功结果弹窗 -->
     <ResultDialog v-model="doneVisible" :title="doneTitle" :lines="doneLines" />
   </div>
@@ -417,7 +375,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Delete, Refresh, Monitor, Setting, Warning } from '@element-plus/icons-vue'
+import { Search, Delete, Refresh, Monitor, Setting, Warning, ShoppingCart } from '@element-plus/icons-vue'
 import service from '@/utils/request'
 import { checkout, refund, exchange, getRefundableOrders } from '@/api/jxc/cashier'
 import { getSalePage, getSaleDetail, getSaleRemaining } from '@/api/jxc/sale'
@@ -674,9 +632,7 @@ const posSessionCreating = ref(false)
 const posSessionResetting = ref(false)
 // 当前收银台码（localStorage 持久化）；无码时不轮询，小程序扫码无法加购
 const posSession = ref(localStorage.getItem(POS_SESSION_KEY) || '')
-const posDrawerVisible = ref(false)
-const posPending = ref([])      // 当前轮询到的待消费条目（仅展示处理过程，消费后即消失）
-const posAutoCount = ref(0)     // 本次收银自动加入购物车件数（badge 展示，清空/收款后归零）
+const posAutoCount = ref(0)     // 本次收银自动加入购物车件数（头部 chip 展示，清空/收款后归零）
 let posPollTimer = null          // 轮询定时器句柄（页面级常驻，抽屉开关不启停）
 const POS_POLL_FAST_MS = 3000    // 高频轮询间隔：正常收银 3s 一次
 const POS_POLL_SLOW_MS = 30000   // 低频保活间隔：长时间无扫码 30s 一次（保活且不刷屏）
@@ -767,19 +723,32 @@ const posAddToCart = (it) => {
 // - 新见条目（posKnownIds 未见）→ 自动加入购物车 + confirm
 // - 滞留条目（上次 confirm 失败）→ 补 confirm 不加购，避免重复加购
 // - sku=null 条目 → 只 confirm 清理，不入购物车
+// 扫码错误条目提示节流：同一 error 内容 1s 内只提示一次（避免批量错误刷屏）
+let posErrorTipAt = 0
+let posErrorTipText = ''
+const showPosScanError = (text) => {
+  if (!text) return
+  const now = Date.now()
+  if (now - posErrorTipAt < 1000 && text === posErrorTipText) return
+  posErrorTipAt = now
+  posErrorTipText = text
+  ElMessage.error(`扫码失败：${text}`)
+}
+
 const loadPosPending = async (isFirst = false) => {
   if (!posSession.value) return
   try {
     const res = await service.get('/jxc/pos/scan/pending', { params: { session: posSession.value }, donNotShowLoading: true })
     const list = Array.isArray(res.data) ? res.data : []
-    posPending.value = list
     const fresh = list.filter((it) => !posKnownIds.has(it.id))   // 本次新见条目
     const stale = list.filter((it) => posKnownIds.has(it.id))    // 滞留条目（上次 confirm 未成功）
-    // 提示音：非首次拉取且出现新有效条目（自动加购时响）
+    // 错误条目（error 非空、sku=null）：PC 端节流提示；自动 confirm 清理，不入购物车/不响提示音/不计累计
+    fresh.forEach((it) => { if (it.error) showPosScanError(it.error) })
+    // 提示音：非首次拉取且出现新有效条目（自动加购时响；error 条目 sku=null 天然不触发）
     if (!isFirst && posFirstLoad && fresh.some((it) => it.sku)) playPosBeep()
     // 自动加购（核心语义：无人工确认，扫码即进购物车）
     fresh.filter((it) => it.sku).forEach((it) => { posAutoCount.value += posAddToCart(it) })
-    // confirm：新见条目 + 滞留条目；sku=null 的不加购但一并清理
+    // confirm：新见条目 + 滞留条目；sku=null / error 的不加购但一并清理
     const ids = [...fresh.map((it) => it.id), ...stale.map((it) => it.id)]
     if (ids.length) {
       try {
@@ -820,12 +789,6 @@ const applyPollInterval = () => {
     posPollTimer = null
   }
   posPollTimer = setInterval(() => loadPosPending(false), interval)
-}
-
-// 抽屉打开：不启停轮询（页面级常驻），仅重置计数并立即刷新一次列表（首拉基线保留）
-const onPosDrawerOpen = () => {
-  posEmptyCount = 0
-  loadPosPending(true)
 }
 
 // 手动恢复高频：清空计数 + 立即拉一次 + 切回 3s（applyPollInterval 幂等，不叠加）
@@ -1327,44 +1290,6 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
 }
 .ps-btns { display: flex; gap: 10px; }
-
-/* ===== 扫码枪抽屉 ===== */
-.pos-drawer-body { display: flex; flex-direction: column; height: 100%; }
-.pos-drawer-tip {
-  font-size: 12px;
-  color: #909399;
-  background: #f8fafc;
-  border-radius: 8px;
-  padding: 8px 10px;
-  margin-bottom: 10px;
-}
-.pos-drawer-tip.warn {
-  color: #e6a23c;
-  background: #fdf6ec;
-}
-.pos-list { flex: 1; min-height: 0; overflow: auto; }
-.pos-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 4px;
-  border-bottom: 1px dashed #f0f2f5;
-}
-.pos-item:last-child { border-bottom: none; }
-.pos-item .pi-main { min-width: 0; flex: 1; }
-.pos-item .pi-name { font-size: 14px; font-weight: 600; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pos-item .pi-name.deleted { color: #f56c6c; }
-.pos-item .pi-spec { font-size: 11px; color: #909399; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pos-item .pi-price { font-size: 13px; color: #ff5a1f; font-weight: 700; margin-top: 4px; }
-.pi-status {
-  font-size: 11px;
-  color: #67c23a;
-  background: #f0f9eb;
-  border-radius: 20px;
-  padding: 3px 10px;
-  flex-shrink: 0;
-}
 
 /* ===== 小屏兜底 =====
    <1280px：收紧右列与商品卡密度；<1024px：收银区改纵向堆叠，

@@ -54,7 +54,7 @@
 <script setup>
 import { ref } from 'vue'
 import { onLoad, onPullDownRefresh, onShow } from '@dcloudio/uni-app'
-import { get } from '@/utils/request'
+import { get, post } from '@/utils/request'
 import { isLoggedIn } from '@/utils/auth'
 import { LOGIN_PAGE } from '@/config'
 
@@ -80,7 +80,7 @@ const FRESH_TTL = 30 * 1000
 const menus = [
   { key: 'scan', name: '扫码查库存', glyph: '查', cls: 'tint-green', type: 'tab', url: '/pages/stock/stock' },
   { key: 'dashboard', name: '经营看板', glyph: '板', cls: 'tint-green-deep', type: 'page', url: '/pages/dashboard/dashboard' },
-  { key: 'pos', name: '扫码上架', glyph: '扫', cls: 'tint-green-deep', type: 'page', url: '/pages/pos/pos' },
+  { key: 'pos', name: '扫码加购', glyph: '扫', cls: 'tint-green-deep', type: 'action' },
   { key: 'cashier', name: '收银', glyph: '收', cls: 'tint-gray', disabled: true, tag: '敬请期待' },
   { key: 'check', name: '盘点', glyph: '盘', cls: 'tint-gray', disabled: true },
   { key: 'io', name: '出入库', glyph: '库', cls: 'tint-gray', disabled: true },
@@ -168,15 +168,72 @@ function goDashboard() {
   uni.navigateTo({ url: '/pages/dashboard/dashboard' })
 }
 
+const POS_SESSION_KEY = 'posSession'
+
 function onMenu(item) {
   if (item.disabled) {
     uni.showToast({ title: item.tag || 'M3 开发中，敬请期待', icon: 'none' })
+    return
+  }
+  // 「扫」入口：点击直接启动微信扫码（无需独立页面）
+  if (item.key === 'pos') {
+    startScan()
     return
   }
   if (item.type === 'tab') {
     uni.switchTab({ url: item.url })
   } else {
     uni.navigateTo({ url: item.url })
+  }
+}
+
+// 首页直接扫码：微信扫条码 → 提交到 PC 收银台队列（商品错误由 PC 端展示，此处不弹）
+function startScan() {
+  // #ifdef MP-WEIXIN
+  uni.scanCode({
+    onlyFromCamera: false,
+    scanType: ['barCode', 'qrCode'],
+    success: (res) => {
+      const result = res && res.result
+      if (!result) {
+        uni.showToast({ title: '未识别到条码内容', icon: 'none' })
+        return
+      }
+      submitScan(String(result).trim())
+    },
+    fail: () => {
+      // 取消/失败静默：取消扫码是常见操作，不打扰
+    }
+  })
+  // #endif
+  // #ifndef MP-WEIXIN
+  uni.showToast({ title: '扫码功能请在微信小程序中使用', icon: 'none' })
+  // #endif
+}
+
+// 提交扫码：未绑定先引导去「我的」；成功后仅提示成功（商品类错误在 PC 端展示）
+async function submitScan(barcode) {
+  const session = uni.getStorageSync(POS_SESSION_KEY) || ''
+  if (!session) {
+    uni.showToast({ title: '请先在「我的」绑定收银台', icon: 'none' })
+    uni.switchTab({ url: '/pages/mine/mine' })
+    return
+  }
+  uni.showLoading({ title: '扫码中…', mask: true })
+  try {
+    await post('/jxc/pos/scan', { barcode, qty: 1, session }, { silent: true })
+    // code=0：即使 data.error 非空（商品错误已入队）也只提示成功，报错交由 PC 端展示
+    uni.showToast({ title: '已加入收银台购物车', icon: 'success' })
+  } catch (e) {
+    // 会话无效（code=7）：清除本地绑定并引导重新绑定
+    if ((e && e.code) === 7 || ((e && e.msg) || '').indexOf('无效') >= 0) {
+      uni.removeStorageSync(POS_SESSION_KEY)
+      uni.showToast({ title: '收银台码已失效，请重新绑定', icon: 'none' })
+    } else {
+      uni.showToast({ title: (e && e.msg) || '扫码提交失败', icon: 'none' })
+    }
+  } finally {
+    uni.hideLoading()
   }
 }
 

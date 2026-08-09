@@ -50,6 +50,7 @@
         <text class="pos-unbound-arrow">›</text>
       </view>
       <view class="pos-tip">绑定后，扫码的商品将自动加入 PC 收银台购物车</view>
+      <view class="pos-tip">扫码入口在首页「扫码加购」</view>
     </view>
 
     <!-- 绑定收银台弹层（自绘，兼容 H5 与小程序） -->

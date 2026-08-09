@@ -41,14 +41,6 @@
         "navigationBarBackgroundColor": "#ffffff",
         "navigationBarTextStyle": "black"
       }
-    },
-    {
-      "path": "pages/pos/pos",
-      "style": {
-        "navigationBarTitleText": "扫码加购",
-        "navigationBarBackgroundColor": "#ffffff",
-        "navigationBarTextStyle": "black"
-      }
     }
   ],
   "globalStyle": {
