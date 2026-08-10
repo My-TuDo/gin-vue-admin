@@ -378,7 +378,8 @@ function fmtInt(n) {
   background: $ui-bg-card;
   border-radius: $ui-radius-md;
   padding: 12rpx 0;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  border: 1rpx solid $ui-border;
+  box-shadow: $ui-shadow-card;
 }
 
 .grid-item {

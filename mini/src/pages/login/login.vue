@@ -185,6 +185,7 @@ async function handleLogin() {
 
 .login-btn {
   margin-top: $ui-space-sm;
+  width: 100%;
   height: 88rpx;
   line-height: 88rpx;
   background: $ui-primary;
