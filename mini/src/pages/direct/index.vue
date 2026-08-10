@@ -1,16 +1,16 @@
 <template>
-  <view class="page">
+  <view class="ui-page page-direct">
     <!-- 表头区：仓库选择 + 方向切换 + 扫码添加 -->
     <view class="top-card ui-card">
       <picker :range="warehouseNames" :value="warehouseIndex" @change="onWarehouseChange">
-        <view class="wh-pick">
+        <view class="wh-pick" hover-class="ui-hover" hover-stay-time="60">
           <text class="wh-label">仓库</text>
           <text class="wh-value" :class="{ placeholder: !warehouseId }">{{ warehouseId ? warehouseName : '请选择仓库' }}</text>
         </view>
       </picker>
       <view class="dir-tabs">
-        <view class="dir-tab" :class="{ active: direction === 'in' }" @click="direction = 'in'">入 库</view>
-        <view class="dir-tab" :class="{ active: direction === 'out' }" @click="direction = 'out'">出 库</view>
+        <view class="dir-tab" :class="{ active: direction === 'in' }" hover-class="ui-hover" hover-stay-time="60" @click="direction = 'in'">入 库</view>
+        <view class="dir-tab" :class="{ active: direction === 'out' }" hover-class="ui-hover" hover-stay-time="60" @click="direction = 'out'">出 库</view>
       </view>
     </view>
 
@@ -22,8 +22,9 @@
         type="text"
         placeholder="搜索商品名称 / 款号"
         confirm-type="search"
+        @confirm="onSearchKey"
       />
-      <view class="ui-search-action" @click="doScan">扫码添加</view>
+      <view class="ui-search-action" hover-class="ui-hover" hover-stay-time="60" @click="doScan">扫码添加</view>
     </view>
 
     <!-- 商品列表区（可滚动）：浏览商品 → 点选进入 SKU 选择 -->
@@ -31,15 +32,18 @@
       <text class="section-title">商品列表</text>
       <text class="list-count">{{ goodsListFiltered.length }} 条</text>
     </view>
-    <scroll-view class="sku-scroll" scroll-y>
+    <scroll-view class="sku-scroll" scroll-y :scroll-into-view="scrollInto">
       <view v-if="listLoading" class="ui-empty">加载中…</view>
       <view v-else-if="listError" class="ui-err">
         <text class="ui-err-text">{{ listError }}</text>
-        <view class="ui-retry" @click="retryLoad">重试</view>
+        <view class="ui-retry" hover-class="ui-hover" hover-stay-time="60" @click="retryLoad">重试</view>
       </view>
-      <view v-else-if="!goodsListFiltered.length" class="ui-empty">{{ goodsList.length ? '无匹配商品' : '暂无商品数据' }}</view>
-      <view v-else class="goods-list">
-        <view v-for="g in goodsListFiltered" :key="g.ID" class="goods-item" @click="openSkuPop(g)">
+      <view v-else-if="!goodsListFiltered.length" class="ui-empty">
+        <text class="ui-empty-main">{{ goodsList.length ? '无匹配商品' : '暂无商品数据' }}</text>
+        <text class="ui-empty-sub">商品在 PC 端商品中心维护，此处实时同步</text>
+      </view>
+      <view v-else class="goods-list" id="top">
+        <view v-for="g in goodsListFiltered" :key="g.ID" class="goods-item" hover-class="ui-hover" hover-stay-time="60" @click="openSkuPop(g)">
           <view class="gi-main">
             <text class="gi-name">{{ g.name }}</text>
             <text v-if="g.code" class="gi-code">{{ g.code }}</text>
@@ -67,12 +71,12 @@
             </text>
           </view>
           <view class="ri-right">
-            <view class="ri-stepper ui-stepper">
-              <view class="step-btn" @click="stepRow(r, -1)">−</view>
+          <view class="ir-stepper ui-stepper">
+              <view class="step-btn" :class="{ disabled: r.qty <= 1 }" @click="stepRow(r, -1)">−</view>
               <view class="step-num">{{ r.qty }}</view>
               <view class="step-btn plus" @click="stepRow(r, 1)">+</view>
             </view>
-            <text class="ri-del" @click="rows.splice(idx, 1)">删</text>
+            <text class="ri-del" hover-class="ui-hover" hover-stay-time="60" @click="rows.splice(idx, 1)">删</text>
           </view>
         </view>
       </scroll-view>
@@ -80,6 +84,8 @@
       <view
         class="submit-btn"
         :class="{ disabled: submitting || !rows.length }"
+        hover-class="ui-hover"
+        hover-stay-time="60"
         @click="submit"
       >提交{{ direction === 'in' ? '入库' : '出库' }}（{{ rows.length }} 项）</view>
     </view>
@@ -90,7 +96,7 @@
         <view class="pop-head">
           <text class="pop-title">{{ currentGoods.name }}</text>
           <text v-if="currentGoods.code" class="pop-code">{{ currentGoods.code }}</text>
-          <view class="pop-close" @click="skuPopVisible = false">×</view>
+          <view class="pop-close" hover-class="ui-hover" hover-stay-time="60" @click="skuPopVisible = false">×</view>
         </view>
         <view v-if="!popSkus.length" class="ui-empty">该商品暂无 SKU，请先在电脑端商品中心添加</view>
         <scroll-view v-else class="pop-scroll" scroll-y>
@@ -107,7 +113,7 @@
           </view>
         </scroll-view>
         <view class="pop-foot">
-          <view class="pop-add-btn" :class="{ disabled: !popTotal }" @click="addFromPop">加入明细（合计 {{ popTotal }} 件）</view>
+          <view class="pop-add-btn" :class="{ disabled: !popTotal }" hover-class="ui-hover" hover-stay-time="60" @click="addFromPop">加入明细（合计 {{ popTotal }} 件）</view>
         </view>
       </view>
     </view>
@@ -136,6 +142,14 @@ const stockMap = ref({}) // skuId -> { qty: 总库存, avail: 可售 }（当前�
 const listKeyword = ref('') // 本地过滤词（匹配商品名称/款号）
 const listLoading = ref(false)
 const listError = ref('')
+// 搜索回车定位：滚动到商品列表顶部（scroll-into-view 锚点 id=top）
+const scrollInto = ref('')
+function onSearchKey() {
+  scrollInto.value = ''
+  setTimeout(() => {
+    scrollInto.value = 'top'
+  }, 50)
+}
 
 // ===== SKU 选择弹层状态 =====
 const skuPopVisible = ref(false)
@@ -304,7 +318,6 @@ function addFromPop() {
     addRow({ skuId: x.skuId, skuCode: x.skuCode, name: g.name || x.skuCode, color: x.color, size: x.size }, x.qty)
   })
   skuPopVisible.value = false
-  uni.showToast({ title: '已加入明细', icon: 'success' })
 }
 
 // 公共加入明细逻辑：同 SKU 数量累加；qty 参数缺省为 1（扫码/点选兼容）
@@ -354,7 +367,6 @@ async function addSku(barcode) {
       color: data.color || '',
       size: data.size || '',
     })
-    uni.showToast({ title: '已添加', icon: 'success' })
   } catch (e) {
     uni.showToast({ title: (e && e.msg) || '未找到该条码对应的商品', icon: 'none' })
   } finally {
@@ -433,13 +445,11 @@ async function submit() {
 </script>
 
 <style lang="scss" scoped>
-.page {
+.page-direct {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: $ui-space-md;
-  padding-bottom: 12rpx;
-  box-sizing: border-box;
+  padding-bottom: 12rpx; /* 其余 padding/圆角等复用 .ui-page */
 }
 
 .section-title {
@@ -491,7 +501,6 @@ async function submit() {
   &.active {
     background: linear-gradient(135deg, $ui-primary 0%, $ui-primary-light 100%);
     color: $ui-bg-card;
-    box-shadow: 0 6rpx 16rpx rgba(43, 138, 62, 0.25);
   }
 }
 
@@ -632,7 +641,7 @@ async function submit() {
 .ri-spec {
   display: block;
   margin-top: 2rpx;
-  font-size: 20rpx;
+  font-size: $ui-font-xs;
   color: $ui-text-3;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -650,7 +659,7 @@ async function submit() {
   padding: 8rpx 8rpx;
 }
 
-/* ===== 提交（复用 .ui-btn-primary，仅补高度与渐变） ===== */
+/* ===== 提交（复用 .ui-btn-primary，仅补高度） ===== */
 .submit-btn {
   margin-top: 14rpx;
   height: 88rpx;
@@ -661,7 +670,6 @@ async function submit() {
   font-size: 30rpx;
   font-weight: 700;
   border-radius: $ui-radius-full;
-  box-shadow: 0 8rpx 24rpx rgba(43, 138, 62, 0.25);
 
   &.disabled {
     opacity: 0.5;
@@ -692,11 +700,23 @@ async function submit() {
   margin-right: 12rpx;
 }
 .pop-close {
+  position: relative;
   font-size: 40rpx;
   line-height: 1;
   color: $ui-text-3;
   padding: 0 4rpx;
   flex-shrink: 0;
+
+  /* 命中区扩展至 88rpx（触控标准），视觉不变 */
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 88rpx;
+    height: 88rpx;
+    transform: translate(-50%, -50%);
+  }
 }
 .pop-scroll {
   flex: 1;
@@ -751,7 +771,6 @@ async function submit() {
   font-size: 30rpx;
   font-weight: 700;
   border-radius: $ui-radius-full;
-  box-shadow: 0 8rpx 24rpx rgba(43, 138, 62, 0.25);
 
   &.disabled {
     opacity: 0.5;

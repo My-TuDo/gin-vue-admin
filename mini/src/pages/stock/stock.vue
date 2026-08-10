@@ -10,17 +10,17 @@
         confirm-type="search"
         @confirm="doSearch"
       />
-      <view class="ui-search-action" @click="doScan">扫码</view>
-    </view>
-    <view class="query-row">
-      <button class="ui-btn-ghost" @click="doSearch">查 询</button>
+      <view class="ui-search-action" hover-class="ui-hover" hover-stay-time="60" @click="doScan">扫码</view>
     </view>
 
     <!-- 查询中 -->
     <view v-if="searching" class="ui-empty">查询中…</view>
 
     <!-- 未找到 -->
-    <view v-else-if="notFound" class="ui-empty">未找到该条码对应的商品</view>
+    <view v-else-if="notFound" class="ui-empty">
+      <text class="ui-empty-main">未找到该条码对应的商品</text>
+      <text class="ui-empty-sub">请核对条码，或在 PC 端商品中心上架商品</text>
+    </view>
 
     <!-- 查询失败 -->
     <view v-else-if="queryError" class="ui-err">
@@ -80,7 +80,10 @@
           </view>
         </view>
       </view>
-      <view v-else class="ui-empty">暂无库存记录</view>
+      <view v-else class="ui-empty">
+        <text class="ui-empty-main">暂无库存记录</text>
+        <text class="ui-empty-sub">该 SKU 尚未配置仓库库存</text>
+      </view>
     </template>
   </view>
 </template>
@@ -219,17 +222,6 @@ function toInt(n) {
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  padding: 24rpx;
-  box-sizing: border-box;
-}
-
-.query-row {
-  margin-top: 20rpx;
-  text-align: center;
-}
-
 /* SKU 信息卡 */
 .sku-card {
   margin-top: $ui-space-md;
@@ -263,7 +255,7 @@ function toInt(n) {
 
 .sku-k {
   font-size: 26rpx;
-  color: $ui-text-3;
+  color: $ui-text-2;
 }
 
 .sku-v {
@@ -325,14 +317,15 @@ function toInt(n) {
 }
 
 .avail-label {
-  font-size: 20rpx;
+  font-size: $ui-font-xs;
   color: $ui-text-3;
 }
 
 .avail-num {
-  font-size: 34rpx;
+  font-size: $ui-font-amount-s;
   font-weight: 600;
   color: $ui-primary;
+  font-variant-numeric: tabular-nums;
 
   &.danger {
     color: $ui-danger;

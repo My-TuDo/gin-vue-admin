@@ -2,7 +2,7 @@
   <view class="login-page">
     <view class="login-card">
       <view class="login-title">进销存管理系统</view>
-      <view class="login-subtitle">经营 · 库存 · 财务一站式管理</view>
+      <view class="login-subtitle">扫码查库存 · 出入库 · 盘点 · 销售</view>
 
       <view class="form-item">
         <text class="form-label">用户名</text>
@@ -37,8 +37,8 @@
           placeholder-class="ph"
           :maxlength="8"
         />
-        <image v-if="captchaImg" class="captcha-img" :src="captchaImg" mode="aspectFit" @click="loadCaptcha" />
-        <text v-else class="captcha-loading" @click="loadCaptcha">点击获取验证码</text>
+        <image v-if="captchaImg" class="captcha-img" :src="captchaImg" mode="aspectFit" hover-class="ui-hover" hover-stay-time="60" @click="loadCaptcha" />
+        <text v-else class="captcha-loading" hover-class="ui-hover" hover-stay-time="60" @click="loadCaptcha">点击获取验证码</text>
       </view>
 
       <button class="login-btn ui-btn-primary" :loading="loading" :disabled="loading" @click="handleLogin">

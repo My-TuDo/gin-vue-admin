@@ -8,11 +8,22 @@ $ui-primary: #2b8a3e; // 深主色：按钮/激活/主强调
 $ui-primary-light: #3fb45c; // 浅主色：渐变/高亮
 $ui-primary-bg: #e8f5e9; // 主色浅底（徽标/色块）
 
+/* ---------- 中性 ---------- */
+$ui-text-1: #303133; // 主文本
+$ui-text-2: #606266; // 次级文本
+$ui-text-3: #73777a; // 弱化文本/占位（#73777a：白底对比度约 4.6:1，达到 WCAG AA）
+$ui-border: #e4e7ed; // 分割线/边框
+$ui-bg-page: #f5f6f7; // 页面背景
+$ui-bg-card: #ffffff; // 卡片背景
+$ui-bg-hover: #f0f1f2; // 悬停/浅灰块
+$ui-bg-disabled: #f0f0f0; // 禁用/徽标灰底
+
 /* ---------- 语义色 ---------- */
-$ui-success: #3fb45c; // 成功
-$ui-warning: #e6a23c; // 警告
+$ui-success: $ui-primary-light; // 成功（与 $ui-primary-light 同值，属有意复用：成功语义与品牌浅绿共用同一色相）
+$ui-warning: #e6a23c; // 警告（大面积/图形场景，如渐变、图表）
+$ui-warning-text: #b97a1f; // 警告徽标文字（深橙，浅底上对比度达标）
 $ui-danger: #e64340; // 危险/错误
-$ui-info: #909399; // 中性信息
+$ui-info: $ui-text-3; // 中性信息（$ui-text-3 的语义别名）
 $ui-blue: #2f6fde; // 仅信息类（换货/批发/链接）
 
 /* 语义浅底（徽标浅色底，rgba 透明底） */
@@ -21,15 +32,8 @@ $ui-warning-bg: rgba(230, 162, 60, 0.12);
 $ui-danger-bg: rgba(230, 67, 64, 0.1);
 $ui-blue-bg: rgba(47, 111, 222, 0.1);
 
-/* ---------- 中性 ---------- */
-$ui-text-1: #303133; // 主文本
-$ui-text-2: #606266; // 次级文本
-$ui-text-3: #909399; // 弱化文本/占位
-$ui-border: #e4e7ed; // 分割线/边框
-$ui-bg-page: #f5f6f7; // 页面背景
-$ui-bg-card: #ffffff; // 卡片背景
-$ui-bg-hover: #f0f1f2; // 悬停/浅灰块
-$ui-bg-disabled: #f0f0f0; // 禁用/徽标灰底
+/* ---------- 触控 ---------- */
+$ui-touch: 88rpx; // 触控目标最小尺寸（≈44px @ 375 屏宽，符合触控规范）
 
 /* ---------- 圆角 ---------- */
 $ui-radius-sm: 8rpx;
@@ -45,16 +49,25 @@ $ui-space-lg: 32rpx;
 $ui-space-xl: 48rpx;
 
 /* ---------- 字号 ---------- */
-$ui-font-xs: 22rpx;
+$ui-font-xs: 22rpx; // 最小可读字号（对比度类一律 ≥ 该值）
 $ui-font-sm: 24rpx;
 $ui-font-base: 28rpx;
 $ui-font-md: 32rpx;
 $ui-font-lg: 36rpx;
 $ui-font-xl: 44rpx;
+$ui-font-amount: 40rpx; // 大金额/主数值（首页今日销售额、收银台码）
+$ui-font-amount-s: 32rpx; // 次级金额/数量数值（库存可售、明细金额）
 
 /* ---------- 阴影 ---------- */
 $ui-shadow-card: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
 $ui-shadow-pop: 0 -4rpx 24rpx rgba(0, 0, 0, 0.08);
+
+/* ---------- 图表色板（品牌绿系 + 语义色，去紫/青彩虹） ---------- */
+$ui-chart-colors: #2b8a3e, #e6a23c, #e64340, #2f6fde, #3fb45c, #909399;
+
+/* ---------- z-index / 缓动 ---------- */
+$ui-z-mask: 999; // 遮罩层级
+$ui-ease-out: cubic-bezier(0.16, 1, 0.3, 1); // 弹出/出场缓动
 
 /* =========================================================
  * 兼容旧 $uni-* 变量（映射到新令牌，避免已有引用失效）

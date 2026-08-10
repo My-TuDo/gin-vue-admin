@@ -41,11 +41,11 @@
           <text class="pos-code-value">{{ posSession }}</text>
         </view>
         <view class="pos-actions">
-          <view class="pos-btn ui-btn-ghost" @click="openBind(true)">重新绑定</view>
-          <view class="pos-btn ui-btn-ghost ui-btn-ghost--danger" @click="unbind">解绑</view>
+          <view class="pos-btn ui-btn-ghost" hover-class="ui-hover" hover-stay-time="60" @click="openBind(true)">重新绑定</view>
+          <view class="pos-btn ui-btn-ghost ui-btn-ghost--danger" hover-class="ui-hover" hover-stay-time="60" @click="unbind">解绑</view>
         </view>
       </view>
-      <view v-else class="pos-unbound" @click="openBind(false)">
+      <view v-else class="pos-unbound" hover-class="ui-hover" hover-stay-time="60" @click="openBind(false)">
         <text class="pos-unbound-text">绑定收银台</text>
         <text class="pos-unbound-arrow">›</text>
       </view>
@@ -53,9 +53,9 @@
       <view class="pos-tip">扫码入口在首页「扫码加购」</view>
     </view>
 
-    <!-- 绑定收银台弹层（自绘，兼容 H5 与小程序） -->
-    <view v-if="bindVisible" class="bind-mask" @click="bindVisible = false">
-      <view class="bind-pop" @click.stop>
+    <!-- 绑定收银台弹层（复用全局居中弹窗体系 .ui-pop-mask--center/.ui-pop-body） -->
+    <view v-if="bindVisible" class="ui-pop-mask ui-pop-mask--center" @click="bindVisible = false">
+      <view class="ui-pop-body" @click.stop>
         <view class="bind-title">{{ bindRebind ? '重新绑定收银台' : '绑定收银台' }}</view>
         <view class="bind-desc">请输入 PC 收银台设置的 6 位收银台码</view>
         <input
@@ -67,8 +67,8 @@
           @input="onCodeInput"
         />
         <view class="bind-btns">
-          <view class="bind-btn" @click="bindVisible = false">取消</view>
-          <view class="bind-btn bind-btn-primary" @click="doBind">确认绑定</view>
+          <view class="bind-btn bind-btn-cancel" hover-class="ui-hover" hover-stay-time="60" @click="bindVisible = false">取消</view>
+          <view class="bind-btn bind-btn-primary" hover-class="ui-hover" hover-stay-time="60" @click="doBind">确认绑定</view>
         </view>
       </view>
     </view>
@@ -280,10 +280,11 @@ function handleLogout() {
 }
 .pos-code-value {
   margin-left: 20rpx;
-  font-size: 40rpx;
+  font-size: $ui-font-amount;
   font-weight: 700;
   letter-spacing: 6rpx;
   color: $ui-primary;
+  font-variant-numeric: tabular-nums;
 }
 .pos-actions {
   display: flex;
@@ -291,7 +292,6 @@ function handleLogout() {
 }
 .pos-btn {
   flex: 1;
-  height: 72rpx;
   text-align: center;
   font-size: 26rpx;
   font-weight: 600;
@@ -319,25 +319,7 @@ function handleLogout() {
   color: $ui-text-3;
 }
 
-/* ===== 绑定弹层（居中弹窗，自绘） ===== */
-.bind-mask {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.bind-pop {
-  width: 600rpx;
-  background: $ui-bg-card;
-  border-radius: $ui-radius-lg;
-  padding: 40rpx 36rpx 32rpx;
-}
+/* ===== 绑定弹层（复用全局 .ui-pop-mask--center/.ui-pop-body，仅内容样式） ===== */
 .bind-title {
   font-size: $ui-font-md;
   font-weight: 700;
@@ -369,19 +351,20 @@ function handleLogout() {
 }
 .bind-btn {
   flex: 1;
-  height: 80rpx;
-  line-height: 80rpx;
+  height: 88rpx;
+  line-height: 88rpx;
   text-align: center;
-  background: $ui-bg-page;
-  color: $ui-text-2;
   font-size: $ui-font-base;
   border-radius: $ui-radius-full;
-
-  &.bind-btn-primary {
-    background: $ui-primary;
-    color: $ui-bg-card;
-    font-weight: 600;
-  }
+}
+.bind-btn-cancel {
+  background: transparent;
+  color: $ui-text-2;
+}
+.bind-btn-primary {
+  background: $ui-primary;
+  color: $ui-bg-card;
+  font-weight: 600;
 }
 
 .version {

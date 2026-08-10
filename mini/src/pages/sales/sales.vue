@@ -1,5 +1,5 @@
 <template>
-  <view class="page">
+  <view class="ui-page page-sales">
     <!-- ================= 列表视图 ================= -->
     <template v-if="!detailVisible">
       <!-- 状态筛选 tab（本地过滤已加载数据） -->
@@ -9,6 +9,8 @@
           :key="t.value"
           class="tab-item"
           :class="{ active: activeStatus === t.value }"
+          hover-class="ui-hover"
+          hover-stay-time="60"
           @click="switchTab(t.value)"
         >{{ t.name }}</view>
       </view>
@@ -34,12 +36,15 @@
       <view v-if="loading && !orders.length" class="ui-empty">加载中…</view>
       <view v-else-if="error" class="ui-err">
         <text class="ui-err-text">{{ error }}</text>
-        <view class="ui-retry" @click="reload">重试</view>
+        <view class="ui-retry" hover-class="ui-hover" hover-stay-time="60" @click="reload">重试</view>
       </view>
-      <view v-else-if="!filteredOrders.length" class="ui-empty">{{ keyword ? '未找到相关销售单' : '暂无销售记录' }}</view>
+      <view v-else-if="!filteredOrders.length" class="ui-empty">
+        <text class="ui-empty-main">{{ keyword ? '未找到相关销售单' : '暂无销售记录' }}</text>
+        <text class="ui-empty-sub">{{ keyword ? '请核对单号后重试' : '完成首笔收银后，销售记录将在此呈现' }}</text>
+      </view>
 
       <view v-else class="card-list">
-        <view v-for="o in filteredOrders" :key="o.ID" class="order-card" @click="openDetail(o.ID)">
+        <view v-for="o in filteredOrders" :key="o.ID" class="order-card" hover-class="ui-hover" hover-stay-time="60" @click="openDetail(o.ID)">
           <view class="oc-head">
             <text class="oc-no">{{ o.orderNo }}</text>
             <text class="type-tag" :class="typeCls(o.orderType)">{{ typeName(o.orderType) }}</text>
@@ -62,7 +67,7 @@
     <!-- ================= 详情视图（同页切换） ================= -->
     <template v-else>
       <view class="detail-top">
-        <view class="back-btn" @click="closeDetail">‹ 返回</view>
+        <view class="back-btn" hover-class="ui-hover" hover-stay-time="60" @click="closeDetail">‹ 返回</view>
         <text class="detail-no">{{ detail.orderNo || '销售单详情' }}</text>
         <text class="type-tag" :class="typeCls(detail.orderType)">{{ typeName(detail.orderType) }}</text>
       </view>
@@ -70,7 +75,7 @@
       <view v-if="detailLoading" class="ui-empty">加载中…</view>
       <view v-else-if="detailError" class="ui-err">
         <text class="ui-err-text">{{ detailError }}</text>
-        <view class="ui-retry" @click="reloadDetail">重试</view>
+        <view class="ui-retry" hover-class="ui-hover" hover-stay-time="60" @click="reloadDetail">重试</view>
       </view>
 
       <template v-else-if="detail">
@@ -125,6 +130,7 @@ import { onLoad, onReachBottom } from '@dcloudio/uni-app'
 import { get } from '@/utils/request'
 import { isLoggedIn } from '@/utils/auth'
 import { LOGIN_PAGE } from '@/config'
+import { fmtTime } from '@/utils/fmtTime'
 
 // ===== 状态/类型映射常量 =====
 // 筛选 tab：0 全部，其余对应后端 status（1 待出库 / 2 已出库 / 3 已取消）
@@ -195,16 +201,8 @@ function fmtMoney(n) {
   const num = Number(n) || 0
   const sign = num < 0 ? '-' : ''
   const fixed = Math.abs(num).toFixed(2)
-  return `${sign}¥${fixed.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`
-}
-
-// createdAt（ISO 字符串）→ YYYY-MM-DD HH:mm（容错：非法时间显示 —）
-function fmtTime(str) {
-  if (!str) return '—'
-  const d = new Date(str)
-  if (Number.isNaN(d.getTime())) return '—'
-  const p = (x) => String(x).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  // 负数格式：负号在 ¥ 后（¥-1,234.56，记账习惯）
+  return `¥${sign}${fixed.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`
 }
 
 // ===== 列表加载 =====
@@ -310,11 +308,8 @@ onLoad(() => {
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  padding: $ui-space-md;
-  box-sizing: border-box;
-  padding-bottom: 40rpx;
+.page-sales {
+  padding-bottom: 40rpx; /* 其余 padding 复用 .ui-page */
 }
 
 /* ===== 状态筛选 tab ===== */
@@ -340,7 +335,6 @@ onLoad(() => {
   &.active {
     background: linear-gradient(135deg, $ui-primary 0%, $ui-primary-light 100%);
     color: $ui-bg-card;
-    box-shadow: 0 6rpx 16rpx rgba(43, 138, 62, 0.25);
   }
 }
 
@@ -393,9 +387,10 @@ onLoad(() => {
   margin-bottom: 10rpx;
 }
 .oc-amount {
-  font-size: $ui-font-md;
+  font-size: $ui-font-amount-s;
   font-weight: 700;
   color: $ui-text-1;
+  font-variant-numeric: tabular-nums;
 
   &.neg {
     color: $ui-danger;
@@ -412,12 +407,12 @@ onLoad(() => {
 }
 .oc-time {
   font-size: $ui-font-xs;
-  color: $ui-text-3;
+  color: $ui-text-2;
 }
 
 /* ===== 类型徽标（胶囊） ===== */
 .type-tag {
-  font-size: 20rpx;
+  font-size: $ui-font-xs;
   font-weight: 600;
   padding: 4rpx 14rpx;
   border-radius: $ui-radius-full;
@@ -435,7 +430,7 @@ onLoad(() => {
   border-radius: $ui-radius-full;
   flex-shrink: 0;
 }
-.st-pending { background: $ui-warning-bg; color: $ui-warning; }
+.st-pending { background: $ui-warning-bg; color: $ui-warning-text; }
 .st-shipped { background: $ui-primary-bg; color: $ui-primary; }
 .st-canceled { background: $ui-bg-disabled; color: $ui-text-3; }
 
@@ -518,7 +513,7 @@ onLoad(() => {
 }
 .dir-tag {
   display: inline-block;
-  font-size: 18rpx;
+  font-size: $ui-font-xs;
   font-weight: 600;
   padding: 2rpx 10rpx;
   border-radius: $ui-radius-sm;
@@ -529,7 +524,7 @@ onLoad(() => {
 .dir-in { background: $ui-danger-bg; color: $ui-danger; }
 .ir-spec {
   margin-top: 2rpx;
-  font-size: 20rpx;
+  font-size: $ui-font-xs;
   color: $ui-text-3;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -555,6 +550,7 @@ onLoad(() => {
   font-size: 26rpx;
   font-weight: 600;
   color: $ui-text-1;
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 
   &.neg {
@@ -576,6 +572,7 @@ onLoad(() => {
   font-size: $ui-font-md;
   font-weight: 700;
   color: $ui-text-1;
+  font-variant-numeric: tabular-nums;
 
   &.neg {
     color: $ui-danger;

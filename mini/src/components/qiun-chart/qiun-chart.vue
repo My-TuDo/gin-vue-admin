@@ -16,13 +16,18 @@
          Vue3 中 v-else 必须紧跟 v-if/v-else-if，无法与 v-show 配对（否则编译报错）；
          双 v-show 只切换 display，canvas 节点常驻不复建 —— 图表初始化昂贵（canvas 2d 节点查询+
          实例构造），避免反复销毁重建造成二次初始化的空白与卡顿（社区方法论第 2 条）。 -->
-    <view v-show="!showCanvas" class="qiun-empty">{{ emptyText }}</view>
+    <view v-show="!showCanvas" class="ui-empty">{{ emptyText }}</view>
   </view>
 </template>
 
 <script setup>
 import { computed, getCurrentInstance, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import uCharts from '@qiun/ucharts'
+
+// 默认色板：与 uni.scss $ui-chart-colors 同步（SCSS 变量无法注入 script，保持两处一致）。
+// 注意：defineProps 的 default 会被提升到模块作用域，不能引用 <script setup> 局部变量，
+// 故此处内联数组字面量；改动时需与 uni.scss $ui-chart-colors 同步。
+const AXIS_COLOR = '#73777a'
 
 const props = defineProps({
   /** 图表类型：line 折线 | column 柱状 | ring 环形 | pie 饼图 | area 面积 */
@@ -37,7 +42,7 @@ const props = defineProps({
   /** 系列配色 */
   colors: {
     type: Array,
-    default: () => ['#2b8a3e', '#f5a623', '#e64340', '#4a90d9', '#9b59b6', '#1abc9c', '#e67e22']
+    default: () => ['#2b8a3e', '#e6a23c', '#e64340', '#2f6fde', '#3fb45c', '#909399']
   },
   /** 空数据占位文案 */
   emptyText: { type: String, default: '暂无数据' },
@@ -223,7 +228,7 @@ function buildOptions() {
     xAxis: {
       disableGrid: true,
       fontSize: 10,
-      fontColor: '#999999',
+      fontColor: AXIS_COLOR,
       // X 轴标签抽稀依据（@qiun/ucharts 2.5.0 u-charts.js 第 4545-4566 行）：
       //   drawXAxis 中 labelCount 语义为「X 轴单屏最多标签数」。实现：未设 xAxis.itemCount 时
       //   maxXAxisListLength = labelCount - 1（第 4550 行），ratio = ceil(categories.length /
@@ -246,9 +251,9 @@ function buildOptions() {
       dashLength: 2,
       // column：强制 y 轴从 0 开始（见 buildOptions 注释 a），柱子基线=绘图区底部=X 轴线；
       // 其它类型保持 data:[] 自动刻度（折线图聚焦数据波动、保持现状）。
-      data: isColumn ? [{ min: 0, fontSize: 10, fontColor: '#999999' }] : [],
+      data: isColumn ? [{ min: 0, fontSize: 10, fontColor: AXIS_COLOR }] : [],
       fontSize: 10,
-      fontColor: '#999999',
+      fontColor: AXIS_COLOR,
       splitNumber: 4,
       disabled: isPieLike
     },
@@ -306,16 +311,5 @@ onBeforeUnmount(() => {
 .qiun-canvas {
   display: block;
   width: 100%;
-}
-
-.qiun-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 200rpx;
-  color: $ui-text-3;
-  font-size: $ui-font-sm;
-  background: $ui-bg-hover;
-  border-radius: $ui-radius-sm;
 }
 </style>

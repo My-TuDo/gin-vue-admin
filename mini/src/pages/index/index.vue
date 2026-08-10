@@ -1,21 +1,28 @@
 <template>
   <view class="ui-page">
     <!-- 经营看板缩略卡片：点击进入看板详情页 -->
-    <view class="dash-card ui-card" @click="goDashboard">
+    <view class="dash-card ui-card" hover-class="ui-hover" hover-stay-time="60" @click="goDashboard">
       <view class="dash-head">
         <text class="dash-title">经营看板</text>
         <view v-if="alertCount > 0" class="badge">预警 {{ alertCount }}</view>
-        <view v-else-if="alertError" class="badge badge-muted">预警 -</view>
+        <view
+          v-else-if="alertError"
+          class="badge badge-muted"
+          hover-class="ui-hover"
+          hover-stay-time="60"
+          @click.stop="loadAll(false)"
+        >预警 · 重试</view>
       </view>
 
       <view v-if="overviewLoading" class="dash-tip">经营数据加载中…</view>
-      <view v-else-if="overviewError" class="dash-tip">
+      <view v-else-if="overviewError" class="dash-tip dash-tip-err">
         <text class="dash-error">{{ overviewError }}</text>
+        <view class="ui-retry dash-retry" hover-class="ui-hover" hover-stay-time="60" @click.stop="loadAll(false)">重试</view>
       </view>
       <view v-else-if="today" class="dash-grid">
         <view class="dash-item">
           <text class="dash-label">今日销售额</text>
-          <text class="dash-value">¥{{ fmtMoney(today.sales) }}</text>
+          <text class="dash-value dash-value-main">¥{{ fmtMoney(today.sales) }}</text>
         </view>
         <view class="dash-item">
           <text class="dash-label">今日订单</text>
@@ -41,6 +48,8 @@
         :key="item.key"
         class="grid-item"
         :class="{ disabled: item.disabled }"
+        hover-class="ui-hover"
+        hover-stay-time="60"
         @click="onMenu(item)"
       >
         <view class="grid-icon" :class="item.cls">{{ item.glyph }}</view>
@@ -75,16 +84,17 @@ let lastFreshTime = 0
 const FRESH_TTL = 30 * 1000
 
 // 功能入口：type=tab 走 switchTab，type=page 走 navigateTo，disabled 为占位
-// 图标方案（用户要求不用 emoji）：纯 CSS 圆角色块 + 1-2 个汉字（glyph），
-// cls 控制色块底色——可用入口用品牌绿（主色 #2b8a3e）深浅两色，占位入口统一灰色调。
+// 图标方案（用户要求不用 emoji）：纯 CSS 圆角色块 + 1-2 个汉字（glyph）。
+// cls 控制色块底色——高频扫码入口（扫码查库存/扫码加购）用深绿实心 tint-green-deep，
+// 其余可用入口用浅绿底深字 tint-green，占位入口统一灰色调 tint-gray（绿色收敛原则）。
 const menus = [
-  { key: 'scan', name: '扫码查库存', glyph: '查', cls: 'tint-green', type: 'tab', url: '/pages/stock/stock' },
-  { key: 'dashboard', name: '经营看板', glyph: '板', cls: 'tint-green-deep', type: 'page', url: '/pages/dashboard/dashboard' },
+  { key: 'scan', name: '扫码查库存', glyph: '查', cls: 'tint-green-deep', type: 'tab', url: '/pages/stock/stock' },
+  { key: 'dashboard', name: '经营看板', glyph: '板', cls: 'tint-green', type: 'page', url: '/pages/dashboard/dashboard' },
   { key: 'pos', name: '扫码加购', glyph: '扫', cls: 'tint-green-deep', type: 'action' },
-  { key: 'stocktake', name: '扫码盘点', glyph: '盘', cls: 'tint-green-deep', type: 'page', url: '/pages/stocktake/index' },
-  { key: 'direct', name: '出入库', glyph: '库', cls: 'tint-green-deep', type: 'page', url: '/pages/direct/index' },
-  { key: 'sales', name: '销售记录', glyph: '销', cls: 'tint-green-deep', type: 'page', url: '/pages/sales/sales' },
-  { key: 'customer', name: '客户查询', glyph: '客', cls: 'tint-green-deep', type: 'page', url: '/pages/customer/customer' },
+  { key: 'stocktake', name: '扫码盘点', glyph: '盘', cls: 'tint-green', type: 'page', url: '/pages/stocktake/index' },
+  { key: 'direct', name: '出入库', glyph: '库', cls: 'tint-green', type: 'page', url: '/pages/direct/index' },
+  { key: 'sales', name: '销售记录', glyph: '销', cls: 'tint-green', type: 'page', url: '/pages/sales/sales' },
+  { key: 'customer', name: '客户查询', glyph: '客', cls: 'tint-green', type: 'page', url: '/pages/customer/customer' },
   { key: 'cashier', name: '收银', glyph: '收', cls: 'tint-gray', disabled: true, tag: '敬请期待' },
   { key: 'purchase', name: '进货管理', glyph: '进', cls: 'tint-gray', disabled: true, tag: '敬请期待' }
 ]
@@ -254,13 +264,13 @@ function fmtInt(n) {
 <style lang="scss" scoped>
 /* 页面容器：复用全局 .ui-page；区块标题：复用全局 .ui-section-title */
 
-/* ---- 看板缩略卡片 ---- */
+/* ---- 看板缩略卡片（白卡 + 品牌绿强调，与 dashboard 图表卡一致） ---- */
 .dash-card {
-  background: linear-gradient(135deg, $ui-primary 0%, $ui-primary-light 100%);
+  background: $ui-bg-card;
   border-radius: $ui-radius-md;
   padding: 28rpx 28rpx 20rpx;
   margin-bottom: $ui-space-lg;
-  box-shadow: 0 8rpx 24rpx rgba(43, 138, 62, 0.25);
+  box-shadow: $ui-shadow-card;
 }
 
 .dash-head {
@@ -273,12 +283,12 @@ function fmtInt(n) {
 .dash-title {
   font-size: $ui-font-md;
   font-weight: 600;
-  color: $ui-bg-card;
+  color: $ui-text-1;
 }
 
 .badge {
-  background: rgba(255, 255, 255, 0.2);
-  color: $ui-bg-card;
+  background: $ui-primary-bg;
+  color: $ui-primary;
   font-size: $ui-font-xs;
   padding: 6rpx 18rpx;
   border-radius: $ui-radius-full;
@@ -286,18 +296,30 @@ function fmtInt(n) {
 }
 
 .badge-muted {
-  opacity: 0.7;
+  background: $ui-bg-hover;
+  color: $ui-text-2;
+  opacity: 1;
 }
 
 .dash-tip {
-  color: rgba(255, 255, 255, 0.85);
+  color: $ui-text-3;
   font-size: $ui-font-sm;
   padding: 30rpx 0;
   text-align: center;
 }
 
+.dash-tip-err {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .dash-error {
   font-size: $ui-font-sm;
+}
+
+.dash-retry {
+  margin-top: 20rpx;
 }
 
 .dash-grid {
@@ -312,35 +334,41 @@ function fmtInt(n) {
 }
 
 .dash-item + .dash-item {
-  border-left: 1rpx solid rgba(255, 255, 255, 0.25);
+  border-left: 1rpx solid $ui-border;
 }
 
 .dash-label {
   font-size: $ui-font-xs;
-  color: rgba(255, 255, 255, 0.8);
+  color: $ui-text-2;
   margin-bottom: 10rpx;
 }
 
 .dash-value {
-  font-size: 30rpx;
+  font-size: $ui-font-amount-s;
   font-weight: 600;
-  color: $ui-bg-card;
+  color: $ui-text-1;
+  font-variant-numeric: tabular-nums;
 
   &.warn {
     color: $ui-danger;
   }
 }
 
+.dash-value-main {
+  font-size: $ui-font-amount;
+  color: $ui-primary;
+}
+
 .dash-foot {
   margin-top: 20rpx;
   padding-top: 16rpx;
-  border-top: 1rpx solid rgba(255, 255, 255, 0.25);
+  border-top: 1rpx solid $ui-border;
   text-align: right;
 }
 
 .dash-more {
   font-size: $ui-font-sm;
-  color: rgba(255, 255, 255, 0.9);
+  color: $ui-text-3;
 }
 
 /* ---- 功能九宫格 ---- */
@@ -404,10 +432,10 @@ function fmtInt(n) {
   position: absolute;
   top: 22rpx;
   right: calc(33.333% / 2 - 60rpx);
-  font-size: 18rpx;
+  font-size: $ui-font-xs;
   color: $ui-danger;
   background: $ui-danger-bg;
   border-radius: $ui-radius-full;
-  padding: 2rpx 10rpx;
+  padding: 4rpx 12rpx;
 }
 </style>

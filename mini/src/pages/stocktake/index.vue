@@ -1,15 +1,20 @@
 <template>
-  <view class="page">
+  <view class="ui-page page-stocktake">
     <!-- ========== 盘点单选择列表 ========== -->
     <template v-if="mode === 'list'">
       <view class="ui-section-title">选择盘点单</view>
       <view v-if="listLoading" class="ui-empty">加载中…</view>
-      <view v-else-if="!checkList.length" class="ui-empty">暂无可录入的盘点单，请先在 PC 创建</view>
+      <view v-else-if="!checkList.length" class="ui-empty">
+        <text class="ui-empty-main">暂无可录入的盘点单</text>
+        <text class="ui-empty-sub">请在 PC 端创建盘点单，创建后回到此处刷新</text>
+      </view>
       <view v-else class="check-list">
         <view
           v-for="c in checkList"
           :key="c.ID"
           class="check-item"
+          hover-class="ui-hover"
+          hover-stay-time="60"
           @click="openCheck(c)"
         >
           <view class="ci-main">
@@ -31,7 +36,7 @@
         <view class="ch-top">
           <text class="ch-no">{{ current.checkNo }}</text>
           <view class="ch-actions">
-            <view class="ch-switch" @click="backToList">切换盘点单</view>
+            <view class="ch-switch" hover-class="ui-hover" hover-stay-time="60" @click="backToList">切换盘点单</view>
           </view>
         </view>
         <view class="ch-sub">
@@ -42,7 +47,10 @@
 
       <!-- 明细列表 -->
       <view class="ui-section-title">盘点明细</view>
-      <view v-if="!items.length" class="ui-empty">该盘点单暂无明细</view>
+      <view v-if="!items.length" class="ui-empty">
+        <text class="ui-empty-main">该盘点单暂无明细</text>
+        <text class="ui-empty-sub">请在 PC 端为该盘点单添加明细商品</text>
+      </view>
       <view v-else class="item-list">
         <view v-for="row in items" :key="row.ID" class="item-row">
           <view class="ir-main">
@@ -61,7 +69,7 @@
               <text class="ir-v">{{ row._touched ? row._actual : '-' }}</text>
             </view>
             <view class="ir-stepper ui-stepper">
-              <view class="step-btn" @click="step(row, -1)">−</view>
+              <view class="step-btn" :class="{ disabled: !row._touched || row._actual <= 0 }" @click="step(row, -1)">−</view>
               <view class="step-num">{{ row._touched ? row._actual : 0 }}</view>
               <view class="step-btn plus" @click="step(row, 1)">+</view>
             </view>
@@ -71,10 +79,12 @@
 
       <!-- 底部：扫码录入 + 提交 -->
       <view class="foot-actions">
-        <view class="scan-big ui-btn-primary" @click="doScan">扫码录入</view>
+        <view class="scan-big ui-btn-primary" hover-class="ui-hover" hover-stay-time="60" @click="doScan">扫码录入</view>
         <view
           class="submit-btn ui-btn-ghost"
           :class="{ disabled: !touchedCount }"
+          hover-class="ui-hover"
+          hover-stay-time="60"
           @click="submit"
         >提交盘点录入</view>
       </view>
@@ -88,6 +98,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { get, request } from '@/utils/request'
 import { isLoggedIn } from '@/utils/auth'
 import { LOGIN_PAGE } from '@/config'
+import { fmtTime } from '@/utils/fmtTime'
 
 // request.js 未导出 put 便捷封装（且不在本次可写范围）：页内用底层 request 直调 PUT
 const put = (url, data, options = {}) => request({ url, method: 'PUT', data, ...options })
@@ -261,19 +272,11 @@ async function submit() {
   }
 }
 
-function fmtTime(t) {
-  if (!t) return ''
-  const s = String(t).replace('T', ' ').slice(0, 16)
-  return s
-}
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  padding: $ui-space-md;
-  padding-bottom: 180rpx;
-  box-sizing: border-box;
+.page-stocktake {
+  padding-bottom: 180rpx; /* 底部操作区占位，其余 padding 复用 .ui-page */
 }
 
 /* ===== 盘点单列表 ===== */
@@ -322,8 +325,8 @@ function fmtTime(t) {
 }
 .ci-time {
   margin-top: 6rpx;
-  font-size: 20rpx;
-  color: $ui-text-3;
+  font-size: $ui-font-xs;
+  color: $ui-text-2;
 }
 
 /* ===== 盘点头 ===== */
@@ -443,9 +446,11 @@ function fmtTime(t) {
   position: fixed;
   left: $ui-space-md;
   right: $ui-space-md;
-  bottom: 20rpx;
+  bottom: calc(20rpx + env(safe-area-inset-bottom));
   display: flex;
   gap: $ui-space-sm;
+  padding: 16rpx 0 0;
+  background: $ui-bg-page;
 }
 .scan-big {
   flex: 1;

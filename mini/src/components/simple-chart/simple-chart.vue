@@ -14,7 +14,7 @@
           <text class="sc-bar-value">{{ row.value }}</text>
         </view>
       </view>
-      <view v-else class="sc-empty">{{ emptyText }}</view>
+      <view v-else class="ui-empty">{{ emptyText }}</view>
     </view>
 
     <!-- 环形/饼图：conic-gradient 简易环形 + 占比列表 -->
@@ -23,7 +23,7 @@
         <view class="sc-ring" :style="ringStyle" />
         <view class="sc-ring-center">{{ ringCenter }}</view>
       </view>
-      <view v-else class="sc-empty">{{ emptyText }}</view>
+      <view v-else class="ui-empty">{{ emptyText }}</view>
       <view v-if="hasData" class="sc-legend">
         <view v-for="(row, i) in ringRows" :key="i" class="sc-legend-row">
           <view class="sc-legend-dot" :style="{ background: row.color }" />
@@ -38,13 +38,16 @@
 <script setup>
 import { computed } from 'vue'
 
+// 注意：defineProps 的 default 会被提升到模块作用域，不能引用 <script setup> 局部变量，
+// 故 colors default 用内联数组字面量；改动时需与 uni.scss $ui-chart-colors 同步。
+
 const props = defineProps({
   type: { type: String, default: 'column' },
   chartData: { type: Object, default: () => ({ categories: [], series: [] }) },
   height: { type: Number, default: 280 },
   colors: {
     type: Array,
-    default: () => ['#2b8a3e', '#f5a623', '#e64340', '#4a90d9', '#9b59b6', '#1abc9c', '#e67e22']
+    default: () => ['#2b8a3e', '#e6a23c', '#e64340', '#2f6fde', '#3fb45c', '#909399']
   },
   emptyText: { type: String, default: '暂无数据' }
 })
@@ -129,17 +132,6 @@ function toNumber(n) {
   box-sizing: border-box;
 }
 
-.sc-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 200rpx;
-  color: #999;
-  font-size: 24rpx;
-  background: #fafbfc;
-  border-radius: 12rpx;
-}
-
 /* 横向条形 */
 .sc-bar-row {
   display: flex;
@@ -149,8 +141,8 @@ function toNumber(n) {
 
 .sc-bar-label {
   width: 160rpx;
-  font-size: 22rpx;
-  color: #666;
+  font-size: $ui-font-xs;
+  color: $ui-text-2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -159,10 +151,10 @@ function toNumber(n) {
 .sc-bar-track {
   flex: 1;
   height: 28rpx;
-  background: #f2f3f5;
+  background: $ui-bg-hover;
   border-radius: 999rpx;
   overflow: hidden;
-  margin: 0 16rpx;
+  margin: 0 $ui-space-sm;
 }
 
 .sc-bar-fill {
@@ -174,8 +166,8 @@ function toNumber(n) {
 .sc-bar-value {
   width: 110rpx;
   text-align: right;
-  font-size: 22rpx;
-  color: #333;
+  font-size: $ui-font-xs;
+  color: $ui-text-1;
 }
 
 /* 环形 */
@@ -198,8 +190,8 @@ function toNumber(n) {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 24rpx;
-  color: #333;
+  font-size: $ui-font-sm;
+  color: $ui-text-1;
   font-weight: 600;
 }
 
@@ -222,15 +214,15 @@ function toNumber(n) {
 
 .sc-legend-name {
   flex: 1;
-  font-size: 24rpx;
-  color: #333;
+  font-size: $ui-font-sm;
+  color: $ui-text-1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .sc-legend-value {
-  font-size: 24rpx;
-  color: #999;
+  font-size: $ui-font-sm;
+  color: $ui-text-3;
 }
 </style>

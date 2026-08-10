@@ -1,5 +1,5 @@
 <template>
-  <view class="page">
+  <view class="ui-page page-customer">
     <!-- ================= 列表视图 ================= -->
     <template v-if="!detailVisible">
       <!-- 搜索（名称/电话，confirm 触发） -->
@@ -23,12 +23,15 @@
       <view v-if="loading && !customers.length" class="ui-empty">加载中…</view>
       <view v-else-if="error" class="ui-err">
         <text class="ui-err-text">{{ error }}</text>
-        <view class="ui-retry" @click="reload">重试</view>
+        <view class="ui-retry" hover-class="ui-hover" hover-stay-time="60" @click="reload">重试</view>
       </view>
-      <view v-else-if="!customers.length" class="ui-empty">{{ keyword ? '未找到相关客户' : '暂无客户数据' }}</view>
+      <view v-else-if="!customers.length" class="ui-empty">
+        <text class="ui-empty-main">{{ keyword ? '未找到相关客户' : '暂无客户数据' }}</text>
+        <text class="ui-empty-sub">{{ keyword ? '请核对名称或电话后重试' : '客户在 PC 端维护，此处实时同步' }}</text>
+      </view>
 
       <view v-else class="card-list">
-        <view v-for="c in customers" :key="c.ID" class="cust-card" @click="openDetail(c.ID)">
+        <view v-for="c in customers" :key="c.ID" class="cust-card" hover-class="ui-hover" hover-stay-time="60" @click="openDetail(c.ID)">
           <view class="cc-top">
             <text class="cc-name">{{ c.name }}</text>
             <text class="lv-tag" :class="levelCls(c.level)">{{ levelName(c.level) }}</text>
@@ -49,7 +52,7 @@
     <!-- ================= 详情视图（同页切换） ================= -->
     <template v-else>
       <view class="detail-top">
-        <view class="back-btn" @click="closeDetail">‹ 返回</view>
+        <view class="back-btn" hover-class="ui-hover" hover-stay-time="60" @click="closeDetail">‹ 返回</view>
         <text class="detail-no">{{ detail.name || '客户详情' }}</text>
         <text class="lv-tag" :class="levelCls(detail.level)">{{ levelName(detail.level) }}</text>
       </view>
@@ -163,11 +166,8 @@ onLoad(() => {
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  padding: $ui-space-md;
-  box-sizing: border-box;
-  padding-bottom: 40rpx;
+.page-customer {
+  padding-bottom: 40rpx; /* 其余 padding 复用 .ui-page */
 }
 
 /* ===== 列表 ===== */
@@ -235,19 +235,19 @@ onLoad(() => {
 
 /* ===== 等级徽标（胶囊） ===== */
 .lv-tag {
-  font-size: 20rpx;
+  font-size: $ui-font-xs;
   font-weight: 600;
   padding: 4rpx 14rpx;
   border-radius: $ui-radius-full;
   flex-shrink: 0;
 }
 .lv-normal { background: $ui-bg-disabled; color: $ui-text-2; }
-.lv-vip { background: $ui-warning-bg; color: $ui-warning; }
+.lv-vip { background: $ui-warning-bg; color: $ui-warning-text; }
 .lv-wholesale { background: $ui-blue-bg; color: $ui-blue; }
 
 /* ===== 状态徽标 ===== */
 .st-tag {
-  font-size: 20rpx;
+  font-size: $ui-font-xs;
   font-weight: 600;
   padding: 4rpx 14rpx;
   border-radius: $ui-radius-full;

@@ -13,7 +13,7 @@
         type="line"
         :chart-data="trendData"
         :height="300"
-        empty-text="近 7 天暂无销售数据"
+        empty-text="近 7 天暂无销售数据，有数据后自动呈现"
       />
     </view>
 
@@ -30,7 +30,7 @@
         type="column"
         :chart-data="topData"
         :height="300"
-        empty-text="近 30 天暂无销售记录"
+        empty-text="近 30 天暂无销售记录，有数据后自动呈现"
       />
     </view>
 
@@ -47,7 +47,7 @@
         type="ring"
         :chart-data="catData"
         :height="300"
-        empty-text="近 30 天暂无销售记录"
+        empty-text="近 30 天暂无销售记录，有数据后自动呈现"
       />
     </view>
 
@@ -66,13 +66,19 @@
             <text class="alert-sku">{{ item.skuCode || '' }}</text>
           </view>
           <view class="alert-qty">
-            <text class="qty-label">可售</text>
-            <text class="qty-num" :class="{ danger: item.available <= 0 }">{{ fmtInt(item.available) }}</text>
+            <view class="alert-qty-top">
+              <text class="qty-label">可售</text>
+              <text v-if="item.available <= 0" class="ui-badge ui-badge--danger">告急</text>
+            </view>
+            <text class="qty-num">{{ fmtInt(item.available) }}</text>
             <text class="qty-safe">安全线 {{ fmtInt(item.safeStock) }}</text>
           </view>
         </view>
       </view>
-      <view v-else class="ui-empty">暂无库存预警</view>
+      <view v-else class="ui-empty">
+        <text class="ui-empty-main">暂无库存预警</text>
+        <text class="ui-empty-sub">库存低于安全线时，此处自动提醒</text>
+      </view>
     </view>
   </view>
 </template>
@@ -312,19 +318,27 @@ function fmtInt(n) {
   align-items: flex-end;
 }
 
+.alert-qty-top {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 6rpx;
+}
+
 .qty-label {
-  font-size: 20rpx;
+  font-size: $ui-font-xs;
   color: $ui-text-3;
 }
 
 .qty-num {
-  font-size: 34rpx;
+  font-size: $ui-font-amount-s;
   font-weight: 600;
   color: $ui-danger;
+  font-variant-numeric: tabular-nums;
 }
 
 .qty-safe {
-  font-size: 20rpx;
+  font-size: $ui-font-xs;
   color: $ui-text-3;
 }
 </style>
