@@ -328,7 +328,7 @@ func (s *SaleService) GetSalePage(ctx context.Context, info request.PageInfo) (l
 // GetSaleDetail 查询销售单详情（含明细）
 func (s *SaleService) GetSaleDetail(ctx context.Context, id uint) (order jxc.SaleOrder, err error) {
 	err = global.GVA_DB.WithContext(ctx).
-		Preload("Customer").Preload("Warehouse").Preload("Items").
+		Preload("Customer").Preload("Warehouse").Preload("Items").Preload("Original").
 		First(&order, id).Error
 	return
 }

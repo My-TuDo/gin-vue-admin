@@ -57,6 +57,22 @@
         "navigationBarBackgroundColor": "#ffffff",
         "navigationBarTextStyle": "black"
       }
+    },
+    {
+      "path": "pages/sales/sales",
+      "style": {
+        "navigationBarTitleText": "销售记录",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/customer/customer",
+      "style": {
+        "navigationBarTitleText": "客户查询",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black"
+      }
     }
   ],
   "globalStyle": {
