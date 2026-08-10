@@ -455,6 +455,10 @@ func TestGetSalePage_Detail(t *testing.T) {
 	if err := saleSvc.CreateSaleOrder(context.Background(), ret); err != nil {
 		t.Fatalf("创建退货单失败: %v", err)
 	}
+	retDetail, err := saleSvc.GetSaleDetail(context.Background(), ret.ID)
+	if err != nil || retDetail.Original == nil || retDetail.Original.OrderNo != order.OrderNo {
+		t.Fatalf("退货单详情未预加载原单: orig=%+v err=%v", retDetail.Original, err)
+	}
 	if err := saleSvc.ConfirmReturn(context.Background(), ret.ID, "t"); err != nil {
 		t.Fatalf("退货失败: %v", err)
 	}

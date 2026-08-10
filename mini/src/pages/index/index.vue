@@ -83,8 +83,10 @@ const menus = [
   { key: 'pos', name: '扫码加购', glyph: '扫', cls: 'tint-green-deep', type: 'action' },
   { key: 'stocktake', name: '扫码盘点', glyph: '盘', cls: 'tint-green-deep', type: 'page', url: '/pages/stocktake/index' },
   { key: 'direct', name: '出入库', glyph: '库', cls: 'tint-green-deep', type: 'page', url: '/pages/direct/index' },
+  { key: 'sales', name: '销售记录', glyph: '销', cls: 'tint-green-deep', type: 'page', url: '/pages/sales/sales' },
+  { key: 'customer', name: '客户查询', glyph: '客', cls: 'tint-green-deep', type: 'page', url: '/pages/customer/customer' },
   { key: 'cashier', name: '收银', glyph: '收', cls: 'tint-gray', disabled: true, tag: '敬请期待' },
-  { key: 'sales', name: '销售记录', glyph: '销', cls: 'tint-gray', disabled: true }
+  { key: 'purchase', name: '进货管理', glyph: '进', cls: 'tint-gray', disabled: true, tag: '敬请期待' }
 ]
 
 onLoad(() => {
