@@ -14,29 +14,29 @@
       </view>
 
       <!-- 搜索（单号，confirm 触发） -->
-      <view class="search-bar">
+      <view class="ui-search">
         <input
           v-model="keyword"
-          class="search-input"
+          class="ui-search-input"
           type="text"
           placeholder="搜索单号"
           confirm-type="search"
           @confirm="onSearch"
         />
-        <view v-if="keyword" class="clear-btn" @click="clearSearch">清空</view>
+        <view v-if="keyword" class="ui-search-action" @click="clearSearch">清空</view>
       </view>
 
       <view class="list-head">
-        <text class="section-title">销售单</text>
+        <view class="ui-section-title">销售单</view>
         <text class="list-count">{{ filteredOrders.length }} / {{ total }} 条</text>
       </view>
 
-      <view v-if="loading && !orders.length" class="block-tip">加载中…</view>
-      <view v-else-if="error" class="err-box">
-        <text class="err-text">{{ error }}</text>
-        <view class="retry-btn" @click="reload">重试</view>
+      <view v-if="loading && !orders.length" class="ui-empty">加载中…</view>
+      <view v-else-if="error" class="ui-err">
+        <text class="ui-err-text">{{ error }}</text>
+        <view class="ui-retry" @click="reload">重试</view>
       </view>
-      <view v-else-if="!filteredOrders.length" class="block-tip">{{ keyword ? '未找到相关销售单' : '暂无销售记录' }}</view>
+      <view v-else-if="!filteredOrders.length" class="ui-empty">{{ keyword ? '未找到相关销售单' : '暂无销售记录' }}</view>
 
       <view v-else class="card-list">
         <view v-for="o in filteredOrders" :key="o.ID" class="order-card" @click="openDetail(o.ID)">
@@ -67,16 +67,16 @@
         <text class="type-tag" :class="typeCls(detail.orderType)">{{ typeName(detail.orderType) }}</text>
       </view>
 
-      <view v-if="detailLoading" class="block-tip">加载中…</view>
-      <view v-else-if="detailError" class="err-box">
-        <text class="err-text">{{ detailError }}</text>
-        <view class="retry-btn" @click="reloadDetail">重试</view>
+      <view v-if="detailLoading" class="ui-empty">加载中…</view>
+      <view v-else-if="detailError" class="ui-err">
+        <text class="ui-err-text">{{ detailError }}</text>
+        <view class="ui-retry" @click="reloadDetail">重试</view>
       </view>
 
       <template v-else-if="detail">
         <!-- 明细表 -->
-        <view class="panel">
-          <view class="panel-title">商品明细</view>
+        <view class="panel ui-card">
+          <view class="panel-title ui-section-title">商品明细</view>
           <view class="item-row head">
             <text class="ir-goods">商品 / 规格</text>
             <text class="ir-qty">数量</text>
@@ -101,7 +101,7 @@
         </view>
 
         <!-- 单信息卡 -->
-        <view class="panel info-panel">
+        <view class="panel ui-card info-panel">
           <view class="info-row"><text class="info-label">单号</text><text class="info-value">{{ detail.orderNo }}</text></view>
           <view class="info-row"><text class="info-label">类型</text><text class="info-value">{{ typeName(detail.orderType) }}</text></view>
           <view class="info-row"><text class="info-label">状态</text><text class="info-value">{{ statusName(detail.status) }}</text></view>
@@ -312,7 +312,7 @@ onLoad(() => {
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  padding: 24rpx;
+  padding: $ui-space-md;
   box-sizing: border-box;
   padding-bottom: 40rpx;
 }
@@ -321,56 +321,27 @@ onLoad(() => {
 .tabs-bar {
   display: flex;
   gap: 12rpx;
-  background: #ffffff;
-  border-radius: 16rpx;
+  background: $ui-bg-card;
+  border-radius: $ui-radius-md;
   padding: 12rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  box-shadow: $ui-shadow-card;
 }
 .tab-item {
   flex: 1;
   height: 68rpx;
   line-height: 68rpx;
   text-align: center;
-  background: #f5f6f7;
-  color: #666;
+  background: $ui-bg-page;
+  color: $ui-text-2;
   font-size: 26rpx;
   font-weight: 600;
-  border-radius: 12rpx;
+  border-radius: $ui-radius-sm;
 
   &.active {
-    background: linear-gradient(135deg, #2b8a3e 0%, #3fb45c 100%);
-    color: #fff;
+    background: linear-gradient(135deg, $ui-primary 0%, $ui-primary-light 100%);
+    color: $ui-bg-card;
     box-shadow: 0 6rpx 16rpx rgba(43, 138, 62, 0.25);
   }
-}
-
-/* ===== 搜索栏 ===== */
-.search-bar {
-  display: flex;
-  align-items: center;
-  margin-top: 16rpx;
-  background: #ffffff;
-  border-radius: 16rpx;
-  padding: 12rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
-}
-.search-input {
-  flex: 1;
-  height: 72rpx;
-  line-height: 72rpx;
-  background: #f5f6f7;
-  border-radius: 12rpx;
-  padding: 0 24rpx;
-  font-size: 26rpx;
-}
-.clear-btn {
-  margin-left: 16rpx;
-  padding: 0 20rpx;
-  height: 72rpx;
-  line-height: 72rpx;
-  font-size: 24rpx;
-  color: #999;
-  flex-shrink: 0;
 }
 
 /* ===== 列表 ===== */
@@ -380,24 +351,19 @@ onLoad(() => {
   align-items: baseline;
   margin: 20rpx 4rpx 12rpx;
 }
-.section-title {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #222;
-}
 .list-count {
-  font-size: 22rpx;
-  color: #999;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
 }
 .card-list {
-  background: #ffffff;
-  border-radius: 16rpx;
+  background: $ui-bg-card;
+  border-radius: $ui-radius-md;
   overflow: hidden;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  box-shadow: $ui-shadow-card;
 }
 .order-card {
-  padding: 22rpx 24rpx;
-  border-bottom: 1rpx solid #f0f0f0;
+  padding: 22rpx $ui-space-md;
+  border-bottom: 1rpx solid $ui-border;
 
   &:last-child {
     border-bottom: none;
@@ -410,15 +376,15 @@ onLoad(() => {
   margin-bottom: 12rpx;
 }
 .oc-no {
-  font-size: 28rpx;
+  font-size: $ui-font-base;
   font-weight: 700;
-  color: #222;
+  color: $ui-text-1;
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-right: 16rpx;
+  margin-right: $ui-space-sm;
 }
 .oc-mid {
   display: flex;
@@ -427,12 +393,12 @@ onLoad(() => {
   margin-bottom: 10rpx;
 }
 .oc-amount {
-  font-size: 32rpx;
+  font-size: $ui-font-md;
   font-weight: 700;
-  color: #222;
+  color: $ui-text-1;
 
   &.neg {
-    color: #e64340;
+    color: $ui-danger;
   }
 }
 .oc-foot {
@@ -441,83 +407,58 @@ onLoad(() => {
   justify-content: space-between;
 }
 .oc-cust {
-  font-size: 24rpx;
-  color: #666;
+  font-size: $ui-font-sm;
+  color: $ui-text-2;
 }
 .oc-time {
-  font-size: 22rpx;
-  color: #999;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
 }
 
-/* ===== 类型徽标 ===== */
+/* ===== 类型徽标（胶囊） ===== */
 .type-tag {
   font-size: 20rpx;
   font-weight: 600;
   padding: 4rpx 14rpx;
-  border-radius: 8rpx;
+  border-radius: $ui-radius-full;
   flex-shrink: 0;
 }
-.type-sale { background: #e8f5e9; color: #2b8a3e; }
-.type-return { background: #fdeaea; color: #e64340; }
-.type-exchange { background: #e8f0fe; color: #2f6fde; }
+.type-sale { background: $ui-primary-bg; color: $ui-primary; }
+.type-return { background: $ui-danger-bg; color: $ui-danger; }
+.type-exchange { background: $ui-blue-bg; color: $ui-blue; }
 
 /* ===== 状态徽标 ===== */
 .st-tag {
-  font-size: 22rpx;
+  font-size: $ui-font-xs;
   font-weight: 600;
   padding: 4rpx 16rpx;
-  border-radius: 999rpx;
+  border-radius: $ui-radius-full;
   flex-shrink: 0;
 }
-.st-pending { background: #fff4e5; color: #e6a23c; }
-.st-shipped { background: #e8f5e9; color: #2b8a3e; }
-.st-canceled { background: #f0f0f0; color: #999; }
+.st-pending { background: $ui-warning-bg; color: $ui-warning; }
+.st-shipped { background: $ui-primary-bg; color: $ui-primary; }
+.st-canceled { background: $ui-bg-disabled; color: $ui-text-3; }
 
-/* ===== 状态提示（加载中/空态/错误） ===== */
-.block-tip {
-  padding: 80rpx 0;
-  text-align: center;
-  color: #999;
-  font-size: 26rpx;
-}
-.err-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 80rpx 0;
-}
-.err-text {
-  font-size: 26rpx;
-  color: #999;
-  margin-bottom: 20rpx;
-}
-.retry-btn {
-  padding: 10rpx 40rpx;
-  background: #2b8a3e;
-  color: #fff;
-  font-size: 24rpx;
-  border-radius: 8rpx;
-}
 .loading-more {
-  padding: 24rpx 0 8rpx;
+  padding: $ui-space-md 0 8rpx;
   text-align: center;
-  color: #b2b2b2;
-  font-size: 22rpx;
+  color: $ui-text-3;
+  font-size: $ui-font-xs;
 }
 
 /* ================= 详情视图 ================= */
 .detail-top {
   display: flex;
   align-items: center;
-  background: #ffffff;
-  border-radius: 16rpx;
-  padding: 20rpx 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
-  margin-bottom: 16rpx;
+  background: $ui-bg-card;
+  border-radius: $ui-radius-md;
+  padding: 20rpx $ui-space-md;
+  box-shadow: $ui-shadow-card;
+  margin-bottom: $ui-space-sm;
 }
 .back-btn {
-  font-size: 28rpx;
-  color: #2b8a3e;
+  font-size: $ui-font-base;
+  color: $ui-primary;
   font-weight: 600;
   padding-right: 20rpx;
   flex-shrink: 0;
@@ -527,38 +468,31 @@ onLoad(() => {
   min-width: 0;
   font-size: 30rpx;
   font-weight: 700;
-  color: #222;
+  color: $ui-text-1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-right: 16rpx;
+  margin-right: $ui-space-sm;
 }
 .panel {
-  background: #ffffff;
-  border-radius: 16rpx;
-  padding: 20rpx 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
-  margin-bottom: 16rpx;
-}
-.panel-title {
-  font-size: 28rpx;
-  font-weight: 700;
-  color: #222;
-  margin-bottom: 16rpx;
+  padding: 20rpx $ui-space-md;
+  margin-bottom: $ui-space-sm;
 }
 .item-row {
   display: flex;
   align-items: center;
   padding: 14rpx 0;
-  border-bottom: 1rpx dashed #f0f0f0;
+  border-bottom: 1rpx dashed $ui-border;
 
   &.head {
-    border-bottom: 1rpx solid #eef0ef;
+    border-bottom: 1rpx solid $ui-border;
     padding: 8rpx 0;
+    background: $ui-bg-hover;
+    border-radius: $ui-radius-sm;
 
     .ir-goods, .ir-qty, .ir-price, .ir-amount {
-      font-size: 22rpx;
-      color: #999;
+      font-size: $ui-font-xs;
+      color: $ui-text-3;
       font-weight: 400;
     }
   }
@@ -577,7 +511,7 @@ onLoad(() => {
 .ir-name {
   font-size: 26rpx;
   font-weight: 600;
-  color: #222;
+  color: $ui-text-1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -587,16 +521,16 @@ onLoad(() => {
   font-size: 18rpx;
   font-weight: 600;
   padding: 2rpx 10rpx;
-  border-radius: 6rpx;
+  border-radius: $ui-radius-sm;
   margin-left: 10rpx;
   vertical-align: middle;
 }
-.dir-out { background: #e8f0fe; color: #2f6fde; }
-.dir-in { background: #fdeaea; color: #e64340; }
+.dir-out { background: $ui-blue-bg; color: $ui-blue; }
+.dir-in { background: $ui-danger-bg; color: $ui-danger; }
 .ir-spec {
   margin-top: 2rpx;
   font-size: 20rpx;
-  color: #999;
+  color: $ui-text-3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -605,14 +539,14 @@ onLoad(() => {
   width: 70rpx;
   text-align: center;
   font-size: 26rpx;
-  color: #333;
+  color: $ui-text-1;
   flex-shrink: 0;
 }
 .ir-price {
   width: 110rpx;
   text-align: right;
-  font-size: 24rpx;
-  color: #666;
+  font-size: $ui-font-sm;
+  color: $ui-text-2;
   flex-shrink: 0;
 }
 .ir-amount {
@@ -620,43 +554,43 @@ onLoad(() => {
   text-align: right;
   font-size: 26rpx;
   font-weight: 600;
-  color: #222;
+  color: $ui-text-1;
   flex-shrink: 0;
 
   &.neg {
-    color: #e64340;
+    color: $ui-danger;
   }
 }
 .total-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 16rpx;
+  padding-top: $ui-space-sm;
 }
 .total-label {
   font-size: 26rpx;
   font-weight: 600;
-  color: #666;
+  color: $ui-text-2;
 }
 .total-amount {
-  font-size: 32rpx;
+  font-size: $ui-font-md;
   font-weight: 700;
-  color: #222;
+  color: $ui-text-1;
 
   &.neg {
-    color: #e64340;
+    color: $ui-danger;
   }
 }
 
 /* 单信息卡 */
 .info-panel {
-  padding: 8rpx 24rpx;
+  padding: 8rpx $ui-space-md;
 }
 .info-row {
   display: flex;
   align-items: flex-start;
   padding: 14rpx 0;
-  border-bottom: 1rpx dashed #f0f0f0;
+  border-bottom: 1rpx dashed $ui-border;
 
   &:last-child {
     border-bottom: none;
@@ -664,15 +598,15 @@ onLoad(() => {
 }
 .info-label {
   width: 140rpx;
-  font-size: 24rpx;
-  color: #999;
+  font-size: $ui-font-sm;
+  color: $ui-text-3;
   flex-shrink: 0;
 }
 .info-value {
   flex: 1;
   min-width: 0;
   font-size: 26rpx;
-  color: #333;
+  color: $ui-text-1;
   word-break: break-all;
 }
 </style>

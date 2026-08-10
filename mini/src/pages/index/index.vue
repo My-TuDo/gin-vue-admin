@@ -1,7 +1,7 @@
 <template>
-  <view class="page">
+  <view class="ui-page">
     <!-- 经营看板缩略卡片：点击进入看板详情页 -->
-    <view class="dash-card" @click="goDashboard">
+    <view class="dash-card ui-card" @click="goDashboard">
       <view class="dash-head">
         <text class="dash-title">经营看板</text>
         <view v-if="alertCount > 0" class="badge">预警 {{ alertCount }}</view>
@@ -34,7 +34,7 @@
     </view>
 
     <!-- 功能九宫格（3 列） -->
-    <view class="section-title">功能</view>
+    <view class="ui-section-title">功能</view>
     <view class="grid">
       <view
         v-for="item in menus"
@@ -252,25 +252,14 @@ function fmtInt(n) {
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  padding: 24rpx;
-  box-sizing: border-box;
-}
-
-.section-title {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #222;
-  margin: 8rpx 0 20rpx;
-}
+/* 页面容器：复用全局 .ui-page；区块标题：复用全局 .ui-section-title */
 
 /* ---- 看板缩略卡片 ---- */
 .dash-card {
-  background: linear-gradient(135deg, #2b8a3e 0%, #3fb45c 100%);
-  border-radius: 20rpx;
+  background: linear-gradient(135deg, $ui-primary 0%, $ui-primary-light 100%);
+  border-radius: $ui-radius-md;
   padding: 28rpx 28rpx 20rpx;
-  margin-bottom: 32rpx;
+  margin-bottom: $ui-space-lg;
   box-shadow: 0 8rpx 24rpx rgba(43, 138, 62, 0.25);
 }
 
@@ -282,17 +271,17 @@ function fmtInt(n) {
 }
 
 .dash-title {
-  font-size: 32rpx;
+  font-size: $ui-font-md;
   font-weight: 600;
-  color: #fff;
+  color: $ui-bg-card;
 }
 
 .badge {
   background: rgba(255, 255, 255, 0.2);
-  color: #fff;
-  font-size: 22rpx;
+  color: $ui-bg-card;
+  font-size: $ui-font-xs;
   padding: 6rpx 18rpx;
-  border-radius: 999rpx;
+  border-radius: $ui-radius-full;
   font-weight: 600;
 }
 
@@ -302,13 +291,13 @@ function fmtInt(n) {
 
 .dash-tip {
   color: rgba(255, 255, 255, 0.85);
-  font-size: 26rpx;
+  font-size: $ui-font-sm;
   padding: 30rpx 0;
   text-align: center;
 }
 
 .dash-error {
-  font-size: 24rpx;
+  font-size: $ui-font-sm;
 }
 
 .dash-grid {
@@ -327,7 +316,7 @@ function fmtInt(n) {
 }
 
 .dash-label {
-  font-size: 22rpx;
+  font-size: $ui-font-xs;
   color: rgba(255, 255, 255, 0.8);
   margin-bottom: 10rpx;
 }
@@ -335,10 +324,10 @@ function fmtInt(n) {
 .dash-value {
   font-size: 30rpx;
   font-weight: 600;
-  color: #fff;
+  color: $ui-bg-card;
 
   &.warn {
-    color: #ffd9d9;
+    color: $ui-danger;
   }
 }
 
@@ -350,7 +339,7 @@ function fmtInt(n) {
 }
 
 .dash-more {
-  font-size: 24rpx;
+  font-size: $ui-font-sm;
   color: rgba(255, 255, 255, 0.9);
 }
 
@@ -358,8 +347,8 @@ function fmtInt(n) {
 .grid {
   display: flex;
   flex-wrap: wrap;
-  background: #ffffff;
-  border-radius: 20rpx;
+  background: $ui-bg-card;
+  border-radius: $ui-radius-md;
   padding: 12rpx 0;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
 }
@@ -380,35 +369,35 @@ function fmtInt(n) {
 .grid-icon {
   width: 88rpx;
   height: 88rpx;
-  border-radius: 24rpx;
+  border-radius: $ui-radius-lg;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 36rpx;
+  font-size: $ui-font-lg;
   font-weight: 600;
   line-height: 1;
   margin-bottom: 14rpx;
 }
 
-/* 色块底色：可用入口品牌绿深浅两色，占位入口灰色调（与主色 #2b8a3e 协调） */
+/* 色块底色：可用入口品牌绿深浅两色，占位入口灰色调（与 $ui-primary 协调） */
 .tint-green {
-  background: #e8f5e9;
-  color: #2b8a3e;
+  background: $ui-primary-bg;
+  color: $ui-primary;
 }
 
 .tint-green-deep {
-  background: #2b8a3e;
-  color: #ffffff;
+  background: $ui-primary;
+  color: $ui-bg-card;
 }
 
 .tint-gray {
-  background: #eef0ef;
-  color: #97a09c;
+  background: $ui-bg-hover;
+  color: $ui-text-3;
 }
 
 .grid-name {
-  font-size: 24rpx;
-  color: #333;
+  font-size: $ui-font-sm;
+  color: $ui-text-1;
 }
 
 .grid-tag {
@@ -416,9 +405,9 @@ function fmtInt(n) {
   top: 22rpx;
   right: calc(33.333% / 2 - 60rpx);
   font-size: 18rpx;
-  color: #e64340;
-  background: #fff1f0;
-  border-radius: 999rpx;
+  color: $ui-danger;
+  background: $ui-danger-bg;
+  border-radius: $ui-radius-full;
   padding: 2rpx 10rpx;
 }
 </style>

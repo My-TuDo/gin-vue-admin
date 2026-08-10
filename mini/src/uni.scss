@@ -1,15 +1,72 @@
-/* uni-app 全局 SCSS 变量（编译时自动注入每个页面） */
-$uni-color-primary: #2b8a3e;
-$uni-color-success: #4cd964;
-$uni-color-warning: #f0ad4e;
-$uni-color-error: #dd524d;
+/* =========================================================
+ * uni-app 全局 SCSS 设计令牌（编译时自动注入每个页面）
+ * 命名：$ui-<类别>-<语义>
+ * ========================================================= */
 
-$uni-text-color: #333333;
-$uni-text-color-grey: #999999;
-$uni-text-color-placeholder: #b2b2b2;
+/* ---------- 品牌色 ---------- */
+$ui-primary: #2b8a3e; // 深主色：按钮/激活/主强调
+$ui-primary-light: #3fb45c; // 浅主色：渐变/高亮
+$ui-primary-bg: #e8f5e9; // 主色浅底（徽标/色块）
 
-$uni-bg-color: #f6f7f9;
-$uni-bg-color-grey: #f5f6f7;
-$uni-border-color: #e5e5e5;
+/* ---------- 语义色 ---------- */
+$ui-success: #3fb45c; // 成功
+$ui-warning: #e6a23c; // 警告
+$ui-danger: #e64340; // 危险/错误
+$ui-info: #909399; // 中性信息
+$ui-blue: #2f6fde; // 仅信息类（换货/批发/链接）
 
-$uni-border-radius: 12rpx;
+/* 语义浅底（徽标浅色底，rgba 透明底） */
+$ui-success-bg: rgba(63, 180, 92, 0.12);
+$ui-warning-bg: rgba(230, 162, 60, 0.12);
+$ui-danger-bg: rgba(230, 67, 64, 0.1);
+$ui-blue-bg: rgba(47, 111, 222, 0.1);
+
+/* ---------- 中性 ---------- */
+$ui-text-1: #303133; // 主文本
+$ui-text-2: #606266; // 次级文本
+$ui-text-3: #909399; // 弱化文本/占位
+$ui-border: #e4e7ed; // 分割线/边框
+$ui-bg-page: #f5f6f7; // 页面背景
+$ui-bg-card: #ffffff; // 卡片背景
+$ui-bg-hover: #f0f1f2; // 悬停/浅灰块
+$ui-bg-disabled: #f0f0f0; // 禁用/徽标灰底
+
+/* ---------- 圆角 ---------- */
+$ui-radius-sm: 8rpx;
+$ui-radius-md: 16rpx;
+$ui-radius-lg: 24rpx;
+$ui-radius-full: 999rpx;
+
+/* ---------- 间距 ---------- */
+$ui-space-xs: 8rpx;
+$ui-space-sm: 16rpx;
+$ui-space-md: 24rpx;
+$ui-space-lg: 32rpx;
+$ui-space-xl: 48rpx;
+
+/* ---------- 字号 ---------- */
+$ui-font-xs: 22rpx;
+$ui-font-sm: 24rpx;
+$ui-font-base: 28rpx;
+$ui-font-md: 32rpx;
+$ui-font-lg: 36rpx;
+$ui-font-xl: 44rpx;
+
+/* ---------- 阴影 ---------- */
+$ui-shadow-card: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
+$ui-shadow-pop: 0 -4rpx 24rpx rgba(0, 0, 0, 0.08);
+
+/* =========================================================
+ * 兼容旧 $uni-* 变量（映射到新令牌，避免已有引用失效）
+ * ========================================================= */
+$uni-color-primary: $ui-primary;
+$uni-color-success: $ui-success;
+$uni-color-warning: $ui-warning;
+$uni-color-error: $ui-danger;
+$uni-text-color: $ui-text-1;
+$uni-text-color-grey: $ui-text-3;
+$uni-text-color-placeholder: $ui-text-3;
+$uni-bg-color: $ui-bg-page;
+$uni-bg-color-grey: $ui-bg-page;
+$uni-border-color: $ui-border;
+$uni-border-radius: $ui-radius-md;

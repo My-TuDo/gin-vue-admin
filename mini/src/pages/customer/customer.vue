@@ -3,29 +3,29 @@
     <!-- ================= 列表视图 ================= -->
     <template v-if="!detailVisible">
       <!-- 搜索（名称/电话，confirm 触发） -->
-      <view class="search-bar">
+      <view class="ui-search">
         <input
           v-model="keyword"
-          class="search-input"
+          class="ui-search-input"
           type="text"
           placeholder="搜索客户名称 / 电话"
           confirm-type="search"
           @confirm="onSearch"
         />
-        <view v-if="keyword" class="clear-btn" @click="clearSearch">清空</view>
+        <view v-if="keyword" class="ui-search-action" @click="clearSearch">清空</view>
       </view>
 
       <view class="list-head">
-        <text class="section-title">客户</text>
+        <view class="ui-section-title">客户</view>
         <text class="list-count">{{ customers.length }} / {{ total }} 条</text>
       </view>
 
-      <view v-if="loading && !customers.length" class="block-tip">加载中…</view>
-      <view v-else-if="error" class="err-box">
-        <text class="err-text">{{ error }}</text>
-        <view class="retry-btn" @click="reload">重试</view>
+      <view v-if="loading && !customers.length" class="ui-empty">加载中…</view>
+      <view v-else-if="error" class="ui-err">
+        <text class="ui-err-text">{{ error }}</text>
+        <view class="ui-retry" @click="reload">重试</view>
       </view>
-      <view v-else-if="!customers.length" class="block-tip">{{ keyword ? '未找到相关客户' : '暂无客户数据' }}</view>
+      <view v-else-if="!customers.length" class="ui-empty">{{ keyword ? '未找到相关客户' : '暂无客户数据' }}</view>
 
       <view v-else class="card-list">
         <view v-for="c in customers" :key="c.ID" class="cust-card" @click="openDetail(c.ID)">
@@ -54,7 +54,7 @@
         <text class="lv-tag" :class="levelCls(detail.level)">{{ levelName(detail.level) }}</text>
       </view>
 
-      <view class="panel info-panel">
+      <view class="panel ui-card info-panel">
         <view class="info-row"><text class="info-label">编码</text><text class="info-value">{{ detail.code || '—' }}</text></view>
         <view class="info-row"><text class="info-label">等级</text><text class="info-value">{{ levelName(detail.level) }}</text></view>
         <view class="info-row"><text class="info-label">电话</text><text class="info-value">{{ detail.phone || '—' }}</text></view>
@@ -165,37 +165,9 @@ onLoad(() => {
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  padding: 24rpx;
+  padding: $ui-space-md;
   box-sizing: border-box;
   padding-bottom: 40rpx;
-}
-
-/* ===== 搜索栏 ===== */
-.search-bar {
-  display: flex;
-  align-items: center;
-  background: #ffffff;
-  border-radius: 16rpx;
-  padding: 12rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
-}
-.search-input {
-  flex: 1;
-  height: 72rpx;
-  line-height: 72rpx;
-  background: #f5f6f7;
-  border-radius: 12rpx;
-  padding: 0 24rpx;
-  font-size: 26rpx;
-}
-.clear-btn {
-  margin-left: 16rpx;
-  padding: 0 20rpx;
-  height: 72rpx;
-  line-height: 72rpx;
-  font-size: 24rpx;
-  color: #999;
-  flex-shrink: 0;
 }
 
 /* ===== 列表 ===== */
@@ -205,24 +177,19 @@ onLoad(() => {
   align-items: baseline;
   margin: 20rpx 4rpx 12rpx;
 }
-.section-title {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #222;
-}
 .list-count {
-  font-size: 22rpx;
-  color: #999;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
 }
 .card-list {
-  background: #ffffff;
-  border-radius: 16rpx;
+  background: $ui-bg-card;
+  border-radius: $ui-radius-md;
   overflow: hidden;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  box-shadow: $ui-shadow-card;
 }
 .cust-card {
-  padding: 22rpx 24rpx;
-  border-bottom: 1rpx solid #f0f0f0;
+  padding: 22rpx $ui-space-md;
+  border-bottom: 1rpx solid $ui-border;
 
   &:last-child {
     border-bottom: none;
@@ -235,13 +202,13 @@ onLoad(() => {
 .cc-name {
   font-size: 30rpx;
   font-weight: 700;
-  color: #222;
+  color: $ui-text-1;
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-right: 16rpx;
+  margin-right: $ui-space-sm;
 }
 .cc-mid {
   display: flex;
@@ -250,90 +217,65 @@ onLoad(() => {
   margin-top: 8rpx;
 }
 .cc-phone {
-  font-size: 24rpx;
-  color: #666;
+  font-size: $ui-font-sm;
+  color: $ui-text-2;
 }
 .cc-code {
-  font-size: 22rpx;
-  color: #b2b2b2;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
 }
 .cc-addr {
   margin-top: 6rpx;
-  font-size: 22rpx;
-  color: #999;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* ===== 等级徽标 ===== */
+/* ===== 等级徽标（胶囊） ===== */
 .lv-tag {
   font-size: 20rpx;
   font-weight: 600;
   padding: 4rpx 14rpx;
-  border-radius: 8rpx;
+  border-radius: $ui-radius-full;
   flex-shrink: 0;
 }
-.lv-normal { background: #f0f0f0; color: #666; }
-.lv-vip { background: #fdf6e3; color: #b8860b; }
-.lv-wholesale { background: #e8f0fe; color: #2f6fde; }
+.lv-normal { background: $ui-bg-disabled; color: $ui-text-2; }
+.lv-vip { background: $ui-warning-bg; color: $ui-warning; }
+.lv-wholesale { background: $ui-blue-bg; color: $ui-blue; }
 
 /* ===== 状态徽标 ===== */
 .st-tag {
   font-size: 20rpx;
   font-weight: 600;
   padding: 4rpx 14rpx;
-  border-radius: 8rpx;
+  border-radius: $ui-radius-full;
   flex-shrink: 0;
   margin-left: 12rpx;
 }
-.st-off { background: #f0f0f0; color: #999; }
+.st-off { background: $ui-bg-disabled; color: $ui-text-3; }
 
-/* ===== 状态提示 ===== */
-.block-tip {
-  padding: 80rpx 0;
-  text-align: center;
-  color: #999;
-  font-size: 26rpx;
-}
-.err-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 80rpx 0;
-}
-.err-text {
-  font-size: 26rpx;
-  color: #999;
-  margin-bottom: 20rpx;
-}
-.retry-btn {
-  padding: 10rpx 40rpx;
-  background: #2b8a3e;
-  color: #fff;
-  font-size: 24rpx;
-  border-radius: 8rpx;
-}
 .loading-more {
-  padding: 24rpx 0 8rpx;
+  padding: $ui-space-md 0 8rpx;
   text-align: center;
-  color: #b2b2b2;
-  font-size: 22rpx;
+  color: $ui-text-3;
+  font-size: $ui-font-xs;
 }
 
 /* ================= 详情视图 ================= */
 .detail-top {
   display: flex;
   align-items: center;
-  background: #ffffff;
-  border-radius: 16rpx;
-  padding: 20rpx 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
-  margin-bottom: 16rpx;
+  background: $ui-bg-card;
+  border-radius: $ui-radius-md;
+  padding: 20rpx $ui-space-md;
+  box-shadow: $ui-shadow-card;
+  margin-bottom: $ui-space-sm;
 }
 .back-btn {
-  font-size: 28rpx;
-  color: #2b8a3e;
+  font-size: $ui-font-base;
+  color: $ui-primary;
   font-weight: 600;
   padding-right: 20rpx;
   flex-shrink: 0;
@@ -343,23 +285,20 @@ onLoad(() => {
   min-width: 0;
   font-size: 30rpx;
   font-weight: 700;
-  color: #222;
+  color: $ui-text-1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-right: 16rpx;
+  margin-right: $ui-space-sm;
 }
 .info-panel {
-  background: #ffffff;
-  border-radius: 16rpx;
-  padding: 8rpx 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  padding: 8rpx $ui-space-md;
 }
 .info-row {
   display: flex;
   align-items: flex-start;
   padding: 14rpx 0;
-  border-bottom: 1rpx dashed #f0f0f0;
+  border-bottom: 1rpx dashed $ui-border;
 
   &:last-child {
     border-bottom: none;
@@ -367,15 +306,15 @@ onLoad(() => {
 }
 .info-label {
   width: 140rpx;
-  font-size: 24rpx;
-  color: #999;
+  font-size: $ui-font-sm;
+  color: $ui-text-3;
   flex-shrink: 0;
 }
 .info-value {
   flex: 1;
   min-width: 0;
   font-size: 26rpx;
-  color: #333;
+  color: $ui-text-1;
   word-break: break-all;
 }
 </style>

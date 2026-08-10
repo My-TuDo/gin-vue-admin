@@ -1,5 +1,5 @@
 <template>
-  <view class="page">
+  <view class="ui-page">
     <!-- 用户信息 -->
     <view class="profile">
       <image v-if="user.headerImg" class="avatar" :src="user.headerImg" mode="aspectFill" />
@@ -10,27 +10,27 @@
       </view>
     </view>
 
-    <view class="info-card">
-      <view class="info-row">
+    <view class="info-card ui-card">
+      <view class="info-row ui-cell">
         <text class="info-label">角色 ID</text>
         <text class="info-value">{{ user.authorityId != null ? user.authorityId : '-' }}</text>
       </view>
-      <view class="info-row">
+      <view class="info-row ui-cell">
         <text class="info-label">手机号</text>
         <text class="info-value">{{ user.phone || '-' }}</text>
       </view>
-      <view class="info-row">
+      <view class="info-row ui-cell">
         <text class="info-label">邮箱</text>
         <text class="info-value">{{ user.email || '-' }}</text>
       </view>
-      <view class="info-row">
+      <view class="info-row ui-cell">
         <text class="info-label">部门</text>
         <text class="info-value">{{ (user.dept && user.dept.name) || '-' }}</text>
       </view>
     </view>
 
     <!-- 收银台绑定：绑定后小程序扫码商品自动加入 PC 收银台购物车 -->
-    <view class="pos-card">
+    <view class="pos-card ui-card">
       <view class="pos-card-head">
         <text class="pos-card-title">收银台</text>
         <text class="pos-card-state" :class="{ bound: !!posSession }">{{ posSession ? '已绑定' : '未绑定' }}</text>
@@ -41,8 +41,8 @@
           <text class="pos-code-value">{{ posSession }}</text>
         </view>
         <view class="pos-actions">
-          <view class="pos-btn" @click="openBind(true)">重新绑定</view>
-          <view class="pos-btn pos-btn-danger" @click="unbind">解绑</view>
+          <view class="pos-btn ui-btn-ghost" @click="openBind(true)">重新绑定</view>
+          <view class="pos-btn ui-btn-ghost ui-btn-ghost--danger" @click="unbind">解绑</view>
         </view>
       </view>
       <view v-else class="pos-unbound" @click="openBind(false)">
@@ -73,7 +73,7 @@
       </view>
     </view>
 
-    <button class="logout-btn" @click="handleLogout">退出登录</button>
+    <button class="logout-btn ui-btn-ghost ui-btn-ghost--danger" @click="handleLogout">退出登录</button>
 
     <view class="version">v1.0.0 · 进销存小程序</view>
   </view>
@@ -163,27 +163,21 @@ function handleLogout() {
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  padding: 24rpx;
-  box-sizing: border-box;
-}
-
 .profile {
   display: flex;
   align-items: center;
-  background: linear-gradient(135deg, #2b8a3e 0%, #3fb45c 100%);
-  border-radius: 16rpx;
+  background: linear-gradient(135deg, $ui-primary 0%, $ui-primary-light 100%);
+  border-radius: $ui-radius-md;
   padding: 40rpx 32rpx;
-  margin-bottom: 24rpx;
+  margin-bottom: $ui-space-md;
 }
 
 .avatar {
   width: 120rpx;
   height: 120rpx;
   border-radius: 50%;
-  background: #fff;
-  margin-right: 24rpx;
+  background: $ui-bg-card;
+  margin-right: $ui-space-md;
 }
 
 .avatar-placeholder {
@@ -192,7 +186,7 @@ function handleLogout() {
   justify-content: center;
   font-size: 56rpx;
   font-weight: 600;
-  color: #2b8a3e;
+  color: $ui-primary;
 }
 
 .profile-main {
@@ -203,28 +197,23 @@ function handleLogout() {
 .nickname {
   font-size: 34rpx;
   font-weight: 600;
-  color: #fff;
+  color: $ui-bg-card;
 }
 
 .username {
   margin-top: 8rpx;
-  font-size: 24rpx;
+  font-size: $ui-font-sm;
   color: rgba(255, 255, 255, 0.8);
 }
 
 .info-card {
-  background: #ffffff;
-  border-radius: 16rpx;
   padding: 8rpx 32rpx;
-  margin-bottom: 24rpx;
+  margin-bottom: $ui-space-md;
 }
 
 .info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   padding: 26rpx 0;
-  border-bottom: 1rpx solid #f0f0f0;
+  border-bottom: 1rpx solid $ui-border;
 
   &:last-child {
     border-bottom: none;
@@ -233,37 +222,26 @@ function handleLogout() {
 
 .info-label {
   font-size: 26rpx;
-  color: #999;
+  color: $ui-text-3;
 }
 
 .info-value {
   font-size: 26rpx;
-  color: #222;
+  color: $ui-text-1;
   max-width: 400rpx;
   text-align: right;
   word-break: break-all;
 }
 
 .logout-btn {
-  margin-top: 32rpx;
+  margin-top: $ui-space-lg;
   height: 88rpx;
-  line-height: 88rpx;
-  background: #ffffff;
-  color: #e64340;
-  font-size: 30rpx;
-  border-radius: 16rpx;
-
-  &::after {
-    border: none;
-  }
 }
 
 /* ===== 收银台绑定 ===== */
 .pos-card {
-  background: #ffffff;
-  border-radius: 16rpx;
   padding: 28rpx 32rpx;
-  margin-bottom: 24rpx;
+  margin-bottom: $ui-space-md;
 }
 .pos-card-head {
   display: flex;
@@ -274,90 +252,81 @@ function handleLogout() {
 .pos-card-title {
   font-size: 30rpx;
   font-weight: 600;
-  color: #222;
+  color: $ui-text-1;
 }
 .pos-card-state {
-  font-size: 22rpx;
-  color: #999;
-  background: #f5f6f7;
-  border-radius: 20rpx;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
+  background: $ui-bg-page;
+  border-radius: $ui-radius-full;
   padding: 4rpx 18rpx;
 
   &.bound {
-    color: #2b8a3e;
-    background: #e8f5e9;
+    color: $ui-primary;
+    background: $ui-primary-bg;
   }
 }
 .pos-code {
   display: flex;
   align-items: baseline;
-  background: #f8fafc;
-  border-radius: 12rpx;
-  padding: 20rpx 24rpx;
+  background: $ui-bg-hover;
+  border-radius: $ui-radius-sm;
+  padding: 20rpx $ui-space-md;
   margin-bottom: 18rpx;
 }
 .pos-code-label {
-  font-size: 24rpx;
-  color: #999;
+  font-size: $ui-font-sm;
+  color: $ui-text-3;
 }
 .pos-code-value {
   margin-left: 20rpx;
   font-size: 40rpx;
   font-weight: 700;
   letter-spacing: 6rpx;
-  color: #2b8a3e;
+  color: $ui-primary;
 }
 .pos-actions {
   display: flex;
-  gap: 16rpx;
+  gap: $ui-space-sm;
 }
 .pos-btn {
   flex: 1;
   height: 72rpx;
-  line-height: 72rpx;
   text-align: center;
-  background: #e8f5e9;
-  color: #2b8a3e;
   font-size: 26rpx;
   font-weight: 600;
-  border-radius: 12rpx;
-
-  &.pos-btn-danger {
-    background: #fdf0ef;
-    color: #e64340;
-  }
 }
 .pos-unbound {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #f8fafc;
-  border-radius: 12rpx;
-  padding: 24rpx 28rpx;
+  background: $ui-bg-hover;
+  border-radius: $ui-radius-sm;
+  padding: $ui-space-md 28rpx;
 }
 .pos-unbound-text {
-  font-size: 28rpx;
-  color: #222;
+  font-size: $ui-font-base;
+  color: $ui-text-1;
   font-weight: 600;
 }
 .pos-unbound-arrow {
   font-size: 34rpx;
-  color: #b2b2b2;
+  color: $ui-text-3;
 }
 .pos-tip {
-  margin-top: 16rpx;
-  font-size: 22rpx;
-  color: #b2b2b2;
+  margin-top: $ui-space-sm;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
 }
 
-/* ===== 绑定弹层 ===== */
+/* ===== 绑定弹层（居中弹窗，自绘） ===== */
 .bind-mask {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.5);
   z-index: 999;
   display: flex;
   align-items: center;
@@ -365,28 +334,28 @@ function handleLogout() {
 }
 .bind-pop {
   width: 600rpx;
-  background: #ffffff;
-  border-radius: 20rpx;
+  background: $ui-bg-card;
+  border-radius: $ui-radius-lg;
   padding: 40rpx 36rpx 32rpx;
 }
 .bind-title {
-  font-size: 32rpx;
+  font-size: $ui-font-md;
   font-weight: 700;
-  color: #222;
+  color: $ui-text-1;
   text-align: center;
 }
 .bind-desc {
   margin-top: 10rpx;
-  font-size: 24rpx;
-  color: #999;
+  font-size: $ui-font-sm;
+  color: $ui-text-3;
   text-align: center;
 }
 .bind-input {
   margin-top: 28rpx;
   height: 88rpx;
   line-height: 88rpx;
-  background: #f5f6f7;
-  border-radius: 14rpx;
+  background: $ui-bg-page;
+  border-radius: $ui-radius-md;
   padding: 0 28rpx;
   font-size: 34rpx;
   font-weight: 700;
@@ -395,30 +364,30 @@ function handleLogout() {
 }
 .bind-btns {
   display: flex;
-  gap: 16rpx;
-  margin-top: 32rpx;
+  gap: $ui-space-sm;
+  margin-top: $ui-space-lg;
 }
 .bind-btn {
   flex: 1;
   height: 80rpx;
   line-height: 80rpx;
   text-align: center;
-  background: #f5f6f7;
-  color: #666;
-  font-size: 28rpx;
-  border-radius: 12rpx;
+  background: $ui-bg-page;
+  color: $ui-text-2;
+  font-size: $ui-font-base;
+  border-radius: $ui-radius-full;
 
   &.bind-btn-primary {
-    background: #2b8a3e;
-    color: #ffffff;
+    background: $ui-primary;
+    color: $ui-bg-card;
     font-weight: 600;
   }
 }
 
 .version {
-  margin-top: 48rpx;
+  margin-top: $ui-space-xl;
   text-align: center;
-  font-size: 22rpx;
-  color: #b2b2b2;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
 }
 </style>

@@ -1,7 +1,7 @@
 <template>
   <view class="page">
     <!-- 表头区：仓库选择 + 方向切换 + 扫码添加 -->
-    <view class="top-card">
+    <view class="top-card ui-card">
       <picker :range="warehouseNames" :value="warehouseIndex" @change="onWarehouseChange">
         <view class="wh-pick">
           <text class="wh-label">仓库</text>
@@ -15,15 +15,15 @@
     </view>
 
     <!-- 搜索 + 扫码 -->
-    <view class="add-bar">
+    <view class="ui-search">
       <input
         v-model="listKeyword"
-        class="add-input"
+        class="ui-search-input"
         type="text"
         placeholder="搜索商品名称 / 款号"
         confirm-type="search"
       />
-      <view class="scan-btn" @click="doScan">扫码添加</view>
+      <view class="ui-search-action" @click="doScan">扫码添加</view>
     </view>
 
     <!-- 商品列表区（可滚动）：浏览商品 → 点选进入 SKU 选择 -->
@@ -32,12 +32,12 @@
       <text class="list-count">{{ goodsListFiltered.length }} 条</text>
     </view>
     <scroll-view class="sku-scroll" scroll-y>
-      <view v-if="listLoading" class="block-tip">加载中…</view>
-      <view v-else-if="listError" class="err-box">
-        <text class="err-text">{{ listError }}</text>
-        <view class="retry-btn" @click="retryLoad">重试</view>
+      <view v-if="listLoading" class="ui-empty">加载中…</view>
+      <view v-else-if="listError" class="ui-err">
+        <text class="ui-err-text">{{ listError }}</text>
+        <view class="ui-retry" @click="retryLoad">重试</view>
       </view>
-      <view v-else-if="!goodsListFiltered.length" class="block-tip">{{ goodsList.length ? '无匹配商品' : '暂无商品数据' }}</view>
+      <view v-else-if="!goodsListFiltered.length" class="ui-empty">{{ goodsList.length ? '无匹配商品' : '暂无商品数据' }}</view>
       <view v-else class="goods-list">
         <view v-for="g in goodsListFiltered" :key="g.ID" class="goods-item" @click="openSkuPop(g)">
           <view class="gi-main">
@@ -53,7 +53,7 @@
     </scroll-view>
 
     <!-- 明细区（底部固定）+ 提交 -->
-    <view class="detail-panel">
+    <view class="detail-panel ui-card">
       <view class="detail-head">
         <text class="detail-title">待{{ direction === 'in' ? '入库' : '出库' }}（{{ rows.length }} 项）</text>
         <text class="detail-total">共 {{ rowsTotal }} 件</text>
@@ -67,7 +67,7 @@
             </text>
           </view>
           <view class="ri-right">
-            <view class="ri-stepper">
+            <view class="ri-stepper ui-stepper">
               <view class="step-btn" @click="stepRow(r, -1)">−</view>
               <view class="step-num">{{ r.qty }}</view>
               <view class="step-btn plus" @click="stepRow(r, 1)">+</view>
@@ -85,21 +85,21 @@
     </view>
 
     <!-- SKU 选择弹层（自绘半屏，无 uni-popup 依赖） -->
-    <view v-if="skuPopVisible" class="pop-mask" @click="skuPopVisible = false">
-      <view class="pop-panel" @click.stop>
+    <view v-if="skuPopVisible" class="pop-mask ui-pop-mask" @click="skuPopVisible = false">
+      <view class="pop-panel ui-pop-body" @click.stop>
         <view class="pop-head">
           <text class="pop-title">{{ currentGoods.name }}</text>
           <text v-if="currentGoods.code" class="pop-code">{{ currentGoods.code }}</text>
           <view class="pop-close" @click="skuPopVisible = false">×</view>
         </view>
-        <view v-if="!popSkus.length" class="pop-empty">该商品暂无 SKU，请先在电脑端商品中心添加</view>
+        <view v-if="!popSkus.length" class="ui-empty">该商品暂无 SKU，请先在电脑端商品中心添加</view>
         <scroll-view v-else class="pop-scroll" scroll-y>
           <view v-for="(x, idx) in popSkus" :key="x.skuId" class="pop-sku-row">
             <view class="ps-main">
               <text class="ps-spec">{{ specText(x) }}</text>
               <text class="ps-stock" :class="{ none: !x.stock }">{{ x.stock > 0 ? `库存 ${x.stock} · 可售 ${x.avail}` : '无库存' }}</text>
             </view>
-            <view class="ps-stepper">
+            <view class="ps-stepper ui-stepper">
               <view class="step-btn" :class="{ disabled: !x.qty }" @click="popStep(x, -1)">−</view>
               <view class="step-num">{{ x.qty }}</view>
               <view class="step-btn plus" @click="popStep(x, 1)">+</view>
@@ -437,23 +437,20 @@ async function submit() {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 24rpx;
+  padding: $ui-space-md;
   padding-bottom: 12rpx;
   box-sizing: border-box;
 }
 
 .section-title {
-  font-size: 30rpx;
+  font-size: $ui-font-md;
   font-weight: 600;
-  color: #222;
+  color: $ui-text-1;
 }
 
 /* ===== 顶部卡片 ===== */
 .top-card {
-  background: #ffffff;
-  border-radius: 16rpx;
   padding: 20rpx 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
   flex-shrink: 0;
 }
 .wh-pick {
@@ -464,15 +461,15 @@ async function submit() {
 }
 .wh-label {
   font-size: 26rpx;
-  color: #999;
+  color: $ui-text-3;
 }
 .wh-value {
-  font-size: 28rpx;
+  font-size: $ui-font-base;
   font-weight: 600;
-  color: #222;
+  color: $ui-text-1;
 
   &.placeholder {
-    color: #b2b2b2;
+    color: $ui-text-3;
     font-weight: 400;
   }
 }
@@ -485,49 +482,22 @@ async function submit() {
   height: 72rpx;
   line-height: 72rpx;
   text-align: center;
-  background: #f5f6f7;
-  color: #666;
-  font-size: 28rpx;
+  background: $ui-bg-page;
+  color: $ui-text-2;
+  font-size: $ui-font-base;
   font-weight: 600;
-  border-radius: 12rpx;
+  border-radius: $ui-radius-sm;
 
   &.active {
-    background: linear-gradient(135deg, #2b8a3e 0%, #3fb45c 100%);
-    color: #fff;
+    background: linear-gradient(135deg, $ui-primary 0%, $ui-primary-light 100%);
+    color: $ui-bg-card;
     box-shadow: 0 6rpx 16rpx rgba(43, 138, 62, 0.25);
   }
 }
 
-/* ===== 搜索栏 ===== */
-.add-bar {
-  display: flex;
-  align-items: center;
-  margin-top: 16rpx;
-  background: #ffffff;
-  border-radius: 16rpx;
-  padding: 12rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
-  flex-shrink: 0;
-}
-.add-input {
-  flex: 1;
-  height: 72rpx;
-  line-height: 72rpx;
-  background: #f5f6f7;
-  border-radius: 12rpx;
-  padding: 0 24rpx;
-  font-size: 26rpx;
-}
-.scan-btn {
-  margin-left: 16rpx;
-  height: 72rpx;
-  line-height: 72rpx;
-  padding: 0 32rpx;
-  background: #2b8a3e;
-  color: #fff;
-  font-size: 28rpx;
-  border-radius: 12rpx;
-  font-weight: 600;
+/* ===== 搜索栏（复用 .ui-search，仅补间距） ===== */
+.page .ui-search {
+  margin-top: $ui-space-sm;
   flex-shrink: 0;
 }
 
@@ -540,26 +510,26 @@ async function submit() {
   flex-shrink: 0;
 }
 .list-count {
-  font-size: 22rpx;
-  color: #999;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
 }
 .sku-scroll {
   flex: 1;
   min-height: 0;
 }
 .goods-list {
-  background: #ffffff;
-  border-radius: 16rpx;
+  background: $ui-bg-card;
+  border-radius: $ui-radius-md;
   overflow: hidden;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  box-shadow: $ui-shadow-card;
   padding-bottom: 2rpx;
 }
 .goods-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 22rpx 24rpx;
-  border-bottom: 1rpx solid #f0f0f0;
+  padding: 22rpx $ui-space-md;
+  border-bottom: 1rpx solid $ui-border;
 
   &:last-child {
     border-bottom: none;
@@ -568,13 +538,13 @@ async function submit() {
 .gi-main {
   flex: 1;
   min-width: 0;
-  margin-right: 16rpx;
+  margin-right: $ui-space-sm;
 }
 .gi-name {
   display: block;
   font-size: 29rpx;
   font-weight: 600;
-  color: #222;
+  color: $ui-text-1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -582,8 +552,8 @@ async function submit() {
 .gi-code {
   display: block;
   margin-top: 4rpx;
-  font-size: 22rpx;
-  color: #2b8a3e;
+  font-size: $ui-font-xs;
+  color: $ui-primary;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -595,22 +565,20 @@ async function submit() {
   flex-shrink: 0;
 }
 .gi-count {
-  font-size: 22rpx;
-  color: #999;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
 }
 .gi-arrow {
-  font-size: 32rpx;
-  color: #c0c4cc;
+  font-size: $ui-font-md;
+  color: $ui-text-3;
 }
 
 /* ===== 明细区（底部固定） ===== */
 .detail-panel {
   flex-shrink: 0;
-  margin-top: 16rpx;
-  background: #ffffff;
-  border-radius: 16rpx;
+  margin-top: $ui-space-sm;
   padding: 16rpx 24rpx 20rpx;
-  box-shadow: 0 -2rpx 16rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $ui-shadow-pop;
 }
 .detail-head {
   display: flex;
@@ -619,29 +587,29 @@ async function submit() {
   margin-bottom: 8rpx;
 }
 .detail-title {
-  font-size: 28rpx;
+  font-size: $ui-font-base;
   font-weight: 700;
-  color: #222;
+  color: $ui-text-1;
 }
 .detail-total {
-  font-size: 22rpx;
-  color: #999;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
 }
 .detail-scroll {
   max-height: 260rpx;
 }
 .detail-empty {
-  padding: 24rpx 0;
+  padding: $ui-space-md 0;
   text-align: center;
-  color: #b2b2b2;
-  font-size: 24rpx;
+  color: $ui-text-3;
+  font-size: $ui-font-sm;
 }
 .row-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 14rpx 0;
-  border-bottom: 1rpx dashed #f0f0f0;
+  border-bottom: 1rpx dashed $ui-border;
 
   &:last-child {
     border-bottom: none;
@@ -650,13 +618,13 @@ async function submit() {
 .ri-main {
   flex: 1;
   min-width: 0;
-  margin-right: 16rpx;
+  margin-right: $ui-space-sm;
 }
 .ri-name {
   display: block;
   font-size: 26rpx;
   font-weight: 600;
-  color: #222;
+  color: $ui-text-1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -665,7 +633,7 @@ async function submit() {
   display: block;
   margin-top: 2rpx;
   font-size: 20rpx;
-  color: #999;
+  color: $ui-text-3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -673,63 +641,26 @@ async function submit() {
 .ri-right {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: $ui-space-sm;
   flex-shrink: 0;
 }
-.ri-stepper {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  background: #f5f6f7;
-  border-radius: 12rpx;
-  padding: 4rpx;
-}
-.step-btn {
-  width: 48rpx;
-  height: 48rpx;
-  line-height: 48rpx;
-  text-align: center;
-  background: #ffffff;
-  border-radius: 10rpx;
-  font-size: 28rpx;
-  font-weight: 700;
-  color: #303133;
-  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.06);
-
-  &.plus {
-    color: #2b8a3e;
-  }
-
-  &.disabled {
-    color: #c0c4cc;
-    background: #f5f6f7;
-    opacity: 0.6;
-  }
-}
-.step-num {
-  min-width: 48rpx;
-  text-align: center;
-  font-size: 26rpx;
-  font-weight: 700;
-  color: #222;
-}
 .ri-del {
-  font-size: 22rpx;
-  color: #e64340;
+  font-size: $ui-font-xs;
+  color: $ui-danger;
   padding: 8rpx 8rpx;
 }
 
-/* ===== 提交 ===== */
+/* ===== 提交（复用 .ui-btn-primary，仅补高度与渐变） ===== */
 .submit-btn {
   margin-top: 14rpx;
   height: 88rpx;
   line-height: 88rpx;
   text-align: center;
-  background: linear-gradient(135deg, #2b8a3e 0%, #3fb45c 100%);
-  color: #fff;
+  background: linear-gradient(135deg, $ui-primary 0%, $ui-primary-light 100%);
+  color: $ui-bg-card;
   font-size: 30rpx;
   font-weight: 700;
-  border-radius: 16rpx;
+  border-radius: $ui-radius-full;
   box-shadow: 0 8rpx 24rpx rgba(43, 138, 62, 0.25);
 
   &.disabled {
@@ -737,66 +668,18 @@ async function submit() {
   }
 }
 
-/* ===== 状态提示 ===== */
-.block-tip {
-  padding: 80rpx 0;
-  text-align: center;
-  color: #999;
-  font-size: 26rpx;
-}
-.err-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 80rpx 0;
-}
-.err-text {
-  font-size: 26rpx;
-  color: #999;
-  margin-bottom: 20rpx;
-}
-.retry-btn {
-  padding: 10rpx 40rpx;
-  background: #2b8a3e;
-  color: #fff;
-  font-size: 24rpx;
-  border-radius: 8rpx;
-}
-
-/* ===== SKU 选择弹层（自绘半屏） ===== */
-.pop-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 999;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-.pop-panel {
-  background: #ffffff;
-  border-radius: 24rpx 24rpx 0 0;
-  height: 70vh;
-  display: flex;
-  flex-direction: column;
-  padding-bottom: env(safe-area-inset-bottom);
-  animation: popUp 0.25s ease;
-}
-@keyframes popUp {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
-}
+/* ===== SKU 选择弹层（复用 .ui-pop-mask/.ui-pop-body） ===== */
 .pop-head {
   display: flex;
   align-items: center;
-  padding: 24rpx 28rpx;
-  border-bottom: 1rpx solid #f0f0f0;
+  padding: $ui-space-md 28rpx;
+  border-bottom: 1rpx solid $ui-border;
   flex-shrink: 0;
 }
 .pop-title {
   font-size: 30rpx;
   font-weight: 700;
-  color: #222;
+  color: $ui-text-1;
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -804,14 +687,14 @@ async function submit() {
   white-space: nowrap;
 }
 .pop-code {
-  font-size: 22rpx;
-  color: #2b8a3e;
+  font-size: $ui-font-xs;
+  color: $ui-primary;
   margin-right: 12rpx;
 }
 .pop-close {
   font-size: 40rpx;
   line-height: 1;
-  color: #999;
+  color: $ui-text-3;
   padding: 0 4rpx;
   flex-shrink: 0;
 }
@@ -819,18 +702,12 @@ async function submit() {
   flex: 1;
   min-height: 0;
 }
-.pop-empty {
-  padding: 100rpx 0;
-  text-align: center;
-  color: #999;
-  font-size: 26rpx;
-}
 .pop-sku-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 22rpx 28rpx;
-  border-bottom: 1rpx dashed #f0f0f0;
+  border-bottom: 1rpx dashed $ui-border;
 
   &:last-child {
     border-bottom: none;
@@ -839,13 +716,13 @@ async function submit() {
 .ps-main {
   flex: 1;
   min-width: 0;
-  margin-right: 16rpx;
+  margin-right: $ui-space-sm;
 }
 .ps-spec {
   display: block;
-  font-size: 28rpx;
+  font-size: $ui-font-base;
   font-weight: 600;
-  color: #222;
+  color: $ui-text-1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -853,36 +730,27 @@ async function submit() {
 .ps-stock {
   display: block;
   margin-top: 4rpx;
-  font-size: 22rpx;
-  color: #2b8a3e;
+  font-size: $ui-font-xs;
+  color: $ui-primary;
 
   &.none {
-    color: #b2b2b2;
+    color: $ui-text-3;
   }
-}
-.ps-stepper {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  background: #f5f6f7;
-  border-radius: 12rpx;
-  padding: 4rpx;
-  flex-shrink: 0;
 }
 .pop-foot {
   padding: 16rpx 24rpx 20rpx;
-  border-top: 1rpx solid #f0f0f0;
+  border-top: 1rpx solid $ui-border;
   flex-shrink: 0;
 }
 .pop-add-btn {
   height: 88rpx;
   line-height: 88rpx;
   text-align: center;
-  background: linear-gradient(135deg, #2b8a3e 0%, #3fb45c 100%);
-  color: #fff;
+  background: linear-gradient(135deg, $ui-primary 0%, $ui-primary-light 100%);
+  color: $ui-bg-card;
   font-size: 30rpx;
   font-weight: 700;
-  border-radius: 16rpx;
+  border-radius: $ui-radius-full;
   box-shadow: 0 8rpx 24rpx rgba(43, 138, 62, 0.25);
 
   &.disabled {

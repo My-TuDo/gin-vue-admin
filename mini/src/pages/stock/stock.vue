@@ -1,41 +1,41 @@
 <template>
-  <view class="page">
+  <view class="ui-page">
     <!-- 搜索 + 扫码 -->
-    <view class="search-bar">
+    <view class="ui-search">
       <input
         v-model="keyword"
-        class="search-input"
+        class="ui-search-input"
         type="text"
         placeholder="输入条码或SKU编码"
         confirm-type="search"
         @confirm="doSearch"
       />
-      <view class="scan-btn" @click="doScan">扫码</view>
+      <view class="ui-search-action" @click="doScan">扫码</view>
     </view>
     <view class="query-row">
-      <button class="query-btn" @click="doSearch">查 询</button>
+      <button class="ui-btn-ghost" @click="doSearch">查 询</button>
     </view>
 
     <!-- 查询中 -->
-    <view v-if="searching" class="block-tip">查询中…</view>
+    <view v-if="searching" class="ui-empty">查询中…</view>
 
     <!-- 未找到 -->
-    <view v-else-if="notFound" class="block-tip">未找到该条码对应的商品</view>
+    <view v-else-if="notFound" class="ui-empty">未找到该条码对应的商品</view>
 
     <!-- 查询失败 -->
-    <view v-else-if="queryError" class="err-box">
-      <text class="err-text">{{ queryError }}</text>
-      <button class="retry-btn" size="mini" @click="doSearch">重试</button>
+    <view v-else-if="queryError" class="ui-err">
+      <text class="ui-err-text">{{ queryError }}</text>
+      <button class="ui-retry" size="mini" @click="doSearch">重试</button>
     </view>
 
     <!-- 查询结果 -->
     <template v-else-if="sku">
       <!-- SKU 信息卡 -->
-      <view class="sku-card">
+      <view class="sku-card ui-card">
         <view class="sku-name-row">
           <text class="sku-name">{{ skuGoodsName }}</text>
-          <text v-if="sku.status === 0" class="sku-off">已停用</text>
-          <text v-else class="sku-on">正常</text>
+          <text v-if="sku.status === 0" class="ui-badge ui-badge--info">已停用</text>
+          <text v-else class="ui-badge ui-badge--success">正常</text>
         </view>
         <view class="sku-row">
           <text class="sku-k">SKU 编码</text>
@@ -64,7 +64,7 @@
       </view>
 
       <!-- 各仓库库存 -->
-      <view class="section-title">仓库库存</view>
+      <view class="ui-section-title">仓库库存</view>
       <view v-if="stockList.length" class="stock-list">
         <view v-for="(it, idx) in stockList" :key="idx" class="stock-item">
           <view class="stock-main">
@@ -80,7 +80,7 @@
           </view>
         </view>
       </view>
-      <view v-else class="empty-tip">暂无库存记录</view>
+      <view v-else class="ui-empty">暂无库存记录</view>
     </template>
   </view>
 </template>
@@ -225,148 +225,36 @@ function toInt(n) {
   box-sizing: border-box;
 }
 
-/* 搜索栏 */
-.search-bar {
-  display: flex;
-  align-items: center;
-  background: #ffffff;
-  border-radius: 16rpx;
-  padding: 12rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
-}
-
-.search-input {
-  flex: 1;
-  height: 72rpx;
-  line-height: 72rpx;
-  background: #f5f6f7;
-  border-radius: 12rpx;
-  padding: 0 24rpx;
-  font-size: 26rpx;
-}
-
-.scan-btn {
-  margin-left: 16rpx;
-  height: 72rpx;
-  line-height: 72rpx;
-  padding: 0 32rpx;
-  background: #2b8a3e;
-  color: #fff;
-  font-size: 28rpx;
-  border-radius: 12rpx;
-  font-weight: 600;
-}
-
 .query-row {
   margin-top: 20rpx;
-}
-
-.query-btn {
-  height: 80rpx;
-  line-height: 80rpx;
-  background: #ffffff;
-  color: #2b8a3e;
-  font-size: 28rpx;
-  border-radius: 16rpx;
-  border: 1rpx solid #2b8a3e;
-
-  &::after {
-    border: none;
-  }
-}
-
-.section-title {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #222;
-  margin: 32rpx 0 20rpx;
-}
-
-.block-tip {
-  padding: 100rpx 0;
   text-align: center;
-  color: #999;
-  font-size: 26rpx;
-}
-
-.empty-tip {
-  padding: 60rpx 0;
-  text-align: center;
-  color: #999;
-  font-size: 26rpx;
-  background: #ffffff;
-  border-radius: 16rpx;
-}
-
-.err-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 80rpx 0;
-}
-
-.err-text {
-  font-size: 26rpx;
-  color: #999;
-  margin-bottom: 20rpx;
-}
-
-.retry-btn {
-  background: #2b8a3e;
-  color: #fff;
-  border-radius: 8rpx;
-  font-size: 24rpx;
-
-  &::after {
-    border: none;
-  }
 }
 
 /* SKU 信息卡 */
 .sku-card {
-  background: #ffffff;
-  border-radius: 16rpx;
-  padding: 24rpx 28rpx;
-  margin-top: 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  margin-top: $ui-space-md;
 }
 
 .sku-name-row {
   display: flex;
   align-items: center;
   padding: 8rpx 0 20rpx;
-  border-bottom: 1rpx solid #f0f0f0;
+  border-bottom: 1rpx solid $ui-border;
   margin-bottom: 8rpx;
 }
 
 .sku-name {
   flex: 1;
-  font-size: 32rpx;
+  font-size: $ui-font-md;
   font-weight: 600;
-  color: #222;
-}
-
-.sku-on {
-  font-size: 20rpx;
-  color: #2b8a3e;
-  background: #eaf7ee;
-  border-radius: 999rpx;
-  padding: 4rpx 16rpx;
-}
-
-.sku-off {
-  font-size: 20rpx;
-  color: #999;
-  background: #f0f0f0;
-  border-radius: 999rpx;
-  padding: 4rpx 16rpx;
+  color: $ui-text-1;
 }
 
 .sku-row {
   display: flex;
   justify-content: space-between;
   padding: 18rpx 0;
-  border-bottom: 1rpx solid #f7f7f7;
+  border-bottom: 1rpx solid $ui-border;
 
   &:last-child {
     border-bottom: none;
@@ -375,12 +263,12 @@ function toInt(n) {
 
 .sku-k {
   font-size: 26rpx;
-  color: #999;
+  color: $ui-text-3;
 }
 
 .sku-v {
   font-size: 26rpx;
-  color: #222;
+  color: $ui-text-1;
   max-width: 440rpx;
   text-align: right;
   word-break: break-all;
@@ -388,18 +276,18 @@ function toInt(n) {
 
 /* 仓库库存 */
 .stock-list {
-  background: #ffffff;
-  border-radius: 16rpx;
+  background: $ui-bg-card;
+  border-radius: $ui-radius-md;
   overflow: hidden;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  box-shadow: $ui-shadow-card;
 }
 
 .stock-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24rpx 28rpx;
-  border-bottom: 1rpx solid #f0f0f0;
+  padding: $ui-space-md 28rpx;
+  border-bottom: 1rpx solid $ui-border;
 
   &:last-child {
     border-bottom: none;
@@ -410,23 +298,23 @@ function toInt(n) {
   display: flex;
   flex-direction: column;
   flex: 1;
-  margin-right: 16rpx;
+  margin-right: $ui-space-sm;
 }
 
 .stock-wh {
-  font-size: 28rpx;
-  color: #222;
+  font-size: $ui-font-base;
+  color: $ui-text-1;
   font-weight: 500;
 }
 
 .stock-sub {
   margin-top: 8rpx;
   display: flex;
-  font-size: 22rpx;
-  color: #999;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
 
   text + text {
-    margin-left: 24rpx;
+    margin-left: $ui-space-md;
   }
 }
 
@@ -438,16 +326,16 @@ function toInt(n) {
 
 .avail-label {
   font-size: 20rpx;
-  color: #999;
+  color: $ui-text-3;
 }
 
 .avail-num {
   font-size: 34rpx;
   font-weight: 600;
-  color: #2b8a3e;
+  color: $ui-primary;
 
   &.danger {
-    color: #e64340;
+    color: $ui-danger;
   }
 }
 </style>

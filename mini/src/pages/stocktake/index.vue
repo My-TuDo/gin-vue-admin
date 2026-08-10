@@ -2,9 +2,9 @@
   <view class="page">
     <!-- ========== 盘点单选择列表 ========== -->
     <template v-if="mode === 'list'">
-      <view class="section-title">选择盘点单</view>
-      <view v-if="listLoading" class="block-tip">加载中…</view>
-      <view v-else-if="!checkList.length" class="empty-tip">暂无可录入的盘点单，请先在 PC 创建</view>
+      <view class="ui-section-title">选择盘点单</view>
+      <view v-if="listLoading" class="ui-empty">加载中…</view>
+      <view v-else-if="!checkList.length" class="ui-empty">暂无可录入的盘点单，请先在 PC 创建</view>
       <view v-else class="check-list">
         <view
           v-for="c in checkList"
@@ -27,7 +27,7 @@
     <!-- ========== 盘点录入 ========== -->
     <template v-else>
       <!-- 顶部：单号 + 仓库 + 统计 -->
-      <view class="check-head">
+      <view class="check-head ui-card">
         <view class="ch-top">
           <text class="ch-no">{{ current.checkNo }}</text>
           <view class="ch-actions">
@@ -41,8 +41,8 @@
       </view>
 
       <!-- 明细列表 -->
-      <view class="section-title">盘点明细</view>
-      <view v-if="!items.length" class="empty-tip">该盘点单暂无明细</view>
+      <view class="ui-section-title">盘点明细</view>
+      <view v-if="!items.length" class="ui-empty">该盘点单暂无明细</view>
       <view v-else class="item-list">
         <view v-for="row in items" :key="row.ID" class="item-row">
           <view class="ir-main">
@@ -60,7 +60,7 @@
               <text class="ir-k">实盘</text>
               <text class="ir-v">{{ row._touched ? row._actual : '-' }}</text>
             </view>
-            <view class="ir-stepper">
+            <view class="ir-stepper ui-stepper">
               <view class="step-btn" @click="step(row, -1)">−</view>
               <view class="step-num">{{ row._touched ? row._actual : 0 }}</view>
               <view class="step-btn plus" @click="step(row, 1)">+</view>
@@ -71,9 +71,9 @@
 
       <!-- 底部：扫码录入 + 提交 -->
       <view class="foot-actions">
-        <view class="scan-big" @click="doScan">扫码录入</view>
+        <view class="scan-big ui-btn-primary" @click="doScan">扫码录入</view>
         <view
-          class="submit-btn"
+          class="submit-btn ui-btn-ghost"
           :class="{ disabled: !touchedCount }"
           @click="submit"
         >提交盘点录入</view>
@@ -271,47 +271,24 @@ function fmtTime(t) {
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  padding: 24rpx;
+  padding: $ui-space-md;
   padding-bottom: 180rpx;
   box-sizing: border-box;
 }
 
-.section-title {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #222;
-  margin: 8rpx 0 20rpx;
-}
-
-.block-tip {
-  padding: 100rpx 0;
-  text-align: center;
-  color: #999;
-  font-size: 26rpx;
-}
-
-.empty-tip {
-  padding: 60rpx 0;
-  text-align: center;
-  color: #999;
-  font-size: 26rpx;
-  background: #ffffff;
-  border-radius: 16rpx;
-}
-
 /* ===== 盘点单列表 ===== */
 .check-list {
-  background: #ffffff;
-  border-radius: 16rpx;
+  background: $ui-bg-card;
+  border-radius: $ui-radius-md;
   overflow: hidden;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  box-shadow: $ui-shadow-card;
 }
 .check-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24rpx 28rpx;
-  border-bottom: 1rpx solid #f0f0f0;
+  padding: $ui-space-md 28rpx;
+  border-bottom: 1rpx solid $ui-border;
 
   &:last-child {
     border-bottom: none;
@@ -326,12 +303,12 @@ function fmtTime(t) {
 .ci-no {
   font-size: 30rpx;
   font-weight: 600;
-  color: #222;
+  color: $ui-text-1;
 }
 .ci-wh {
   margin-top: 6rpx;
-  font-size: 24rpx;
-  color: #2b8a3e;
+  font-size: $ui-font-sm;
+  color: $ui-primary;
 }
 .ci-right {
   display: flex;
@@ -340,21 +317,18 @@ function fmtTime(t) {
   flex-shrink: 0;
 }
 .ci-remark {
-  font-size: 22rpx;
-  color: #999;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
 }
 .ci-time {
   margin-top: 6rpx;
   font-size: 20rpx;
-  color: #b2b2b2;
+  color: $ui-text-3;
 }
 
 /* ===== 盘点头 ===== */
 .check-head {
-  background: #ffffff;
-  border-radius: 16rpx;
-  padding: 24rpx 28rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  padding: $ui-space-md 28rpx;
 }
 .ch-top {
   display: flex;
@@ -362,16 +336,16 @@ function fmtTime(t) {
   align-items: center;
 }
 .ch-no {
-  font-size: 32rpx;
+  font-size: $ui-font-md;
   font-weight: 700;
-  color: #222;
+  color: $ui-text-1;
 }
 .ch-switch {
-  font-size: 24rpx;
-  color: #2b8a3e;
+  font-size: $ui-font-sm;
+  color: $ui-primary;
   padding: 8rpx 20rpx;
-  border: 1rpx solid #2b8a3e;
-  border-radius: 999rpx;
+  border: 1rpx solid $ui-primary;
+  border-radius: $ui-radius-full;
 }
 .ch-sub {
   display: flex;
@@ -380,27 +354,27 @@ function fmtTime(t) {
   margin-top: 14rpx;
 }
 .ch-wh {
-  font-size: 24rpx;
-  color: #2b8a3e;
+  font-size: $ui-font-sm;
+  color: $ui-primary;
 }
 .ch-stat {
-  font-size: 24rpx;
-  color: #999;
+  font-size: $ui-font-sm;
+  color: $ui-text-3;
 }
 
 /* ===== 明细列表 ===== */
 .item-list {
-  background: #ffffff;
-  border-radius: 16rpx;
+  background: $ui-bg-card;
+  border-radius: $ui-radius-md;
   overflow: hidden;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  box-shadow: $ui-shadow-card;
 }
 .item-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20rpx 24rpx;
-  border-bottom: 1rpx solid #f0f0f0;
+  padding: 20rpx $ui-space-md;
+  border-bottom: 1rpx solid $ui-border;
 
   &:last-child {
     border-bottom: none;
@@ -409,13 +383,13 @@ function fmtTime(t) {
 .ir-main {
   flex: 1;
   min-width: 0;
-  margin-right: 16rpx;
+  margin-right: $ui-space-sm;
 }
 .ir-name {
   display: block;
-  font-size: 28rpx;
+  font-size: $ui-font-base;
   font-weight: 600;
-  color: #222;
+  color: $ui-text-1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -423,8 +397,8 @@ function fmtTime(t) {
 .ir-spec {
   display: block;
   margin-top: 4rpx;
-  font-size: 22rpx;
-  color: #999;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -435,14 +409,14 @@ function fmtTime(t) {
   margin-top: 8rpx;
 }
 .ir-k {
-  font-size: 22rpx;
-  color: #999;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
   margin-right: 12rpx;
 }
 .ir-v {
   font-size: 26rpx;
   font-weight: 600;
-  color: #303133;
+  color: $ui-text-1;
 }
 .ir-right {
   display: flex;
@@ -456,77 +430,30 @@ function fmtTime(t) {
   align-items: baseline;
 
   .ir-v {
-    color: #b2b2b2;
+    color: $ui-text-3;
   }
 
   &.touched .ir-v {
-    color: #2b8a3e;
+    color: $ui-primary;
   }
 }
-.ir-stepper {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  background: #f5f6f7;
-  border-radius: 12rpx;
-  padding: 6rpx;
-}
-.step-btn {
-  width: 52rpx;
-  height: 52rpx;
-  line-height: 52rpx;
-  text-align: center;
-  background: #ffffff;
-  border-radius: 10rpx;
-  font-size: 30rpx;
-  font-weight: 700;
-  color: #303133;
-  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.06);
 
-  &.plus {
-    color: #2b8a3e;
-  }
-}
-.step-num {
-  min-width: 52rpx;
-  text-align: center;
-  font-size: 28rpx;
-  font-weight: 700;
-  color: #222;
-}
-
-/* ===== 底部操作 ===== */
+/* ===== 底部操作（复用 .ui-btn-primary/.ui-btn-ghost，仅补高度与布局） ===== */
 .foot-actions {
   position: fixed;
-  left: 24rpx;
-  right: 24rpx;
+  left: $ui-space-md;
+  right: $ui-space-md;
   bottom: 20rpx;
   display: flex;
-  gap: 16rpx;
+  gap: $ui-space-sm;
 }
 .scan-big {
   flex: 1;
   height: 92rpx;
-  line-height: 92rpx;
-  text-align: center;
-  background: linear-gradient(135deg, #2b8a3e 0%, #3fb45c 100%);
-  color: #fff;
-  font-size: 30rpx;
-  font-weight: 700;
-  border-radius: 16rpx;
-  box-shadow: 0 8rpx 24rpx rgba(43, 138, 62, 0.25);
 }
 .submit-btn {
   flex: 1;
   height: 92rpx;
-  line-height: 92rpx;
-  text-align: center;
-  background: #ffffff;
-  color: #2b8a3e;
-  font-size: 30rpx;
-  font-weight: 700;
-  border-radius: 16rpx;
-  border: 2rpx solid #2b8a3e;
 
   &.disabled {
     opacity: 0.4;
