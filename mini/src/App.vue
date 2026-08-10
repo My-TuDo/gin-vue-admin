@@ -37,6 +37,7 @@ page {
 .ui-card {
   background: $ui-bg-card;
   border-radius: $ui-radius-md;
+  border: 1rpx solid $ui-border;
   padding: $ui-space-md;
   box-shadow: $ui-shadow-card;
   box-sizing: border-box;
@@ -86,7 +87,7 @@ page {
   border-radius: $ui-radius-full;
   flex-shrink: 0;
 }
-.ui-badge--success { background: $ui-primary-bg; color: $ui-primary; }
+.ui-badge--success { background: $ui-success-bg; color: $ui-success; }
 .ui-badge--warning { background: $ui-warning-bg; color: $ui-warning-text; }
 .ui-badge--danger { background: $ui-danger-bg; color: $ui-danger; }
 .ui-badge--info { background: $ui-bg-disabled; color: $ui-text-2; }
@@ -314,7 +315,9 @@ page {
   position: relative;
   display: flex;
   align-items: center;
-  background: $ui-bg-page;
+  background: $ui-bg-card;
+  border: 1rpx solid $ui-border;
+  box-shadow: $ui-shadow-card;
   border-radius: $ui-radius-full;
   padding: 8rpx 8rpx 8rpx 44rpx;
   box-sizing: border-box;

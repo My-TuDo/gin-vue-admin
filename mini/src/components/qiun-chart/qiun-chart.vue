@@ -27,7 +27,7 @@ import uCharts from '@qiun/ucharts'
 // 默认色板：与 uni.scss $ui-chart-colors 同步（SCSS 变量无法注入 script，保持两处一致）。
 // 注意：defineProps 的 default 会被提升到模块作用域，不能引用 <script setup> 局部变量，
 // 故此处内联数组字面量；改动时需与 uni.scss $ui-chart-colors 同步。
-const AXIS_COLOR = '#73777a'
+const AXIS_COLOR = '#9ca3af'
 
 const props = defineProps({
   /** 图表类型：line 折线 | column 柱状 | ring 环形 | pie 饼图 | area 面积 */
@@ -42,7 +42,7 @@ const props = defineProps({
   /** 系列配色 */
   colors: {
     type: Array,
-    default: () => ['#2b8a3e', '#e6a23c', '#e64340', '#2f6fde', '#3fb45c', '#909399']
+    default: () => ['#2264f2', '#f9901f', '#f56c6c', '#2f6fde', '#4b83f5', '#909399']
   },
   /** 空数据占位文案 */
   emptyText: { type: String, default: '暂无数据' },

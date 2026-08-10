@@ -47,14 +47,14 @@ const props = defineProps({
   height: { type: Number, default: 280 },
   colors: {
     type: Array,
-    default: () => ['#2b8a3e', '#e6a23c', '#e64340', '#2f6fde', '#3fb45c', '#909399']
+    default: () => ['#2264f2', '#f9901f', '#f56c6c', '#2f6fde', '#4b83f5', '#909399']
   },
   emptyText: { type: String, default: '暂无数据' }
 })
 
 const palette = computed(() => {
   const c = props.colors || []
-  return c.length ? c : ['#2b8a3e']
+  return c.length ? c : ['#2264f2']
 })
 
 const hasData = computed(() => {

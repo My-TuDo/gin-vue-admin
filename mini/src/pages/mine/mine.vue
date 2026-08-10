@@ -235,6 +235,7 @@ function handleLogout() {
 
 .logout-btn {
   margin-top: $ui-space-lg;
+  width: 100%;
   height: 88rpx;
 }
 
