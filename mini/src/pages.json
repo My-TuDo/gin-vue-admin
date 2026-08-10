@@ -79,7 +79,8 @@
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "进销存",
     "navigationBarBackgroundColor": "#ffffff",
-    "backgroundColor": "#f6f7f9"
+    "backgroundColor": "#f5f6f7",
+    "backgroundTextStyle": "light"
   },
   "tabBar": {
     "color": "#7a7e83",

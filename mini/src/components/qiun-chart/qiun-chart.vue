@@ -313,9 +313,9 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   min-height: 200rpx;
-  color: #999;
-  font-size: 24rpx;
-  background: #fafbfc;
-  border-radius: 12rpx;
+  color: $ui-text-3;
+  font-size: $ui-font-sm;
+  background: $ui-bg-hover;
+  border-radius: $ui-radius-sm;
 }
 </style>

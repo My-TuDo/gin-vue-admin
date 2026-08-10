@@ -1,12 +1,12 @@
 <template>
-  <view class="page">
+  <view class="ui-page">
     <!-- 销售趋势（折线） -->
-    <view class="card">
-      <view class="card-title">销售趋势（近 7 天）</view>
-      <view v-if="trendLoading" class="block-tip">加载中…</view>
-      <view v-else-if="trendError" class="err-box">
-        <text class="err-text">{{ trendError }}</text>
-        <button class="retry-btn" size="mini" @click="loadTrend">重试</button>
+    <view class="card ui-card">
+      <view class="card-title ui-section-title">销售趋势（近 7 天）</view>
+      <view v-if="trendLoading" class="ui-empty">加载中…</view>
+      <view v-else-if="trendError" class="ui-err">
+        <text class="ui-err-text">{{ trendError }}</text>
+        <button class="ui-retry" size="mini" @click="loadTrend">重试</button>
       </view>
       <qiun-chart
         v-else
@@ -18,12 +18,12 @@
     </view>
 
     <!-- 热销 TOP5（柱状） -->
-    <view class="card">
-      <view class="card-title">热销 TOP5（近 30 天）</view>
-      <view v-if="topLoading" class="block-tip">加载中…</view>
-      <view v-else-if="topError" class="err-box">
-        <text class="err-text">{{ topError }}</text>
-        <button class="retry-btn" size="mini" @click="loadTop">重试</button>
+    <view class="card ui-card">
+      <view class="card-title ui-section-title">热销 TOP5（近 30 天）</view>
+      <view v-if="topLoading" class="ui-empty">加载中…</view>
+      <view v-else-if="topError" class="ui-err">
+        <text class="ui-err-text">{{ topError }}</text>
+        <button class="ui-retry" size="mini" @click="loadTop">重试</button>
       </view>
       <qiun-chart
         v-else
@@ -35,12 +35,12 @@
     </view>
 
     <!-- 分类销售占比（环形） -->
-    <view class="card">
-      <view class="card-title">分类销售占比（近 30 天）</view>
-      <view v-if="catLoading" class="block-tip">加载中…</view>
-      <view v-else-if="catError" class="err-box">
-        <text class="err-text">{{ catError }}</text>
-        <button class="retry-btn" size="mini" @click="loadCat">重试</button>
+    <view class="card ui-card">
+      <view class="card-title ui-section-title">分类销售占比（近 30 天）</view>
+      <view v-if="catLoading" class="ui-empty">加载中…</view>
+      <view v-else-if="catError" class="ui-err">
+        <text class="ui-err-text">{{ catError }}</text>
+        <button class="ui-retry" size="mini" @click="loadCat">重试</button>
       </view>
       <qiun-chart
         v-else
@@ -52,15 +52,15 @@
     </view>
 
     <!-- 库存预警列表 -->
-    <view class="card">
-      <view class="card-title">库存预警</view>
-      <view v-if="alertLoading" class="block-tip">加载中…</view>
-      <view v-else-if="alertError" class="err-box">
-        <text class="err-text">{{ alertError }}</text>
-        <button class="retry-btn" size="mini" @click="loadAlerts">重试</button>
+    <view class="card ui-card">
+      <view class="card-title ui-section-title">库存预警</view>
+      <view v-if="alertLoading" class="ui-empty">加载中…</view>
+      <view v-else-if="alertError" class="ui-err">
+        <text class="ui-err-text">{{ alertError }}</text>
+        <button class="ui-retry" size="mini" @click="loadAlerts">重试</button>
       </view>
       <view v-else-if="alerts.length" class="alert-list">
-        <view v-for="(item, idx) in alerts" :key="idx" class="alert-item">
+        <view v-for="(item, idx) in alerts" :key="idx" class="alert-item ui-cell">
           <view class="alert-main">
             <text class="alert-name">{{ item.goodsName || '未知商品' }}</text>
             <text class="alert-sku">{{ item.skuCode || '' }}</text>
@@ -72,7 +72,7 @@
           </view>
         </view>
       </view>
-      <view v-else class="empty-tip">暂无库存预警</view>
+      <view v-else class="ui-empty">暂无库存预警</view>
     </view>
   </view>
 </template>
@@ -260,64 +260,19 @@ function fmtInt(n) {
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  padding: 24rpx;
-  box-sizing: border-box;
-}
-
 .card {
-  background: #ffffff;
-  border-radius: 20rpx;
-  padding: 28rpx;
-  margin-bottom: 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  background: $ui-bg-card;
+  border-radius: $ui-radius-md;
+  padding: $ui-space-md;
+  margin-bottom: $ui-space-md;
+  box-shadow: $ui-shadow-card;
 }
 
 .card-title {
-  font-size: 30rpx;
+  font-size: $ui-font-md;
   font-weight: 600;
-  color: #222;
+  color: $ui-text-1;
   margin-bottom: 20rpx;
-}
-
-.block-tip {
-  padding: 80rpx 0;
-  text-align: center;
-  color: #999;
-  font-size: 26rpx;
-}
-
-.empty-tip {
-  padding: 60rpx 0;
-  text-align: center;
-  color: #999;
-  font-size: 26rpx;
-}
-
-/* 错误占位 */
-.err-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 60rpx 0;
-}
-
-.err-text {
-  font-size: 26rpx;
-  color: #999;
-  margin-bottom: 20rpx;
-}
-
-.retry-btn {
-  background: #2b8a3e;
-  color: #fff;
-  border-radius: 8rpx;
-  font-size: 24rpx;
-
-  &::after {
-    border: none;
-  }
 }
 
 /* 库存预警 */
@@ -326,27 +281,20 @@ function fmtInt(n) {
 }
 
 .alert-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 24rpx 0;
-  border-bottom: 1rpx solid #f0f0f0;
-
-  &:last-child {
-    border-bottom: none;
-  }
+  padding: $ui-space-md 0;
+  border-bottom: 1rpx solid $ui-border;
 }
 
 .alert-main {
   display: flex;
   flex-direction: column;
   flex: 1;
-  margin-right: 16rpx;
+  margin-right: $ui-space-sm;
 }
 
 .alert-name {
-  font-size: 28rpx;
-  color: #222;
+  font-size: $ui-font-base;
+  color: $ui-text-1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -354,8 +302,8 @@ function fmtInt(n) {
 
 .alert-sku {
   margin-top: 8rpx;
-  font-size: 22rpx;
-  color: #999;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
 }
 
 .alert-qty {
@@ -366,21 +314,17 @@ function fmtInt(n) {
 
 .qty-label {
   font-size: 20rpx;
-  color: #999;
+  color: $ui-text-3;
 }
 
 .qty-num {
   font-size: 34rpx;
   font-weight: 600;
-  color: #e64340;
-
-  &.danger {
-    color: #e64340;
-  }
+  color: $ui-danger;
 }
 
 .qty-safe {
   font-size: 20rpx;
-  color: #b2b2b2;
+  color: $ui-text-3;
 }
 </style>

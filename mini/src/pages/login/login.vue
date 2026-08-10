@@ -41,7 +41,7 @@
         <text v-else class="captcha-loading" @click="loadCaptcha">点击获取验证码</text>
       </view>
 
-      <button class="login-btn" :loading="loading" :disabled="loading" @click="handleLogin">
+      <button class="login-btn ui-btn-primary" :loading="loading" :disabled="loading" @click="handleLogin">
         登 录
       </button>
       <view class="login-tip">账号密码由系统管理员分配（默认 admin / 123456）</view>
@@ -133,30 +133,30 @@ async function handleLogin() {
   justify-content: center;
   padding: 40rpx;
   box-sizing: border-box;
-  background: linear-gradient(160deg, #eef7f0 0%, #f6f7f9 100%);
+  background: linear-gradient(160deg, $ui-primary-bg 0%, $ui-bg-page 100%);
 }
 
 .login-card {
   width: 100%;
-  background: #ffffff;
-  border-radius: 24rpx;
+  background: $ui-bg-card;
+  border-radius: $ui-radius-lg;
   padding: 60rpx 48rpx;
   box-shadow: 0 8rpx 40rpx rgba(0, 0, 0, 0.06);
   box-sizing: border-box;
 }
 
 .login-title {
-  font-size: 44rpx;
+  font-size: $ui-font-xl;
   font-weight: 600;
   text-align: center;
-  color: #222;
+  color: $ui-text-1;
 }
 
 .login-subtitle {
-  margin-top: 16rpx;
+  margin-top: $ui-space-sm;
   margin-bottom: 56rpx;
-  font-size: 24rpx;
-  color: #999;
+  font-size: $ui-font-sm;
+  color: $ui-text-3;
   text-align: center;
 }
 
@@ -166,31 +166,31 @@ async function handleLogin() {
 
 .form-label {
   display: block;
-  font-size: 26rpx;
-  color: #666;
+  font-size: $ui-font-sm;
+  color: $ui-text-2;
   margin-bottom: 12rpx;
 }
 
 .form-input {
   height: 88rpx;
-  padding: 0 24rpx;
-  background: #f5f6f7;
-  border-radius: 12rpx;
-  font-size: 28rpx;
+  padding: 0 $ui-space-md;
+  background: $ui-bg-page;
+  border-radius: $ui-radius-md;
+  font-size: $ui-font-base;
 }
 
 .ph {
-  color: #b2b2b2;
+  color: $ui-text-3;
 }
 
 .login-btn {
-  margin-top: 16rpx;
+  margin-top: $ui-space-sm;
   height: 88rpx;
   line-height: 88rpx;
-  background: #2b8a3e;
-  color: #fff;
-  font-size: 32rpx;
-  border-radius: 12rpx;
+  background: $ui-primary;
+  color: $ui-bg-card;
+  font-size: $ui-font-md;
+  border-radius: $ui-radius-full;
 
   &::after {
     border: none;
@@ -198,9 +198,9 @@ async function handleLogin() {
 }
 
 .login-tip {
-  margin-top: 32rpx;
-  font-size: 22rpx;
-  color: #b2b2b2;
+  margin-top: $ui-space-lg;
+  font-size: $ui-font-xs;
+  color: $ui-text-3;
   text-align: center;
 }
 
@@ -216,20 +216,20 @@ async function handleLogin() {
 .captcha-img {
   width: 200rpx;
   height: 88rpx;
-  margin-left: 16rpx;
-  border-radius: 12rpx;
-  background: #f0f1f2;
+  margin-left: $ui-space-sm;
+  border-radius: $ui-radius-sm;
+  background: $ui-bg-hover;
 }
 
 .captcha-loading {
-  margin-left: 16rpx;
+  margin-left: $ui-space-sm;
   width: 200rpx;
   height: 88rpx;
   line-height: 88rpx;
   text-align: center;
-  font-size: 22rpx;
-  color: #2b8a3e;
-  background: #f0f1f2;
-  border-radius: 12rpx;
+  font-size: $ui-font-xs;
+  color: $ui-primary;
+  background: $ui-bg-hover;
+  border-radius: $ui-radius-sm;
 }
 </style>
