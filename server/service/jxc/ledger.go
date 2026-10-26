@@ -1,0 +1,360 @@
+package jxc
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/flipped-aurora/gin-vue-admin/server/global"
+	"github.com/flipped-aurora/gin-vue-admin/server/internal/ledger"
+	"github.com/flipped-aurora/gin-vue-admin/server/internal/money"
+	"github.com/flipped-aurora/gin-vue-admin/server/model/jxc"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+)
+
+// LedgerService 库存账本的**唯一写入口**。
+//
+// 约定（见 docs/16-库存账本核心设计.md）：
+//   - 任何对 stock_move / stock_balance 的写入都必须经过这里，其它地方不允许直接写；
+//   - 一张单据的所有明细在**一个事务**里过账，要么全成要么全不成；
+//   - 幂等由 (source_type, source_id, source_line_id) 唯一索引保证，
+//     重复过账不会产生第二行（POS 双击 / 网络重试 / 消息重投都安全）；
+//   - 已结账期间拒绝写入；
+//   - 出库成本按移动加权平均，**冻结在账本行上**。
+type LedgerService struct{}
+
+// MoveInput 一条待过账的账本行。
+//
+// Qty 有符号：入库为正、出库为负。用符号而不是方向字段，
+// 是因为金额汇总、余额推导都能直接 SUM，不需要一堆 CASE WHEN。
+type MoveInput struct {
+	WarehouseID  uint
+	SkuID        uint
+	Qty          int
+	UnitCost     float64 // 仅入库使用；出库由系统按移动加权平均计算
+	SourceType   string
+	SourceID     uint
+	SourceLineID uint
+	OccurredAt   time.Time
+	Operator     string
+	ReversalOf   *uint // 红冲时指向被冲销的账本行
+}
+
+// 允许的出入方向（防止把退货单当成出库这类错用）
+var inboundTypes = map[string]bool{
+	jxc.MoveSourcePurchaseIn: true,
+	jxc.MoveSourceSaleReturn: true,
+	jxc.MoveSourceDirectIn:   true,
+	jxc.MoveSourceCheckGain:  true,
+}
+var outboundTypes = map[string]bool{
+	jxc.MoveSourceSaleOut:   true,
+	jxc.MoveSourceDirectOut: true,
+	jxc.MoveSourceCheckLoss: true,
+}
+
+// validate 校验单条移动的语义
+func (m MoveInput) validate() error {
+	if m.WarehouseID == 0 || m.SkuID == 0 {
+		return errors.New("仓库与 SKU 均不能为空")
+	}
+	if m.Qty == 0 {
+		return errors.New("数量不能为 0")
+	}
+	if m.OccurredAt.IsZero() {
+		return errors.New("业务发生时间不能为空")
+	}
+	switch {
+	case inboundTypes[m.SourceType]:
+		if m.Qty < 0 {
+			return fmt.Errorf("%s 是入库类型，数量必须为正", m.SourceType)
+		}
+		if m.UnitCost < 0 {
+			return errors.New("入库成本不能为负")
+		}
+	case outboundTypes[m.SourceType]:
+		if m.Qty > 0 {
+			return fmt.Errorf("%s 是出库类型，数量必须为负", m.SourceType)
+		}
+	case m.SourceType == jxc.MoveSourceReversal:
+		if m.ReversalOf == nil {
+			return errors.New("红冲必须指定被冲销的账本行")
+		}
+	default:
+		return fmt.Errorf("未知的账本来源类型: %s", m.SourceType)
+	}
+	return nil
+}
+
+// Post 过账。可在已有事务内调用（db 传 tx），也可独立调用（db 传 nil 时自建事务）。
+func (s *LedgerService) Post(ctx context.Context, db *gorm.DB, moves []MoveInput) error {
+	if len(moves) == 0 {
+		return nil
+	}
+	for i, m := range moves {
+		if err := m.validate(); err != nil {
+			return fmt.Errorf("第 %d 条账本行不合法：%w", i+1, err)
+		}
+	}
+	if db != nil {
+		return s.postTx(ctx, db, moves)
+	}
+	return global.GVA_DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return s.postTx(ctx, tx, moves)
+	})
+}
+
+func (s *LedgerService) postTx(ctx context.Context, tx *gorm.DB, moves []MoveInput) error {
+	// 1) 期间必须处于打开状态
+	checkedPeriod := map[string]bool{}
+	for _, m := range moves {
+		ym := m.OccurredAt.Format("2006-01")
+		if checkedPeriod[ym] {
+			continue
+		}
+		if err := s.ensurePeriodOpen(tx, ym); err != nil {
+			return err
+		}
+		checkedPeriod[ym] = true
+	}
+
+	for _, m := range moves {
+		// 2) 幂等：同一来源行已过账则跳过
+		posted, err := s.alreadyPosted(tx, m)
+		if err != nil {
+			return err
+		}
+		if posted {
+			continue
+		}
+
+		// 3) 锁住余额行（没有就建一行 0）
+		pos, err := s.lockBalance(tx, m.WarehouseID, m.SkuID)
+		if err != nil {
+			return err
+		}
+
+		// 4) 按成本方法计算本行
+		var unitCost money.Cents
+		var amount money.Cents
+		var after ledger.Position
+
+		if m.Qty > 0 {
+			unitCost = money.FromYuan(m.UnitCost)
+			amount = unitCost.MulQty(m.Qty)
+			after = pos.ApplyInbound(m.Qty, unitCost)
+		} else {
+			cost, next, err := pos.ApplyOutbound(-m.Qty)
+			if err != nil {
+				return fmt.Errorf("出库失败：SKU %d %w", m.SkuID, err)
+			}
+			unitCost = money.FromYuan(cost.Yuan() / float64(-m.Qty))
+			amount = cost.Neg()
+			after = next
+		}
+
+		// 5) 可售量不得为负（卖超必须挡住）
+		reserved, err := s.reservedQty(tx, m.WarehouseID, m.SkuID)
+		if err != nil {
+			return err
+		}
+		if after.Qty-reserved < 0 {
+			return fmt.Errorf("可售库存不足：SKU %d 结存 %d，已预留 %d，本次需要 %d",
+				m.SkuID, pos.Qty, reserved, -m.Qty)
+		}
+
+		// 6) 写账本行（唯一索引兜底幂等）
+		row := jxc.StockMove{
+			WarehouseID: m.WarehouseID, SkuID: m.SkuID,
+			Qty: m.Qty, UnitCost: unitCost.Yuan(), Amount: amount.Yuan(),
+			SourceType: m.SourceType, SourceID: m.SourceID, SourceLineID: m.SourceLineID,
+			OccurredAt: m.OccurredAt, Operator: m.Operator, ReversalOf: m.ReversalOf,
+		}
+		if err := tx.Create(&row).Error; err != nil {
+			if isDuplicateKeyErr(err) {
+				continue // 并发下的另一笔已经写进去了
+			}
+			return err
+		}
+
+		// 7) 更新物化余额
+		if err := tx.Model(&jxc.StockBalance{}).
+			Where("warehouse_id = ? AND sku_id = ?", m.WarehouseID, m.SkuID).
+			Updates(map[string]interface{}{"qty": after.Qty, "value": after.Value.Yuan()}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// alreadyPosted 该来源行是否已过账
+func (s *LedgerService) alreadyPosted(tx *gorm.DB, m MoveInput) (bool, error) {
+	var cnt int64
+	err := tx.Model(&jxc.StockMove{}).
+		Where("source_type = ? AND source_id = ? AND source_line_id = ?", m.SourceType, m.SourceID, m.SourceLineID).
+		Count(&cnt).Error
+	return cnt > 0, err
+}
+
+// lockBalance 取余额行并加行锁；不存在则先建 0 行再取。
+func (s *LedgerService) lockBalance(tx *gorm.DB, warehouseID, skuID uint) (ledger.Position, error) {
+	var b jxc.StockBalance
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("warehouse_id = ? AND sku_id = ?", warehouseID, skuID).
+		First(&b).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// 先插入 0 行（并发下可能被别的 tx 抢先，用 INSERT IGNORE 语义）
+		row := jxc.StockBalance{WarehouseID: warehouseID, SkuID: skuID}
+		if e := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; e != nil {
+			return ledger.Position{}, e
+		}
+		err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("warehouse_id = ? AND sku_id = ?", warehouseID, skuID).
+			First(&b).Error
+	}
+	if err != nil {
+		return ledger.Position{}, err
+	}
+	return ledger.Position{Qty: b.Qty, Value: money.FromYuan(b.Value)}, nil
+}
+
+// reservedQty 当前有效预留总量
+func (s *LedgerService) reservedQty(tx *gorm.DB, warehouseID, skuID uint) (int, error) {
+	var sum int64
+	err := tx.Model(&jxc.StockReservation{}).
+		Where("warehouse_id = ? AND sku_id = ? AND status = ?", warehouseID, skuID, jxc.ReservationActive).
+		Select("COALESCE(SUM(qty),0)").Scan(&sum).Error
+	return int(sum), err
+}
+
+// ensurePeriodOpen 期间必须存在且未结账
+func (s *LedgerService) ensurePeriodOpen(tx *gorm.DB, yearMonth string) error {
+	var p jxc.AccountingPeriod
+	err := tx.Where("period_month = ?", yearMonth).First(&p).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		row := jxc.AccountingPeriod{PeriodMonth: yearMonth, Status: jxc.PeriodOpen}
+		if e := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; e != nil {
+			return e
+		}
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if p.Status == jxc.PeriodClosed {
+		return fmt.Errorf("%s 已结账，不能再写入账本（更正请在当期开红冲单）", yearMonth)
+	}
+	return nil
+}
+
+// ============ 预留 ============
+
+// Reserve 预留库存（开单时占用），同一来源行重复调用幂等。
+func (s *LedgerService) Reserve(ctx context.Context, db *gorm.DB, m MoveInput) error {
+	if m.Qty <= 0 {
+		return errors.New("预留数量必须大于 0")
+	}
+	fn := func(tx *gorm.DB) error {
+		// 锁余额行，避免与并发的过账/预留互相穿插
+		pos, err := s.lockBalance(tx, m.WarehouseID, m.SkuID)
+		if err != nil {
+			return err
+		}
+		var existing jxc.StockReservation
+		err = tx.Where("source_type = ? AND source_id = ? AND source_line_id = ?",
+			m.SourceType, m.SourceID, m.SourceLineID).First(&existing).Error
+		if err == nil {
+			return nil // 幂等
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		reserved, err := s.reservedQty(tx, m.WarehouseID, m.SkuID)
+		if err != nil {
+			return err
+		}
+		if pos.Qty-reserved < m.Qty {
+			return fmt.Errorf("可售库存不足：结存 %d，已预留 %d，本次需要 %d", pos.Qty, reserved, m.Qty)
+		}
+		return tx.Create(&jxc.StockReservation{
+			WarehouseID: m.WarehouseID, SkuID: m.SkuID, Qty: m.Qty,
+			SourceType: m.SourceType, SourceID: m.SourceID, SourceLineID: m.SourceLineID,
+			Status: jxc.ReservationActive,
+		}).Error
+	}
+	if db != nil {
+		return fn(db)
+	}
+	return global.GVA_DB.WithContext(ctx).Transaction(fn)
+}
+
+// ReleaseReservation 释放预留（取消单据 / 出库后转出）
+func (s *LedgerService) ReleaseReservation(ctx context.Context, sourceType string, sourceID, sourceLineID uint, status int8) error {
+	return global.GVA_DB.WithContext(ctx).Model(&jxc.StockReservation{}).
+		Where("source_type = ? AND source_id = ? AND source_line_id = ? AND status = ?",
+			sourceType, sourceID, sourceLineID, jxc.ReservationActive).
+		Update("status", status).Error
+}
+
+// ============ 对账 ============
+
+// Reconcile 校验某仓库（warehouseID=0 表示全部）的账本与余额是否一致。
+// 这是"一键对账"的后端实现：返回空表示账是平的。
+func (s *LedgerService) Reconcile(ctx context.Context, warehouseID uint) ([]ledger.Violation, error) {
+	db := global.GVA_DB.WithContext(ctx)
+
+	var balances []jxc.StockBalance
+	bq := db.Model(&jxc.StockBalance{})
+	if warehouseID > 0 {
+		bq = bq.Where("warehouse_id = ?", warehouseID)
+	}
+	if err := bq.Find(&balances).Error; err != nil {
+		return nil, err
+	}
+
+	var moves []jxc.StockMove
+	mq := db.Model(&jxc.StockMove{})
+	if warehouseID > 0 {
+		mq = mq.Where("warehouse_id = ?", warehouseID)
+	}
+	if err := mq.Find(&moves).Error; err != nil {
+		return nil, err
+	}
+
+	var reservations []jxc.StockReservation
+	rq := db.Model(&jxc.StockReservation{})
+	if warehouseID > 0 {
+		rq = rq.Where("warehouse_id = ?", warehouseID)
+	}
+	if err := rq.Find(&reservations).Error; err != nil {
+		return nil, err
+	}
+
+	bs := make([]ledger.PositionRow, 0, len(balances))
+	for _, b := range balances {
+		bs = append(bs, ledger.PositionRow{WarehouseID: b.WarehouseID, SkuID: b.SkuID, Qty: b.Qty, Value: money.FromYuan(b.Value)})
+	}
+	es := make([]ledger.Entry, 0, len(moves))
+	for _, m := range moves {
+		es = append(es, ledger.Entry{WarehouseID: m.WarehouseID, SkuID: m.SkuID, Qty: m.Qty, Amount: money.FromYuan(m.Amount)})
+	}
+	rs := make([]ledger.ReservationRow, 0, len(reservations))
+	for _, r := range reservations {
+		rs = append(rs, ledger.ReservationRow{WarehouseID: r.WarehouseID, SkuID: r.SkuID, Qty: r.Qty, Status: r.Status})
+	}
+	return ledger.Check(bs, es, rs), nil
+}
+
+// isDuplicateKeyErr 判定唯一键冲突（MySQL 1062 / sqlite UNIQUE）
+func isDuplicateKeyErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "Duplicate entry") ||
+		strings.Contains(msg, "UNIQUE constraint failed") ||
+		strings.Contains(msg, "duplicate key")
+}
