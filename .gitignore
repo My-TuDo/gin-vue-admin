@@ -46,3 +46,11 @@ web/pnpm-lock.yaml
 *.sqlite
 *.sqlite3
 worktrees/
+
+# 本地产物 / 工具状态（永不入库）
+/backups/
+/output/
+/.playwright-cli/
+/.reasonix/
+/.zcode/
+*.exe~
