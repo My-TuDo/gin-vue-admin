@@ -348,6 +348,78 @@ func (s *LedgerService) Reconcile(ctx context.Context, warehouseID uint) ([]ledg
 	return ledger.Check(bs, es, rs), nil
 }
 
+// BalanceRow 余额行（带 SKU 展示信息，供前端表格用）
+type BalanceRow struct {
+	WarehouseID   uint    `json:"warehouseId"`
+	WarehouseName string  `json:"warehouseName"`
+	SkuID         uint    `json:"skuId"`
+	SkuCode       string  `json:"skuCode"`
+	GoodsName     string  `json:"goodsName"`
+	Color         string  `json:"color"`
+	Size          string  `json:"size"`
+	Qty           int     `json:"qty"`
+	Reserved      int     `json:"reserved"`
+	Available     int     `json:"available"`
+	Value         float64 `json:"value"`
+	AvgCost       float64 `json:"avgCost"`
+}
+
+// Balances 结存列表（含预留与可售），供"库存台账"页与对账页使用。
+func (s *LedgerService) Balances(ctx context.Context, warehouseID uint) ([]BalanceRow, error) {
+	db := global.GVA_DB.WithContext(ctx)
+	q := db.Table("stock_balance b").
+		Select(`b.warehouse_id, w.name AS warehouse_name, b.sku_id, s.sku_code,
+		        g.name AS goods_name, s.color, s.size, b.qty, b.value`).
+		Joins("LEFT JOIN warehouse w ON w.id = b.warehouse_id").
+		Joins("LEFT JOIN goods_sku s ON s.id = b.sku_id").
+		Joins("LEFT JOIN goods g ON g.id = s.goods_id").
+		Order("b.warehouse_id, b.sku_id")
+	if warehouseID > 0 {
+		q = q.Where("b.warehouse_id = ?", warehouseID)
+	}
+	var rows []BalanceRow
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		reserved, err := s.reservedQty(db, rows[i].WarehouseID, rows[i].SkuID)
+		if err != nil {
+			return nil, err
+		}
+		rows[i].Reserved = reserved
+		rows[i].Available = rows[i].Qty - reserved
+		if rows[i].Qty > 0 {
+			rows[i].AvgCost = money.FromYuan(rows[i].Value).Yuan() / float64(rows[i].Qty)
+			rows[i].AvgCost = money.FromYuan(rows[i].AvgCost).Yuan()
+		}
+	}
+	return rows, nil
+}
+
+// Moves 账本流水（分页），供"库存流水"页追溯每一次进出。
+func (s *LedgerService) Moves(ctx context.Context, warehouseID, skuID uint, page, size int) ([]jxc.StockMove, int64, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if size <= 0 || size > 200 {
+		size = 50
+	}
+	db := global.GVA_DB.WithContext(ctx).Model(&jxc.StockMove{})
+	if warehouseID > 0 {
+		db = db.Where("warehouse_id = ?", warehouseID)
+	}
+	if skuID > 0 {
+		db = db.Where("sku_id = ?", skuID)
+	}
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var list []jxc.StockMove
+	err := db.Order("id desc").Offset((page - 1) * size).Limit(size).Find(&list).Error
+	return list, total, err
+}
+
 // isDuplicateKeyErr 判定唯一键冲突（MySQL 1062 / sqlite UNIQUE）
 func isDuplicateKeyErr(err error) bool {
 	if err == nil {

@@ -17,4 +17,9 @@ func initBizRouter(routers ...*gin.RouterGroup) {
 
 	holder(publicGroup, privateGroup)
 
+	// 进销存全部路由挂在 privateGroup：
+	// JWT 鉴权 → 强制改密 → Casbin 权限 → 数据权限，缺一不可。
+	router.RouterGroupApp.Jxc.InitMasterRouter(privateGroup)
+	router.RouterGroupApp.Jxc.InitDocumentRouter(privateGroup)
+	router.RouterGroupApp.Jxc.InitLedgerRouter(privateGroup)
 }

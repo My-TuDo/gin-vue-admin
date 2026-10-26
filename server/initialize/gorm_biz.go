@@ -21,6 +21,10 @@ func bizModel() error {
 		&jxc.StockReservation{},
 		&jxc.AccountingPeriod{},
 		&jxc.StockBalanceSnapshot{},
+		&jxc.PurchaseOrder{},
+		&jxc.PurchaseItem{},
+		&jxc.SaleOrder{},
+		&jxc.SaleItem{},
 	)
 	if err != nil {
 		return err

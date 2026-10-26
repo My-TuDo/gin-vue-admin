@@ -67,6 +67,8 @@ func newLedgerTestDB(t *testing.T) *gorm.DB {
 		&jxc.Warehouse{}, &jxc.Goods{}, &jxc.GoodsSku{},
 		&jxc.StockMove{}, &jxc.StockBalance{}, &jxc.StockReservation{},
 		&jxc.AccountingPeriod{}, &jxc.StockBalanceSnapshot{},
+		&jxc.PurchaseOrder{}, &jxc.PurchaseItem{},
+		&jxc.SaleOrder{}, &jxc.SaleItem{},
 	); err != nil {
 		t.Fatalf("迁移失败: %v", err)
 	}
