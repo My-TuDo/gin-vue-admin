@@ -204,6 +204,52 @@ func TestPurchaseReturn_ReversedPurchaseRejected(t *testing.T) {
 	}
 }
 
+// TestPurchaseReturn_RejectsNegativeResidualValue 按原价退货后如果剩余库存金额会变成负数，
+// 必须拒绝，而不是把一个不可能的负金额写进余额。
+//
+// 例：10@100 + 10@1 = 20/1010，卖掉 19 件后剩 1/50.5；此时按原价 100 退最后 1 件，
+// 数量会归零、金额变 -49.5。这个结果没有业务解释，应该让用户改用盘亏/其他处理。
+func TestPurchaseReturn_RejectsNegativeResidualValue(t *testing.T) {
+	db := newLedgerTestDB(t)
+	wh, sku := seedSku(t, db)
+	ps := NewPurchaseService()
+	ss := NewSaleService()
+	prs := NewPurchaseReturnService()
+	ls := new(LedgerService)
+	ctx := context.Background()
+
+	po := receivePurchase(t, ps, wh, sku, 10, 100)
+	_ = receivePurchase(t, ps, wh, sku, 10, 1)
+
+	so, err := ss.Create(ctx, &jxc.SaleOrder{WarehouseID: wh,
+		Items: []jxc.SaleItem{{SkuID: sku, Qty: 19}}})
+	if err != nil {
+		t.Fatalf("开销售单失败: %v", err)
+	}
+	if err := ss.Ship(ctx, so.ID, "t", time.Now()); err != nil {
+		t.Fatalf("销售出库失败: %v", err)
+	}
+	if q, v := balanceOf(t, db, wh, sku); q != 1 || v != money.FromYuan(50.5) {
+		t.Fatalf("卖 19 后应为 1/50.50，实际 %d/%s", q, v)
+	}
+
+	ret, err := prs.Create(ctx, &jxc.PurchaseReturn{
+		PurchaseID: po.ID,
+		Items:      []jxc.PurchaseReturnItem{{SkuID: sku, Qty: 1}},
+	})
+	if err != nil {
+		t.Fatalf("建退货单失败: %v", err)
+	}
+	if err := prs.Post(ctx, ret.ID, "t", time.Now()); err == nil ||
+		!strings.Contains(err.Error(), "结存金额") {
+		t.Fatalf("按原价退货会留下负金额时应拒绝，got %v", err)
+	}
+	if q, v := balanceOf(t, db, wh, sku); q != 1 || v != money.FromYuan(50.5) {
+		t.Errorf("拒绝后库存应保持 1/50.50，实际 %d/%s", q, v)
+	}
+	mustInvariant(t, ls)
+}
+
 // TestPurchaseReturn_Cancel 取消草稿后不能再出库。
 func TestPurchaseReturn_Cancel(t *testing.T) {
 	db := newLedgerTestDB(t)
