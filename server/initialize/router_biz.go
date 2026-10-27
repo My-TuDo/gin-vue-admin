@@ -22,4 +22,8 @@ func initBizRouter(routers ...*gin.RouterGroup) {
 	router.RouterGroupApp.Jxc.InitMasterRouter(privateGroup)
 	router.RouterGroupApp.Jxc.InitDocumentRouter(privateGroup)
 	router.RouterGroupApp.Jxc.InitLedgerRouter(privateGroup)
+	router.RouterGroupApp.Jxc.InitReversalRouter(privateGroup)
+	router.RouterGroupApp.Jxc.InitReturnRouter(privateGroup)
+	router.RouterGroupApp.Jxc.InitCheckRouter(privateGroup)
+	router.RouterGroupApp.Jxc.InitPeriodRouter(privateGroup)
 }

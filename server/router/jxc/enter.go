@@ -6,4 +6,8 @@ type RouterGroup struct {
 	DocumentRouter
 	LedgerRouter
 	MasterRouter
+	ReversalRouter
+	ReturnRouter
+	CheckRouter
+	PeriodRouter
 }

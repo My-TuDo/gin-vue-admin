@@ -5,4 +5,8 @@ type ApiGroup struct {
 	DocumentApi
 	LedgerApi
 	MasterApi
+	ReversalApi
+	ReturnApi
+	CheckApi
+	PeriodApi
 }

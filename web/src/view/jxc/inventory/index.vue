@@ -1,5 +1,8 @@
 <template>
   <div class="inventory">
+    <el-tabs v-model="tab" class="inv-tabs">
+      <el-tab-pane label="库存台账" name="ledger">
+        <div class="inv-body">
     <div class="toolbar">
       <el-select v-model="warehouseId" placeholder="全部仓库" clearable style="width: 160px" @change="load">
         <el-option v-for="w in warehouses" :key="w.ID" :label="w.name" :value="w.ID" />
@@ -51,6 +54,12 @@
         </template>
       </el-table-column>
     </el-table>
+        </div>
+      </el-tab-pane>
+      <el-tab-pane label="盘点" name="check" lazy>
+        <StockCheck />
+      </el-tab-pane>
+    </el-tabs>
 
     <!-- 流水：账本的原始事实，只读 -->
     <el-drawer v-model="drawer" :title="drawerTitle" size="720px">
@@ -82,6 +91,10 @@
               <span><MoneyText :value="row.cost" /></span>
             </el-tooltip>
           </template>
+        </el-table-column>
+        <!-- 结存：这一笔之后还剩多少。只在单 SKU 视图里算，跨 SKU 混排会看不懂 -->
+        <el-table-column label="结存" width="80" align="right">
+          <template #default="{ row }">{{ row.balance ?? '—' }}</template>
         </el-table-column>
         <el-table-column label="操作人" min-width="80">
           <template #default="{ row }">{{ row.operator || '—' }}</template>
@@ -116,8 +129,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import MoneyText from '@/components/jxc/MoneyText.vue'
+import StockCheck from './check.vue'
 import { ledgerBalances, ledgerMoves, ledgerReconcile, listWarehouses } from '@/api/jxc'
 
+const tab = ref('ledger')
 const warehouses = ref([])
 const warehouseId = ref(null)
 const rows = ref([])
@@ -179,7 +194,15 @@ const openMoves = async (row) => {
   loadingMoves.value = true
   try {
     const res = await ledgerMoves({ warehouseId: row.warehouseId, skuId: row.skuId, page: 1, pageSize: 200 })
-    moves.value = res.code === 0 ? res.data.list || [] : []
+    const list = res.code === 0 ? res.data.list || [] : []
+    // 接口按 id 倒序返回；结存要从最早一笔往后累加，所以先反转再算，最后翻回来展示
+    let running = 0
+    const asc = [...list].reverse()
+    for (const mv of asc) {
+      running += mv.qty
+      mv.balance = running
+    }
+    moves.value = asc.reverse()
   } finally {
     loadingMoves.value = false
   }
@@ -241,6 +264,12 @@ onMounted(async () => {
 }
 .doc {
   font-family: ui-monospace, monospace;
+}
+.inv-tabs :deep(.el-tabs__header) {
+  margin-bottom: 8px;
+}
+.inv-body {
+  min-height: 0;
 }
 .recon-ok {
   text-align: center;

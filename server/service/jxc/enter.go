@@ -10,6 +10,10 @@ type ServiceGroup struct {
 	Ledger   *LedgerService
 	Purchase *PurchaseService
 	Sale     *SaleService
+	Reversal *ReversalService
+	Return   *ReturnService
+	Check    *StockCheckService
+	Period   *PeriodService
 }
 
 // ServiceGroupApp 进程级单例。
@@ -19,4 +23,8 @@ var ServiceGroupApp = &ServiceGroup{
 	Ledger:   new(LedgerService),
 	Purchase: NewPurchaseService(),
 	Sale:     NewSaleService(),
+	Reversal: NewReversalService(),
+	Return:   NewReturnService(),
+	Check:    NewStockCheckService(),
+	Period:   NewPeriodService(),
 }

@@ -1,45 +1,167 @@
--- 进销存 casbin 策略（幂等：先删后插）
+-- 进销存权限矩阵（幂等：先删后插）
 --
--- 背景：GVA 的鉴权是按「角色 + 路径(keyMatch2) + 方法」逐条授权的。
--- 新模块的接口如果没有策略，即使是 admin 也会被 CasbinHandler 拒绝（返回"权限不足"）。
--- 旧项目就是因为漏了这一步，采购/看板等页面一打开就 403。
+-- 为什么需要这个文件：GVA 的鉴权是「角色 + 路径(keyMatch2) + 方法」逐条授权的。
+-- 新模块没有策略时，连 admin 都会被 CasbinHandler 拒绝（返回"权限不足"）。
+-- keyMatch2 支持 :id 占位，所以 /jxc/sale/:id 能匹配 /jxc/sale/12。
 --
--- 路径写法说明：keyMatch2 支持 `:id` 占位，所以 /jxc/purchase/:id 能匹配 /jxc/purchase/12。
+-- 角色约定：
+--   888  超级管理员   —— 全量（GVA 自带角色，这里是逐条授权，没有 * 通配）
+--   9001 老板         —— 全量（与 888 一致，便于把超管账号留给运维）
+--   9002 店长         —— 除「红冲」「月结」外的全部（这两件事影响历史账，必须老板拍板）
+--   9003 店员         —— 只做开单/退货/盘点录入 + 查询，不能采购入库、不能红冲、不能结账
+--   8881 只读         —— GVA 自带测试角色，仅查询
 --
--- 使用：mysql -u root -p gva < docs/sql/jxc-casbin.sql
--- 执行后**必须重启后端**（casbin enforcer 有缓存）。
+-- 使用：mysql -u root -p erp_v3 < docs/sql/jxc-casbin.sql
+-- 执行后**必须重启后端**（casbin enforcer 有进程内缓存，不重启会一直报权限不足）。
 
 SET NAMES utf8mb4;
 
--- 只清理进销存自己的策略，不动系统原有规则
 DELETE FROM casbin_rule WHERE ptype = 'p' AND v1 LIKE '/jxc/%';
 
--- 角色 888 = 超管（当前库里 888 是逐条授权，没有 * 通配）
+-- 超级管理员（37 条）
 INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','888','/jxc/master/warehouses','GET'),
   ('p','888','/jxc/master/warehouses','POST'),
   ('p','888','/jxc/master/goods','GET'),
   ('p','888','/jxc/master/goods','POST'),
   ('p','888','/jxc/master/skus','GET'),
-
   ('p','888','/jxc/purchase','POST'),
   ('p','888','/jxc/purchase/page','GET'),
   ('p','888','/jxc/purchase/:id','GET'),
   ('p','888','/jxc/purchase/:id/approve','POST'),
   ('p','888','/jxc/purchase/:id/receive','POST'),
   ('p','888','/jxc/purchase/:id/cancel','POST'),
-
   ('p','888','/jxc/sale','POST'),
   ('p','888','/jxc/sale/page','GET'),
   ('p','888','/jxc/sale/:id','GET'),
   ('p','888','/jxc/sale/:id/ship','POST'),
   ('p','888','/jxc/sale/:id/cancel','POST'),
-
   ('p','888','/jxc/ledger/balance','GET'),
   ('p','888','/jxc/ledger/moves','GET'),
-  ('p','888','/jxc/ledger/reconcile','GET');
+  ('p','888','/jxc/ledger/reconcile','GET'),
+  ('p','888','/jxc/reversal','POST'),
+  ('p','888','/jxc/reversal/page','GET'),
+  ('p','888','/jxc/return','POST'),
+  ('p','888','/jxc/return/page','GET'),
+  ('p','888','/jxc/return/:id','GET'),
+  ('p','888','/jxc/return/:id/post','POST'),
+  ('p','888','/jxc/return/:id/cancel','POST'),
+  ('p','888','/jxc/return/returnable','GET'),
+  ('p','888','/jxc/check','POST'),
+  ('p','888','/jxc/check/page','GET'),
+  ('p','888','/jxc/check/:id','GET'),
+  ('p','888','/jxc/check/:id/items','POST'),
+  ('p','888','/jxc/check/:id/post','POST'),
+  ('p','888','/jxc/check/:id/cancel','POST'),
+  ('p','888','/jxc/period','GET'),
+  ('p','888','/jxc/period/close','POST'),
+  ('p','888','/jxc/period/snapshot','GET'),
+  ('p','888','/jxc/period/summary','GET');
 
--- 角色 8881 = 普通用户（GVA 自带的测试角色）：只给只读，避免误操作
+-- 老板（37 条）
+INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
+  ('p','9001','/jxc/master/warehouses','GET'),
+  ('p','9001','/jxc/master/warehouses','POST'),
+  ('p','9001','/jxc/master/goods','GET'),
+  ('p','9001','/jxc/master/goods','POST'),
+  ('p','9001','/jxc/master/skus','GET'),
+  ('p','9001','/jxc/purchase','POST'),
+  ('p','9001','/jxc/purchase/page','GET'),
+  ('p','9001','/jxc/purchase/:id','GET'),
+  ('p','9001','/jxc/purchase/:id/approve','POST'),
+  ('p','9001','/jxc/purchase/:id/receive','POST'),
+  ('p','9001','/jxc/purchase/:id/cancel','POST'),
+  ('p','9001','/jxc/sale','POST'),
+  ('p','9001','/jxc/sale/page','GET'),
+  ('p','9001','/jxc/sale/:id','GET'),
+  ('p','9001','/jxc/sale/:id/ship','POST'),
+  ('p','9001','/jxc/sale/:id/cancel','POST'),
+  ('p','9001','/jxc/ledger/balance','GET'),
+  ('p','9001','/jxc/ledger/moves','GET'),
+  ('p','9001','/jxc/ledger/reconcile','GET'),
+  ('p','9001','/jxc/reversal','POST'),
+  ('p','9001','/jxc/reversal/page','GET'),
+  ('p','9001','/jxc/return','POST'),
+  ('p','9001','/jxc/return/page','GET'),
+  ('p','9001','/jxc/return/:id','GET'),
+  ('p','9001','/jxc/return/:id/post','POST'),
+  ('p','9001','/jxc/return/:id/cancel','POST'),
+  ('p','9001','/jxc/return/returnable','GET'),
+  ('p','9001','/jxc/check','POST'),
+  ('p','9001','/jxc/check/page','GET'),
+  ('p','9001','/jxc/check/:id','GET'),
+  ('p','9001','/jxc/check/:id/items','POST'),
+  ('p','9001','/jxc/check/:id/post','POST'),
+  ('p','9001','/jxc/check/:id/cancel','POST'),
+  ('p','9001','/jxc/period','GET'),
+  ('p','9001','/jxc/period/close','POST'),
+  ('p','9001','/jxc/period/snapshot','GET'),
+  ('p','9001','/jxc/period/summary','GET');
+
+-- 店长（35 条）
+INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
+  ('p','9002','/jxc/master/warehouses','GET'),
+  ('p','9002','/jxc/master/warehouses','POST'),
+  ('p','9002','/jxc/master/goods','GET'),
+  ('p','9002','/jxc/master/goods','POST'),
+  ('p','9002','/jxc/master/skus','GET'),
+  ('p','9002','/jxc/purchase','POST'),
+  ('p','9002','/jxc/purchase/page','GET'),
+  ('p','9002','/jxc/purchase/:id','GET'),
+  ('p','9002','/jxc/purchase/:id/approve','POST'),
+  ('p','9002','/jxc/purchase/:id/receive','POST'),
+  ('p','9002','/jxc/purchase/:id/cancel','POST'),
+  ('p','9002','/jxc/sale','POST'),
+  ('p','9002','/jxc/sale/page','GET'),
+  ('p','9002','/jxc/sale/:id','GET'),
+  ('p','9002','/jxc/sale/:id/ship','POST'),
+  ('p','9002','/jxc/sale/:id/cancel','POST'),
+  ('p','9002','/jxc/ledger/balance','GET'),
+  ('p','9002','/jxc/ledger/moves','GET'),
+  ('p','9002','/jxc/ledger/reconcile','GET'),
+  ('p','9002','/jxc/reversal/page','GET'),
+  ('p','9002','/jxc/return','POST'),
+  ('p','9002','/jxc/return/page','GET'),
+  ('p','9002','/jxc/return/:id','GET'),
+  ('p','9002','/jxc/return/:id/post','POST'),
+  ('p','9002','/jxc/return/:id/cancel','POST'),
+  ('p','9002','/jxc/return/returnable','GET'),
+  ('p','9002','/jxc/check','POST'),
+  ('p','9002','/jxc/check/page','GET'),
+  ('p','9002','/jxc/check/:id','GET'),
+  ('p','9002','/jxc/check/:id/items','POST'),
+  ('p','9002','/jxc/check/:id/post','POST'),
+  ('p','9002','/jxc/check/:id/cancel','POST'),
+  ('p','9002','/jxc/period','GET'),
+  ('p','9002','/jxc/period/snapshot','GET'),
+  ('p','9002','/jxc/period/summary','GET');
+
+-- 店员（22 条）
+INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
+  ('p','9003','/jxc/master/warehouses','GET'),
+  ('p','9003','/jxc/master/goods','GET'),
+  ('p','9003','/jxc/master/skus','GET'),
+  ('p','9003','/jxc/purchase/page','GET'),
+  ('p','9003','/jxc/purchase/:id','GET'),
+  ('p','9003','/jxc/sale','POST'),
+  ('p','9003','/jxc/sale/page','GET'),
+  ('p','9003','/jxc/sale/:id','GET'),
+  ('p','9003','/jxc/sale/:id/ship','POST'),
+  ('p','9003','/jxc/ledger/balance','GET'),
+  ('p','9003','/jxc/ledger/moves','GET'),
+  ('p','9003','/jxc/return','POST'),
+  ('p','9003','/jxc/return/page','GET'),
+  ('p','9003','/jxc/return/:id','GET'),
+  ('p','9003','/jxc/return/:id/post','POST'),
+  ('p','9003','/jxc/return/returnable','GET'),
+  ('p','9003','/jxc/check','POST'),
+  ('p','9003','/jxc/check/page','GET'),
+  ('p','9003','/jxc/check/:id','GET'),
+  ('p','9003','/jxc/check/:id/items','POST'),
+  ('p','9003','/jxc/period','GET'),
+  ('p','9003','/jxc/period/summary','GET');
+
+-- 只读（19 条）
 INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','8881','/jxc/master/warehouses','GET'),
   ('p','8881','/jxc/master/goods','GET'),
@@ -50,6 +172,26 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','8881','/jxc/sale/:id','GET'),
   ('p','8881','/jxc/ledger/balance','GET'),
   ('p','8881','/jxc/ledger/moves','GET'),
-  ('p','8881','/jxc/ledger/reconcile','GET');
+  ('p','8881','/jxc/ledger/reconcile','GET'),
+  ('p','8881','/jxc/reversal/page','GET'),
+  ('p','8881','/jxc/return/page','GET'),
+  ('p','8881','/jxc/return/:id','GET'),
+  ('p','8881','/jxc/return/returnable','GET'),
+  ('p','8881','/jxc/check/page','GET'),
+  ('p','8881','/jxc/check/:id','GET'),
+  ('p','8881','/jxc/period','GET'),
+  ('p','8881','/jxc/period/snapshot','GET'),
+  ('p','8881','/jxc/period/summary','GET');
+
+-- 业务角色（角色本身由 GVA 的角色管理维护，这里只保证存在，便于直接授人以角色）
+INSERT INTO sys_authorities (authority_id, authority_name, parent_id, created_at, updated_at, deleted_at)
+SELECT 9001, '老板', 0, NOW(), NOW(), NULL FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM sys_authorities WHERE authority_id = 9001);
+INSERT INTO sys_authorities (authority_id, authority_name, parent_id, created_at, updated_at, deleted_at)
+SELECT 9002, '店长', 0, NOW(), NOW(), NULL FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM sys_authorities WHERE authority_id = 9002);
+INSERT INTO sys_authorities (authority_id, authority_name, parent_id, created_at, updated_at, deleted_at)
+SELECT 9003, '店员', 0, NOW(), NOW(), NULL FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM sys_authorities WHERE authority_id = 9003);
 
 SELECT CONCAT('进销存策略条数：', COUNT(*)) AS result FROM casbin_rule WHERE ptype='p' AND v1 LIKE '/jxc/%';

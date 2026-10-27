@@ -107,6 +107,16 @@ func (s *SaleService) Ship(ctx context.Context, id uint, operator string, occurr
 			return errors.New("销售单没有明细")
 		}
 
+		// 先把本单的预留转出库，再记账。
+		// 顺序不能反：Post 的可售校验会把"仍在活跃状态的预留"算作占用，
+		// 若先记账，卖掉最后一件时会出现 after.Qty - reserved < 0 的假失败
+		// （自己占着自己的库存）。这个 bug 由"卖光库存"的用例抓到。
+		for _, it := range items {
+			if err := s.ledger.ReleaseReservation(ctx, tx, jxc.ReserveSourceSaleOrder, order.ID, it.ID, jxc.ReservationConsumed); err != nil {
+				return err
+			}
+		}
+
 		moves := make([]MoveInput, 0, len(items))
 		for _, it := range items {
 			moves = append(moves, MoveInput{
@@ -132,10 +142,6 @@ func (s *SaleService) Ship(ctx context.Context, id uint, operator string, occurr
 			costTotal = costTotal.Add(lineCost)
 			if err := tx.Model(&jxc.SaleItem{}).Where("id = ?", it.ID).
 				Update("cost_amt", lineCost.Yuan()).Error; err != nil {
-				return err
-			}
-			// 预留转出库
-			if err := s.ledger.ReleaseReservation(ctx, jxc.ReserveSourceSaleOrder, order.ID, it.ID, jxc.ReservationConsumed); err != nil {
 				return err
 			}
 		}
@@ -167,7 +173,7 @@ func (s *SaleService) Cancel(ctx context.Context, id uint, operator string) erro
 			return err
 		}
 		for _, it := range items {
-			if err := s.ledger.ReleaseReservation(ctx, jxc.ReserveSourceSaleOrder, order.ID, it.ID, jxc.ReservationReleased); err != nil {
+			if err := s.ledger.ReleaseReservation(ctx, tx, jxc.ReserveSourceSaleOrder, order.ID, it.ID, jxc.ReservationReleased); err != nil {
 				return err
 			}
 		}

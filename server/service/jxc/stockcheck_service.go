@@ -1,0 +1,225 @@
+package jxc
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/flipped-aurora/gin-vue-admin/server/global"
+	"github.com/flipped-aurora/gin-vue-admin/server/internal/money"
+	"github.com/flipped-aurora/gin-vue-admin/server/model/jxc"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+)
+
+// StockCheckService 盘点。
+//
+// 流程：建单（快照账面数）→ 录实盘数 → 完成（差异过账）。
+// 只有"完成"这一步会动账本，且差异是**追加移动**而不是覆盖余额。
+type StockCheckService struct {
+	ledger *LedgerService
+}
+
+func NewStockCheckService() *StockCheckService {
+	return &StockCheckService{ledger: new(LedgerService)}
+}
+
+// Create 建盘点单：把当前结存快照成明细，实盘数留空等人工录入。
+func (s *StockCheckService) Create(ctx context.Context, warehouseID uint, remark string) (*jxc.StockCheck, error) {
+	if warehouseID == 0 {
+		return nil, errors.New("请选择盘点仓库")
+	}
+	db := global.GVA_DB.WithContext(ctx)
+	if err := ensureWarehouse(db, warehouseID); err != nil {
+		return nil, err
+	}
+
+	var check *jxc.StockCheck
+	err := db.Transaction(func(tx *gorm.DB) error {
+		// 同一仓库不允许有未完成的盘点单，否则两次盘点会互相覆盖
+		var open int64
+		if err := tx.Model(&jxc.StockCheck{}).
+			Where("warehouse_id = ? AND status = ?", warehouseID, jxc.StockCheckDraft).
+			Count(&open).Error; err != nil {
+			return err
+		}
+		if open > 0 {
+			return errors.New("该仓库已有进行中的盘点单，请先完成或取消")
+		}
+
+		no, err := nextOrderNo(tx, "stock_check", "check_no", "PD")
+		if err != nil {
+			return err
+		}
+		check = &jxc.StockCheck{CheckNo: no, WarehouseID: warehouseID, Status: jxc.StockCheckDraft, Remark: remark}
+		if err := tx.Create(check).Error; err != nil {
+			return err
+		}
+
+		var balances []jxc.StockBalance
+		if err := tx.Where("warehouse_id = ?", warehouseID).Find(&balances).Error; err != nil {
+			return err
+		}
+		for _, b := range balances {
+			item := jxc.StockCheckItem{CheckID: check.ID, SkuID: b.SkuID, BookQty: b.Qty}
+			if b.Qty > 0 {
+				item.UnitCost = money.FromYuan(b.Value).Yuan() / float64(b.Qty)
+				item.UnitCost = money.FromYuan(item.UnitCost).Yuan()
+			}
+			if err := tx.Create(&item).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.Get(ctx, check.ID)
+}
+
+// UpdateItems 录入实盘数。只允许盘点中的单。
+func (s *StockCheckService) UpdateItems(ctx context.Context, checkID uint, inputs []StockCountInput) error {
+	if len(inputs) == 0 {
+		return errors.New("请至少录入一条实盘数")
+	}
+	return global.GVA_DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var check jxc.StockCheck
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&check, checkID).Error; err != nil {
+			return errors.New("盘点单不存在")
+		}
+		if check.Status != jxc.StockCheckDraft {
+			return errors.New("只有盘点中的单据可以录入")
+		}
+		for _, in := range inputs {
+			if in.ActualQty < 0 {
+				return errors.New("实盘数不能为负")
+			}
+			var item jxc.StockCheckItem
+			if err := tx.Where("id = ? AND check_id = ?", in.ID, checkID).First(&item).Error; err != nil {
+				return errors.New("盘点明细不存在")
+			}
+			actual := in.ActualQty
+			if err := tx.Model(&jxc.StockCheckItem{}).Where("id = ?", item.ID).
+				Updates(map[string]interface{}{
+					"actual_qty": actual,
+					"diff":       actual - item.BookQty,
+				}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// StockCountInput 一条实盘录入
+type StockCountInput struct {
+	ID        uint `json:"id"`
+	ActualQty int  `json:"actualQty"`
+}
+
+// Post 完成盘点：把差异写进账本（盘盈正数、盘亏负数），然后锁死单据。
+func (s *StockCheckService) Post(ctx context.Context, checkID uint, operator string, occurredAt time.Time) (*jxc.StockCheck, error) {
+	if occurredAt.IsZero() {
+		occurredAt = time.Now()
+	}
+	var out *jxc.StockCheck
+	err := global.GVA_DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var check jxc.StockCheck
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&check, checkID).Error; err != nil {
+			return errors.New("盘点单不存在")
+		}
+		if check.Status != jxc.StockCheckDraft {
+			return errors.New("只有盘点中的单据可以完成")
+		}
+		var items []jxc.StockCheckItem
+		if err := tx.Where("check_id = ?", checkID).Find(&items).Error; err != nil {
+			return err
+		}
+
+		var moves []MoveInput
+		counted := 0
+		for _, it := range items {
+			if it.ActualQty == nil {
+				continue // 没录的不动
+			}
+			counted++
+			if it.Diff == 0 {
+				continue
+			}
+			src := jxc.MoveSourceCheckGain
+			if it.Diff < 0 {
+				src = jxc.MoveSourceCheckLoss
+			}
+			moves = append(moves, MoveInput{
+				WarehouseID: check.WarehouseID, SkuID: it.SkuID,
+				Qty: it.Diff, UnitCost: it.UnitCost,
+				SourceType: src, SourceID: check.ID, SourceLineID: it.ID,
+				OccurredAt: occurredAt, Operator: operator,
+			})
+		}
+		if counted == 0 {
+			return errors.New("还没有录入任何实盘数")
+		}
+		if len(moves) > 0 {
+			if err := s.ledger.Post(ctx, tx, moves); err != nil {
+				return err
+			}
+		}
+
+		now := time.Now()
+		if err := tx.Model(&jxc.StockCheck{}).Where("id = ?", checkID).
+			Updates(map[string]interface{}{"status": jxc.StockCheckPosted, "posted_at": now}).Error; err != nil {
+			return err
+		}
+		out = &check
+		out.Status = jxc.StockCheckPosted
+		out.PostedAt = &now
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.Get(ctx, out.ID)
+}
+
+// Cancel 取消盘点（仅盘点中）
+func (s *StockCheckService) Cancel(ctx context.Context, checkID uint) error {
+	res := global.GVA_DB.WithContext(ctx).Model(&jxc.StockCheck{}).
+		Where("id = ? AND status = ?", checkID, jxc.StockCheckDraft).
+		Update("status", jxc.StockCheckCanceled)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return errors.New("只有盘点中的单据可以取消")
+	}
+	return nil
+}
+
+// Get 详情（带明细与 SKU 展示信息）
+func (s *StockCheckService) Get(ctx context.Context, id uint) (*jxc.StockCheck, error) {
+	var check jxc.StockCheck
+	if err := global.GVA_DB.WithContext(ctx).Preload("Items").First(&check, id).Error; err != nil {
+		return nil, errors.New("盘点单不存在")
+	}
+	return &check, nil
+}
+
+// Page 列表
+func (s *StockCheckService) Page(ctx context.Context, page, size int) ([]jxc.StockCheck, int64, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if size <= 0 || size > 100 {
+		size = 20
+	}
+	db := global.GVA_DB.WithContext(ctx).Model(&jxc.StockCheck{})
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var list []jxc.StockCheck
+	err := db.Preload("Items").Order("id desc").Offset((page - 1) * size).Limit(size).Find(&list).Error
+	return list, total, err
+}

@@ -291,9 +291,15 @@ func (s *LedgerService) Reserve(ctx context.Context, db *gorm.DB, m MoveInput) e
 	return global.GVA_DB.WithContext(ctx).Transaction(fn)
 }
 
-// ReleaseReservation 释放预留（取消单据 / 出库后转出）
-func (s *LedgerService) ReleaseReservation(ctx context.Context, sourceType string, sourceID, sourceLineID uint, status int8) error {
-	return global.GVA_DB.WithContext(ctx).Model(&jxc.StockReservation{}).
+// ReleaseReservation 释放预留（取消单据时 status=Released，出库时 status=Consumed）。
+//
+// 必须支持传入事务 db：出库时"占用→转出"要和过账在同一个事务里，
+// 走全局连接会出现"事务回滚了但预留已经被改掉"的脏状态。
+func (s *LedgerService) ReleaseReservation(ctx context.Context, db *gorm.DB, sourceType string, sourceID, sourceLineID uint, status int8) error {
+	if db == nil {
+		db = global.GVA_DB.WithContext(ctx)
+	}
+	return db.Model(&jxc.StockReservation{}).
 		Where("source_type = ? AND source_id = ? AND source_line_id = ? AND status = ?",
 			sourceType, sourceID, sourceLineID, jxc.ReservationActive).
 		Update("status", status).Error

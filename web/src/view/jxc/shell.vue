@@ -47,7 +47,9 @@ const nav = [
   { path: '/jxc/workspace', label: '工作台', icon: '◱' },
   { path: '/jxc/sale', label: '开单', icon: '◈' },
   { path: '/jxc/purchase', label: '补货', icon: '▤' },
+  { path: '/jxc/documents', label: '单据', icon: '❐' },
   { path: '/jxc/inventory', label: '库存', icon: '▦' },
+  { path: '/jxc/report', label: '报表', icon: '◫' },
   { path: '/jxc/master', label: '基础资料', icon: '⌗' }
 ]
 

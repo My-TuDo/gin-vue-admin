@@ -31,6 +31,7 @@ type PurchaseOrder struct {
 	Status      int8       `json:"status" gorm:"column:status;not null;default:1;comment:1草稿 2已审核 3已入库 4已取消"`
 	TotalAmount float64    `json:"totalAmount" gorm:"column:total_amount;type:decimal(14,2);not null;default:0;comment:采购总额"`
 	PostedAt    *time.Time `json:"postedAt" gorm:"column:posted_at;comment:过账时间（入库时写入，之后单据不可改）"`
+	ReversedAt  *time.Time `json:"reversedAt" gorm:"column:reversed_at;comment:红冲时间（非空表示已整单冲销）"`
 	Remark      string     `json:"remark" gorm:"column:remark;size:500"`
 
 	Items []PurchaseItem `json:"items" gorm:"foreignKey:PurchaseID;references:ID"`
@@ -74,6 +75,7 @@ type SaleOrder struct {
 	TotalAmount float64    `json:"totalAmount" gorm:"column:total_amount;type:decimal(14,2);not null;default:0;comment:销售总额"`
 	CostAmount  float64    `json:"costAmount" gorm:"column:cost_amount;type:decimal(14,2);not null;default:0;comment:出库成本（过账时冻结，用于毛利）"`
 	PostedAt    *time.Time `json:"postedAt" gorm:"column:posted_at;comment:过账时间（出库时写入）"`
+	ReversedAt  *time.Time `json:"reversedAt" gorm:"column:reversed_at;comment:红冲时间（非空表示已整单冲销）"`
 	Remark      string     `json:"remark" gorm:"column:remark;size:500"`
 
 	Items []SaleItem `json:"items" gorm:"foreignKey:SaleID;references:ID"`

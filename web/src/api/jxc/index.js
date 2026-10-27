@@ -28,3 +28,29 @@ export const cancelSale = (id) => service({ url: `/jxc/sale/${id}/cancel`, metho
 export const ledgerBalances = (params) => service({ url: '/jxc/ledger/balance', method: 'get', params })
 export const ledgerMoves = (params) => service({ url: '/jxc/ledger/moves', method: 'get', params })
 export const ledgerReconcile = (params) => service({ url: '/jxc/ledger/reconcile', method: 'get', params })
+
+// ---------- 红冲 ----------
+export const createReversal = (data) => service({ url: '/jxc/reversal', method: 'post', data })
+export const pageReversal = (params) => service({ url: '/jxc/reversal/page', method: 'get', params })
+
+// ---------- 退货 ----------
+export const createReturn = (data) => service({ url: '/jxc/return', method: 'post', data })
+export const pageReturn = (params) => service({ url: '/jxc/return/page', method: 'get', params })
+export const getReturn = (id) => service({ url: `/jxc/return/${id}`, method: 'get' })
+export const postReturn = (id) => service({ url: `/jxc/return/${id}/post`, method: 'post' })
+export const cancelReturn = (id) => service({ url: `/jxc/return/${id}/cancel`, method: 'post' })
+export const getReturnable = (saleId) => service({ url: '/jxc/return/returnable', method: 'get', params: { saleId } })
+
+// ---------- 盘点 ----------
+export const createCheck = (data) => service({ url: '/jxc/check', method: 'post', data })
+export const pageCheck = (params) => service({ url: '/jxc/check/page', method: 'get', params })
+export const getCheck = (id) => service({ url: `/jxc/check/${id}`, method: 'get' })
+export const updateCheckItems = (id, items) => service({ url: `/jxc/check/${id}/items`, method: 'post', data: { items } })
+export const postCheck = (id) => service({ url: `/jxc/check/${id}/post`, method: 'post' })
+export const cancelCheck = (id) => service({ url: `/jxc/check/${id}/cancel`, method: 'post' })
+
+// ---------- 月结与报表 ----------
+export const listPeriods = () => service({ url: '/jxc/period', method: 'get' })
+export const closePeriod = (yearMonth) => service({ url: '/jxc/period/close', method: 'post', data: { yearMonth } })
+export const getSnapshot = (periodId) => service({ url: '/jxc/period/snapshot', method: 'get', params: { periodId } })
+export const getMonthlySummary = (month) => service({ url: '/jxc/period/summary', method: 'get', params: { month } })

@@ -40,7 +40,9 @@ const routes = [
       { path: 'workspace', component: () => import('@/view/jxc/workspace/index.vue') },
       { path: 'sale', component: () => import('@/view/jxc/sale/index.vue') },
       { path: 'purchase', component: () => import('@/view/jxc/purchase/index.vue') },
+      { path: 'documents', component: () => import('@/view/jxc/documents/index.vue') },
       { path: 'inventory', component: () => import('@/view/jxc/inventory/index.vue') },
+      { path: 'report', component: () => import('@/view/jxc/report/index.vue') },
       { path: 'master', component: () => import('@/view/jxc/master/index.vue') }
     ]
   },
