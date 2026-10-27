@@ -10,7 +10,9 @@ import (
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
 	"github.com/flipped-aurora/gin-vue-admin/server/internal/money"
+	common "github.com/flipped-aurora/gin-vue-admin/server/model/common/request"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/jxc"
+	jxcReq "github.com/flipped-aurora/gin-vue-admin/server/model/jxc/request"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -169,21 +171,54 @@ func (s *PurchaseService) Get(ctx context.Context, id uint) (*jxc.PurchaseOrder,
 	return &order, nil
 }
 
-// Page 列表
+// Page 列表（兼容旧调用；新代码用 Search）
 func (s *PurchaseService) Page(ctx context.Context, page, size int) ([]jxc.PurchaseOrder, int64, error) {
-	if page <= 0 {
-		page = 1
+	return s.Search(ctx, jxcReq.DocumentSearch{
+		PageInfo: common.PageInfo{Page: page, PageSize: size},
+	})
+}
+
+// Search 服务端筛选 + 分页。
+//
+// 关键词覆盖单号、备注、供应商名称/编码；状态、仓库、供应商、日期范围、是否红冲
+// 都可组合。total 是数据库的真实总数，不再是前端取回 100 条后的长度。
+func (s *PurchaseService) Search(ctx context.Context, info jxcReq.DocumentSearch) ([]jxc.PurchaseOrder, int64, error) {
+	info.Normalize()
+	db := global.GVA_DB.WithContext(ctx).Model(&jxc.PurchaseOrder{}).
+		Joins("LEFT JOIN jxc_partner p ON p.id = purchase_order.supplier_id")
+
+	if info.Status != nil {
+		db = db.Where("purchase_order.status = ?", *info.Status)
 	}
-	if size <= 0 || size > 100 {
-		size = 20
+	if info.WarehouseID > 0 {
+		db = db.Where("purchase_order.warehouse_id = ?", info.WarehouseID)
 	}
-	db := global.GVA_DB.WithContext(ctx).Model(&jxc.PurchaseOrder{})
+	if info.PartnerID > 0 {
+		db = db.Where("purchase_order.supplier_id = ?", info.PartnerID)
+	}
+	if info.Reversed != nil {
+		if *info.Reversed {
+			db = db.Where("purchase_order.reversed_at IS NOT NULL")
+		} else {
+			db = db.Where("purchase_order.reversed_at IS NULL")
+		}
+	}
+	if kw := keywordPattern(info.Keyword); kw != "" {
+		db = db.Where("(purchase_order.order_no LIKE ? OR purchase_order.remark LIKE ? OR p.name LIKE ? OR p.code LIKE ?)",
+			kw, kw, kw, kw)
+	}
+	db, err := applyDocumentDateRange(db, info, "purchase_order.created_at", "purchase_order.posted_at")
+	if err != nil {
+		return nil, 0, err
+	}
+
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	limit, offset := info.LimitOffset()
 	var list []jxc.PurchaseOrder
-	err := db.Preload("Items").Order("id desc").Offset((page - 1) * size).Limit(size).Find(&list).Error
+	err = db.Preload("Items").Order("purchase_order.id desc").Offset(offset).Limit(limit).Find(&list).Error
 	return list, total, err
 }
 

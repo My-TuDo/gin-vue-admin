@@ -26,11 +26,11 @@ const (
 type PurchaseOrder struct {
 	global.GVA_MODEL
 	OrderNo     string     `json:"orderNo" gorm:"column:order_no;size:50;not null;uniqueIndex:uk_po_no;comment:采购单号"`
-	SupplierID  *uint      `json:"supplierId" gorm:"column:supplier_id;comment:供应商ID（可空）"`
-	WarehouseID uint       `json:"warehouseId" gorm:"column:warehouse_id;not null;comment:入库仓库"`
-	Status      int8       `json:"status" gorm:"column:status;not null;default:1;comment:1草稿 2已审核 3已入库 4已取消"`
+	SupplierID  *uint      `json:"supplierId" gorm:"column:supplier_id;index:idx_po_supplier;comment:供应商ID（可空）"`
+	WarehouseID uint       `json:"warehouseId" gorm:"column:warehouse_id;not null;index:idx_po_warehouse;comment:入库仓库"`
+	Status      int8       `json:"status" gorm:"column:status;not null;default:1;index:idx_po_status;comment:1草稿 2已审核 3已入库 4已取消"`
 	TotalAmount float64    `json:"totalAmount" gorm:"column:total_amount;type:decimal(14,2);not null;default:0;comment:采购总额"`
-	PostedAt    *time.Time `json:"postedAt" gorm:"column:posted_at;comment:过账时间（入库时写入，之后单据不可改）"`
+	PostedAt    *time.Time `json:"postedAt" gorm:"column:posted_at;index:idx_po_posted;comment:过账时间（入库时写入，之后单据不可改）"`
 	ReversedAt  *time.Time `json:"reversedAt" gorm:"column:reversed_at;comment:红冲时间（非空表示已整单冲销）"`
 	Remark      string     `json:"remark" gorm:"column:remark;size:500"`
 
@@ -69,12 +69,12 @@ const (
 type SaleOrder struct {
 	global.GVA_MODEL
 	OrderNo     string     `json:"orderNo" gorm:"column:order_no;size:50;not null;uniqueIndex:uk_so_no;comment:销售单号"`
-	CustomerID  *uint      `json:"customerId" gorm:"column:customer_id;comment:客户ID（散客可空）"`
-	WarehouseID uint       `json:"warehouseId" gorm:"column:warehouse_id;not null;comment:出库仓库"`
-	Status      int8       `json:"status" gorm:"column:status;not null;default:1;comment:1草稿 2已出库 3已取消"`
+	CustomerID  *uint      `json:"customerId" gorm:"column:customer_id;index:idx_so_customer;comment:客户ID（散客可空）"`
+	WarehouseID uint       `json:"warehouseId" gorm:"column:warehouse_id;not null;index:idx_so_warehouse;comment:出库仓库"`
+	Status      int8       `json:"status" gorm:"column:status;not null;default:1;index:idx_so_status;comment:1草稿 2已出库 3已取消"`
 	TotalAmount float64    `json:"totalAmount" gorm:"column:total_amount;type:decimal(14,2);not null;default:0;comment:销售总额"`
 	CostAmount  float64    `json:"costAmount" gorm:"column:cost_amount;type:decimal(14,2);not null;default:0;comment:出库成本（过账时冻结，用于毛利）"`
-	PostedAt    *time.Time `json:"postedAt" gorm:"column:posted_at;comment:过账时间（出库时写入）"`
+	PostedAt    *time.Time `json:"postedAt" gorm:"column:posted_at;index:idx_so_posted;comment:过账时间（出库时写入）"`
 	ReversedAt  *time.Time `json:"reversedAt" gorm:"column:reversed_at;comment:红冲时间（非空表示已整单冲销）"`
 	Remark      string     `json:"remark" gorm:"column:remark;size:500"`
 

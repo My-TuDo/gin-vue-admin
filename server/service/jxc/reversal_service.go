@@ -9,7 +9,9 @@ import (
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
 	"github.com/flipped-aurora/gin-vue-admin/server/internal/money"
+	common "github.com/flipped-aurora/gin-vue-admin/server/model/common/request"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/jxc"
+	jxcReq "github.com/flipped-aurora/gin-vue-admin/server/model/jxc/request"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -178,21 +180,55 @@ func (s *ReversalService) Reverse(ctx context.Context, sourceType string, source
 	return rev, nil
 }
 
-// Page 红冲记录
+// Page 红冲记录（兼容旧调用；新代码用 Search）
 func (s *ReversalService) Page(ctx context.Context, page, size int) ([]jxc.StockReversal, int64, error) {
-	if page <= 0 {
-		page = 1
+	return s.Search(ctx, jxcReq.DocumentSearch{
+		PageInfo: common.PageInfo{Page: page, PageSize: size},
+	})
+}
+
+// Search 红冲记录的服务端筛选。
+// 红冲单本身没有仓库/往来单位字段，因此通过来源单 join 支持这两个筛选；
+// 关键词按红冲单号、原单号、原因搜索（来源类型用 sourceType 精确筛选）。
+func (s *ReversalService) Search(ctx context.Context, info jxcReq.DocumentSearch) ([]jxc.StockReversal, int64, error) {
+	info.Normalize()
+	db := global.GVA_DB.WithContext(ctx).Model(&jxc.StockReversal{}).
+		Joins("LEFT JOIN sale_order so ON stock_reversal.source_type = 'sale' AND so.id = stock_reversal.source_id").
+		Joins("LEFT JOIN purchase_order po ON stock_reversal.source_type = 'purchase' AND po.id = stock_reversal.source_id")
+
+	if info.Status != nil && *info.Status != jxc.ReversalPosted {
+		db = db.Where("1 = 0")
 	}
-	if size <= 0 || size > 100 {
-		size = 20
+	if info.SourceType != "" {
+		if info.SourceType != jxc.ReversalSourcePurchase && info.SourceType != jxc.ReversalSourceSale {
+			return nil, 0, errors.New("sourceType 只能是 purchase 或 sale")
+		}
+		db = db.Where("stock_reversal.source_type = ?", info.SourceType)
 	}
-	db := global.GVA_DB.WithContext(ctx).Model(&jxc.StockReversal{})
+	if info.WarehouseID > 0 {
+		db = db.Where("((stock_reversal.source_type = 'sale' AND so.warehouse_id = ?) OR (stock_reversal.source_type = 'purchase' AND po.warehouse_id = ?))",
+			info.WarehouseID, info.WarehouseID)
+	}
+	if info.PartnerID > 0 {
+		db = db.Where("((stock_reversal.source_type = 'sale' AND so.customer_id = ?) OR (stock_reversal.source_type = 'purchase' AND po.supplier_id = ?))",
+			info.PartnerID, info.PartnerID)
+	}
+	if kw := keywordPattern(info.Keyword); kw != "" {
+		db = db.Where("(stock_reversal.reversal_no LIKE ? OR stock_reversal.source_no LIKE ? OR stock_reversal.reason LIKE ?)",
+			kw, kw, kw)
+	}
+	db, err := applyDocumentDateRange(db, info, "stock_reversal.created_at", "stock_reversal.posted_at")
+	if err != nil {
+		return nil, 0, err
+	}
+
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	limit, offset := info.LimitOffset()
 	var list []jxc.StockReversal
-	err := db.Order("id desc").Offset((page - 1) * size).Limit(size).Find(&list).Error
+	err = db.Order("stock_reversal.id desc").Offset(offset).Limit(limit).Find(&list).Error
 	return list, total, err
 }
 

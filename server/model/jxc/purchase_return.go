@@ -24,14 +24,20 @@ const (
 type PurchaseReturn struct {
 	global.GVA_MODEL
 	ReturnNo    string     `json:"returnNo" gorm:"column:return_no;size:50;not null;uniqueIndex:uk_pr_no;comment:采购退货单号"`
-	PurchaseID  uint       `json:"purchaseId" gorm:"column:purchase_id;not null;index;comment:原采购单ID"`
+	PurchaseID  uint       `json:"purchaseId" gorm:"column:purchase_id;not null;index:idx_pr_purchase;comment:原采购单ID"`
 	PurchaseNo  string     `json:"purchaseNo" gorm:"column:purchase_no;size:50;not null;comment:原采购单号（快照）"`
-	SupplierID  *uint      `json:"supplierId" gorm:"column:supplier_id;comment:供应商ID（从原采购单带出）"`
-	WarehouseID uint       `json:"warehouseId" gorm:"column:warehouse_id;not null;comment:出库仓库（从原采购单带出）"`
-	Status      int8       `json:"status" gorm:"column:status;not null;default:1;comment:1草稿 2已退货 3已取消"`
+	SupplierID  *uint      `json:"supplierId" gorm:"column:supplier_id;index:idx_pr_supplier;comment:供应商ID（从原采购单带出）"`
+	WarehouseID uint       `json:"warehouseId" gorm:"column:warehouse_id;not null;index:idx_pr_warehouse;comment:出库仓库（从原采购单带出）"`
+	Status      int8       `json:"status" gorm:"column:status;not null;default:1;index:idx_pr_status;comment:1草稿 2已退货 3已取消"`
 	Amount      float64    `json:"amount" gorm:"column:amount;type:decimal(14,2);not null;default:0;comment:退货金额（按原采购单价）"`
-	PostedAt    *time.Time `json:"postedAt" gorm:"column:posted_at;comment:过账时间"`
+	PostedAt    *time.Time `json:"postedAt" gorm:"column:posted_at;index:idx_pr_posted;comment:过账时间"`
 	Reason      string     `json:"reason" gorm:"column:reason;size:500"`
+
+	// 以下是列表展示字段，不落库。供应商/仓库名由 Search 的 join 带出，
+	// ItemCount 由 Service 在 Preload 后计算，避免前端为一行再查一次主数据。
+	SupplierName  string `json:"supplierName,omitempty" gorm:"column:supplier_name;->"`
+	WarehouseName string `json:"warehouseName,omitempty" gorm:"column:warehouse_name;->"`
+	ItemCount     int    `json:"itemCount" gorm:"-"`
 
 	Items []PurchaseReturnItem `json:"items" gorm:"foreignKey:ReturnID;references:ID"`
 }

@@ -8,7 +8,9 @@ import (
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
 	"github.com/flipped-aurora/gin-vue-admin/server/internal/money"
+	common "github.com/flipped-aurora/gin-vue-admin/server/model/common/request"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/jxc"
+	jxcReq "github.com/flipped-aurora/gin-vue-admin/server/model/jxc/request"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -264,21 +266,46 @@ func (s *ReturnService) Get(ctx context.Context, id uint) (*jxc.SaleReturn, erro
 	return &ret, nil
 }
 
-// Page 列表
+// Page 列表（兼容旧调用；新代码用 Search）
 func (s *ReturnService) Page(ctx context.Context, page, size int) ([]jxc.SaleReturn, int64, error) {
-	if page <= 0 {
-		page = 1
+	return s.Search(ctx, jxcReq.DocumentSearch{
+		PageInfo: common.PageInfo{Page: page, PageSize: size},
+	})
+}
+
+// Search 服务端筛选 + 分页。
+// 销售退货没有直接的客户字段，关键词/客户筛选通过原销售单 sale_order 关联。
+func (s *ReturnService) Search(ctx context.Context, info jxcReq.DocumentSearch) ([]jxc.SaleReturn, int64, error) {
+	info.Normalize()
+	db := global.GVA_DB.WithContext(ctx).Model(&jxc.SaleReturn{}).
+		Joins("JOIN sale_order so ON so.id = sale_return.sale_id").
+		Joins("LEFT JOIN jxc_partner p ON p.id = so.customer_id")
+
+	if info.Status != nil {
+		db = db.Where("sale_return.status = ?", *info.Status)
 	}
-	if size <= 0 || size > 100 {
-		size = 20
+	if info.WarehouseID > 0 {
+		db = db.Where("sale_return.warehouse_id = ?", info.WarehouseID)
 	}
-	db := global.GVA_DB.WithContext(ctx).Model(&jxc.SaleReturn{})
+	if info.PartnerID > 0 {
+		db = db.Where("so.customer_id = ?", info.PartnerID)
+	}
+	if kw := keywordPattern(info.Keyword); kw != "" {
+		db = db.Where("(sale_return.return_no LIKE ? OR sale_return.sale_no LIKE ? OR sale_return.reason LIKE ? OR p.name LIKE ? OR p.code LIKE ?)",
+			kw, kw, kw, kw, kw)
+	}
+	db, err := applyDocumentDateRange(db, info, "sale_return.created_at", "sale_return.posted_at")
+	if err != nil {
+		return nil, 0, err
+	}
+
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	limit, offset := info.LimitOffset()
 	var list []jxc.SaleReturn
-	err := db.Preload("Items").Order("id desc").Offset((page - 1) * size).Limit(size).Find(&list).Error
+	err = db.Preload("Items").Order("sale_return.id desc").Offset(offset).Limit(limit).Find(&list).Error
 	return list, total, err
 }
 

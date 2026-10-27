@@ -48,15 +48,17 @@ func (a *PurchaseReturnApi) CreatePurchaseReturn(c *gin.Context) {
 // @Success   200       {object}  response.Response{data=response.PageResult{list=[]jxcmodel.PurchaseReturn},msg=string}
 // @Router    /jxc/purchase-return/page [get]
 func (a *PurchaseReturnApi) GetPurchaseReturnPage(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	size, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	list, total, err := jxcsvc.ServiceGroupApp.PurchaseReturn.Page(c.Request.Context(), page, size)
-	if err != nil {
-		global.GVA_LOG.Error("获取采购退货单列表失败", zap.Error(err))
-		response.FailWithMessage("获取采购退货单列表失败", c)
+	info, ok := bindDocumentSearch(c)
+	if !ok {
 		return
 	}
-	response.OkWithData(response.PageResult{List: list, Total: total, Page: page, PageSize: size}, c)
+	list, total, err := jxcsvc.ServiceGroupApp.PurchaseReturn.Search(c.Request.Context(), info)
+	if err != nil {
+		global.GVA_LOG.Error("获取采购退货单列表失败", zap.Error(err))
+		response.FailWithMessage("获取采购退货单列表失败："+err.Error(), c)
+		return
+	}
+	response.OkWithData(response.PageResult{List: list, Total: total, Page: info.Page, PageSize: info.PageSize}, c)
 }
 
 // GetPurchaseReturn

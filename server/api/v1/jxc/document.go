@@ -92,17 +92,19 @@ func (a *DocumentApi) GetPurchase(c *gin.Context) {
 	response.OkWithData(order, c)
 }
 
-// GetPurchasePage 采购单列表
+// GetPurchasePage 采购单列表（支持 status/keyword/warehouseId/partnerId/日期/reversed）
 func (a *DocumentApi) GetPurchasePage(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	size, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	list, total, err := jxcsvc.ServiceGroupApp.Purchase.Page(c.Request.Context(), page, size)
-	if err != nil {
-		global.GVA_LOG.Error("获取采购单列表失败", zap.Error(err))
-		response.FailWithMessage("获取采购单列表失败", c)
+	info, ok := bindDocumentSearch(c)
+	if !ok {
 		return
 	}
-	response.OkWithData(response.PageResult{List: list, Total: total, Page: page, PageSize: size}, c)
+	list, total, err := jxcsvc.ServiceGroupApp.Purchase.Search(c.Request.Context(), info)
+	if err != nil {
+		global.GVA_LOG.Error("获取采购单列表失败", zap.Error(err))
+		response.FailWithMessage("获取采购单列表失败："+err.Error(), c)
+		return
+	}
+	response.OkWithData(response.PageResult{List: list, Total: total, Page: info.Page, PageSize: info.PageSize}, c)
 }
 
 // ---------- 销售 ----------
@@ -163,17 +165,19 @@ func (a *DocumentApi) GetSale(c *gin.Context) {
 	response.OkWithData(order, c)
 }
 
-// GetSalePage 销售单列表
+// GetSalePage 销售单列表（支持 status/keyword/warehouseId/partnerId/日期/reversed）
 func (a *DocumentApi) GetSalePage(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	size, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	list, total, err := jxcsvc.ServiceGroupApp.Sale.Page(c.Request.Context(), page, size)
-	if err != nil {
-		global.GVA_LOG.Error("获取销售单列表失败", zap.Error(err))
-		response.FailWithMessage("获取销售单列表失败", c)
+	info, ok := bindDocumentSearch(c)
+	if !ok {
 		return
 	}
-	response.OkWithData(response.PageResult{List: list, Total: total, Page: page, PageSize: size}, c)
+	list, total, err := jxcsvc.ServiceGroupApp.Sale.Search(c.Request.Context(), info)
+	if err != nil {
+		global.GVA_LOG.Error("获取销售单列表失败", zap.Error(err))
+		response.FailWithMessage("获取销售单列表失败："+err.Error(), c)
+		return
+	}
+	response.OkWithData(response.PageResult{List: list, Total: total, Page: info.Page, PageSize: info.PageSize}, c)
 }
 
 // ---------- 工具 ----------

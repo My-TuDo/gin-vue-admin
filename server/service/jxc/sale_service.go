@@ -9,7 +9,9 @@ import (
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
 	"github.com/flipped-aurora/gin-vue-admin/server/internal/money"
+	common "github.com/flipped-aurora/gin-vue-admin/server/model/common/request"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/jxc"
+	jxcReq "github.com/flipped-aurora/gin-vue-admin/server/model/jxc/request"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -192,21 +194,51 @@ func (s *SaleService) Get(ctx context.Context, id uint) (*jxc.SaleOrder, error) 
 	return &order, nil
 }
 
-// Page 列表
+// Page 列表（兼容旧调用；新代码用 Search）
 func (s *SaleService) Page(ctx context.Context, page, size int) ([]jxc.SaleOrder, int64, error) {
-	if page <= 0 {
-		page = 1
+	return s.Search(ctx, jxcReq.DocumentSearch{
+		PageInfo: common.PageInfo{Page: page, PageSize: size},
+	})
+}
+
+// Search 服务端筛选 + 分页。
+func (s *SaleService) Search(ctx context.Context, info jxcReq.DocumentSearch) ([]jxc.SaleOrder, int64, error) {
+	info.Normalize()
+	db := global.GVA_DB.WithContext(ctx).Model(&jxc.SaleOrder{}).
+		Joins("LEFT JOIN jxc_partner p ON p.id = sale_order.customer_id")
+
+	if info.Status != nil {
+		db = db.Where("sale_order.status = ?", *info.Status)
 	}
-	if size <= 0 || size > 100 {
-		size = 20
+	if info.WarehouseID > 0 {
+		db = db.Where("sale_order.warehouse_id = ?", info.WarehouseID)
 	}
-	db := global.GVA_DB.WithContext(ctx).Model(&jxc.SaleOrder{})
+	if info.PartnerID > 0 {
+		db = db.Where("sale_order.customer_id = ?", info.PartnerID)
+	}
+	if info.Reversed != nil {
+		if *info.Reversed {
+			db = db.Where("sale_order.reversed_at IS NOT NULL")
+		} else {
+			db = db.Where("sale_order.reversed_at IS NULL")
+		}
+	}
+	if kw := keywordPattern(info.Keyword); kw != "" {
+		db = db.Where("(sale_order.order_no LIKE ? OR sale_order.remark LIKE ? OR p.name LIKE ? OR p.code LIKE ?)",
+			kw, kw, kw, kw)
+	}
+	db, err := applyDocumentDateRange(db, info, "sale_order.created_at", "sale_order.posted_at")
+	if err != nil {
+		return nil, 0, err
+	}
+
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	limit, offset := info.LimitOffset()
 	var list []jxc.SaleOrder
-	err := db.Preload("Items").Order("id desc").Offset((page - 1) * size).Limit(size).Find(&list).Error
+	err = db.Preload("Items").Order("sale_order.id desc").Offset(offset).Limit(limit).Find(&list).Error
 	return list, total, err
 }
 

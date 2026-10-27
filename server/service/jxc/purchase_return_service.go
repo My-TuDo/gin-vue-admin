@@ -9,7 +9,9 @@ import (
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
 	"github.com/flipped-aurora/gin-vue-admin/server/internal/money"
+	common "github.com/flipped-aurora/gin-vue-admin/server/model/common/request"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/jxc"
+	jxcReq "github.com/flipped-aurora/gin-vue-admin/server/model/jxc/request"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -242,22 +244,53 @@ func (s *PurchaseReturnService) Get(ctx context.Context, id uint) (*jxc.Purchase
 	return &ret, nil
 }
 
-// Page 列表
+// Page 列表（兼容旧调用；新代码用 Search）
 func (s *PurchaseReturnService) Page(ctx context.Context, page, size int) ([]jxc.PurchaseReturn, int64, error) {
-	if page <= 0 {
-		page = 1
+	return s.Search(ctx, jxcReq.DocumentSearch{
+		PageInfo: common.PageInfo{Page: page, PageSize: size},
+	})
+}
+
+// Search 服务端筛选 + 分页，并带出供应商/仓库名称与明细行数。
+func (s *PurchaseReturnService) Search(ctx context.Context, info jxcReq.DocumentSearch) ([]jxc.PurchaseReturn, int64, error) {
+	info.Normalize()
+	db := global.GVA_DB.WithContext(ctx).Model(&jxc.PurchaseReturn{}).
+		Joins("LEFT JOIN jxc_partner p ON p.id = purchase_return.supplier_id").
+		Joins("LEFT JOIN warehouse w ON w.id = purchase_return.warehouse_id")
+
+	if info.Status != nil {
+		db = db.Where("purchase_return.status = ?", *info.Status)
 	}
-	if size <= 0 || size > 100 {
-		size = 20
+	if info.WarehouseID > 0 {
+		db = db.Where("purchase_return.warehouse_id = ?", info.WarehouseID)
 	}
-	db := global.GVA_DB.WithContext(ctx).Model(&jxc.PurchaseReturn{})
-	var total int64
-	if err := db.Count(&total).Error; err != nil {
+	if info.PartnerID > 0 {
+		db = db.Where("purchase_return.supplier_id = ?", info.PartnerID)
+	}
+	if kw := keywordPattern(info.Keyword); kw != "" {
+		db = db.Where("(purchase_return.return_no LIKE ? OR purchase_return.purchase_no LIKE ? OR purchase_return.reason LIKE ? OR p.name LIKE ? OR p.code LIKE ?)",
+			kw, kw, kw, kw, kw)
+	}
+	db, err := applyDocumentDateRange(db, info, "purchase_return.created_at", "purchase_return.posted_at")
+	if err != nil {
 		return nil, 0, err
 	}
+
+	var total int64
+	if err := db.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	limit, offset := info.LimitOffset()
 	var list []jxc.PurchaseReturn
-	err := db.Preload("Items").Order("id desc").Offset((page - 1) * size).Limit(size).Find(&list).Error
-	return list, total, err
+	err = db.Select("purchase_return.*, p.name AS supplier_name, w.name AS warehouse_name").
+		Preload("Items").Order("purchase_return.id desc").Offset(offset).Limit(limit).Find(&list).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range list {
+		list[i].ItemCount = len(list[i].Items)
+	}
+	return list, total, nil
 }
 
 // Returnable 某张采购单每个 SKU 还能退多少（供前端展示与后端校验）

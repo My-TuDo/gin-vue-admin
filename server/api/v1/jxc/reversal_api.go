@@ -35,17 +35,19 @@ func (a *ReversalApi) CreateReversal(c *gin.Context) {
 	response.OkWithData(rev, c)
 }
 
-// GetReversalPage 红冲记录
+// GetReversalPage 红冲记录（支持 status/keyword/sourceType/warehouseId/partnerId/日期）
 func (a *ReversalApi) GetReversalPage(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	size, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	list, total, err := jxcsvc.ServiceGroupApp.Reversal.Page(c.Request.Context(), page, size)
-	if err != nil {
-		global.GVA_LOG.Error("获取红冲记录失败", zap.Error(err))
-		response.FailWithMessage("获取红冲记录失败", c)
+	info, ok := bindDocumentSearch(c)
+	if !ok {
 		return
 	}
-	response.OkWithData(response.PageResult{List: list, Total: total, Page: page, PageSize: size}, c)
+	list, total, err := jxcsvc.ServiceGroupApp.Reversal.Search(c.Request.Context(), info)
+	if err != nil {
+		global.GVA_LOG.Error("获取红冲记录失败", zap.Error(err))
+		response.FailWithMessage("获取红冲记录失败："+err.Error(), c)
+		return
+	}
+	response.OkWithData(response.PageResult{List: list, Total: total, Page: info.Page, PageSize: info.PageSize}, c)
 }
 
 // ReturnApi 销售退货：部分退货，按原单成本回补库存。
@@ -106,17 +108,19 @@ func (a *ReturnApi) GetReturn(c *gin.Context) {
 	response.OkWithData(ret, c)
 }
 
-// GetReturnPage 退货单列表
+// GetReturnPage 退货单列表（支持 status/keyword/warehouseId/partnerId/日期）
 func (a *ReturnApi) GetReturnPage(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	size, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	list, total, err := jxcsvc.ServiceGroupApp.Return.Page(c.Request.Context(), page, size)
-	if err != nil {
-		global.GVA_LOG.Error("获取退货单列表失败", zap.Error(err))
-		response.FailWithMessage("获取退货单列表失败", c)
+	info, ok := bindDocumentSearch(c)
+	if !ok {
 		return
 	}
-	response.OkWithData(response.PageResult{List: list, Total: total, Page: page, PageSize: size}, c)
+	list, total, err := jxcsvc.ServiceGroupApp.Return.Search(c.Request.Context(), info)
+	if err != nil {
+		global.GVA_LOG.Error("获取退货单列表失败", zap.Error(err))
+		response.FailWithMessage("获取退货单列表失败："+err.Error(), c)
+		return
+	}
+	response.OkWithData(response.PageResult{List: list, Total: total, Page: info.Page, PageSize: info.PageSize}, c)
 }
 
 // GetReturnable 某张销售单每个 SKU 还能退多少
