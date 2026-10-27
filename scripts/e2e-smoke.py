@@ -198,6 +198,26 @@ def main():
     assert bb["qty"] == 15 and bb["value"] == 220, bb
     ok("采购红冲按原价：B 15 件 / 220 元（若按均价冲会是 230）")
 
+    # 采购退货 + 采购退货红冲：退 1 件再红冲，库存/金额应完整回到 15/220
+    pr = must(call(base, "/jxc/purchase-return", "POST", {
+        "purchaseId": po2["ID"], "items": [{"skuId": b, "qty": 1}], "reason": "冒烟采购退货"
+    }), "建采购退货单")
+    assert pr["amount"] == 7 and pr["items"][0]["unitCost"] == 7, pr
+    must(call(base, f"/jxc/purchase-return/{pr['ID']}/post", "POST"), "采购退货出库")
+    bb = balance_of(b)
+    assert bb["qty"] == 14 and bb["value"] == 213, bb
+    pr_rev = must(call(base, "/jxc/reversal", "POST", {
+        "sourceType": "purchase_return", "sourceId": pr["ID"], "reason": "供应商取消退货"
+    }), "红冲采购退货")
+    bb = balance_of(b)
+    assert bb["qty"] == 15 and bb["value"] == 220, bb
+    prd = must(call(base, f"/jxc/purchase-return/{pr['ID']}"), "查采购退货详情")
+    assert prd["reversedAt"], prd
+    returnable = must(call(base, f"/jxc/purchase-return/returnable?purchaseId={po2['ID']}"), "查可退数量")
+    row = next(i for i in returnable if i["skuId"] == b)
+    assert row["canReturn"] == 10, row
+    ok(f"采购退货红冲 {pr_rev['reversalNo']}：库存回到 15/220，可退数量回到 10")
+
     # 盘点建单后账面又发生变化：完成盘点必须被拒绝
     chk = must(call(base, "/jxc/check", "POST", {"warehouseId": wh, "remark": "冒烟盘点"}), "建盘点单")
     row = next(i for i in chk["items"] if i["skuId"] == a)
@@ -211,6 +231,26 @@ def main():
     expect_fail(base, f"/jxc/check/{chk['ID']}/post", {}, "账面变化后完成盘点被拒绝", "账面")
     must(call(base, f"/jxc/check/{chk['ID']}/cancel", "POST"), "取消盘点")
 
+    # 原子开单：失败不留草稿/预留；成功后只发一次 checkout
+    before_drafts = must(call(base, "/jxc/sale/page?page=1&pageSize=1&status=1"), "查草稿单")["total"]
+    expect_fail(base, "/jxc/sale/checkout", {
+        "warehouseId": wh, "items": [{"skuId": a, "qty": 999}],
+    }, "原子开单库存不足回滚", "可售")
+    after_drafts = must(call(base, "/jxc/sale/page?page=1&pageSize=1&status=1"), "再查草稿单")["total"]
+    assert after_drafts == before_drafts, (before_drafts, after_drafts)
+
+    co = must(call(base, "/jxc/sale/checkout", "POST", {
+        "warehouseId": wh, "items": [{"skuId": a, "qty": 1}],
+    }), "原子开单+出库")
+    assert co["status"] == 2 and co["totalAmount"] == 100 and co["costAmount"] == 60, co
+    assert co["items"][0]["costAmt"] == 60, co["items"][0]
+    assert balance_of(a)["qty"] == 8, balance_of(a)
+    sp = must(call(base, f"/jxc/sale/page?page=1&pageSize=1&status=2&keyword={co['orderNo']}"), "单据服务端筛选")
+    assert sp["total"] == 1 and len(sp["list"]) == 1, sp
+    cap = must(call(base, "/jxc/sale/page?page=1&pageSize=500"), "分页上限")
+    assert cap["pageSize"] == 100, cap
+    ok(f"原子开单 {co['orderNo']}：状态2/总额100/成本60，结存8；服务端筛选total=1，pageSize截断100")
+
     # 流水：结存列由后端计算，第一行（最新）应等于当前结存；退货/盘点的单据号也要能回溯
     mv = must(call(base, f"/jxc/ledger/moves?warehouseId={wh}&skuId={a}&page=1&pageSize=200"), "查流水")
     assert mv["total"] >= 1 and mv["list"][0].get("balanceAfter") == balance_of(a)["qty"], mv["list"][0]
@@ -220,7 +260,10 @@ def main():
     # 对账
     rec = must(call(base, "/jxc/ledger/reconcile"), "对账")
     assert rec["ok"], rec
-    ok("对账：账实相符")
+    last = must(call(base, "/jxc/ledger/reconcile/last"), "最近对账")
+    assert last["ok"] is True and last["checkedAt"] and last["stale"] is False, last
+    assert last["checkedSkus"] >= 1, last
+    ok(f"对账：账实相符；last checkedAt={last['checkedAt']} / {last['checkedSkus']} SKU")
 
     # 月报期末库存 = 账本累加，且与当前全部结存金额一致
     ym = datetime.date.today().strftime("%Y-%m")
@@ -228,8 +271,16 @@ def main():
     all_bal = must(call(base, "/jxc/ledger/balance"), "查全部结存")
     total_value = round(sum(float(r["value"]) for r in all_bal), 2)
     assert abs(float(s["stockValue"]) - total_value) < 0.01, (s["stockValue"], total_value)
+    assert "purchaseReturnAmount" in s, s
+    dash = must(call(base, "/jxc/dashboard/summary"), "工作台聚合")
+    assert abs(float(dash["stockValue"]) - total_value) < 0.01, (dash["stockValue"], total_value)
+    assert dash["todaySalesAmount"] >= 100, dash
+    assert dash["lowStock"]["threshold"] == 10, dash["lowStock"]
+    assert dash["pending"]["total"] >= 0, dash["pending"]
     ok(f"月报 {ym}：净销售 {s['salesAmount']:.2f}，净成本 {s['salesCost']:.2f}，"
-       f"毛利 {s['gross']:.2f}，期末库存 {s['stockValue']:.2f}")
+       f"毛利 {s['gross']:.2f}，采购退货 {s['purchaseReturnAmount']:.2f}，期末库存 {s['stockValue']:.2f}")
+    ok(f"工作台：库存 {dash['stockValue']:.2f}，今日销售 {dash['todaySalesAmount']:.2f}，"
+       f"低库存 {dash['lowStock']['count']}，待办 {dash['pending']['total']}")
 
     print("\n全部通过 ✅  (仓库/SKU 前缀：%s)" % tag)
 

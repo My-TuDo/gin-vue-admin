@@ -57,6 +57,19 @@ jobs:
     strategy:
       matrix:
         go-version: [1.24]
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: "123456"
+          MYSQL_ROOT_HOST: "%"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -p123456"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - name: Set up Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
@@ -82,46 +95,12 @@ jobs:
         working-directory: ./server
 
       - name: Test
-        # 当前部分测试依赖真实 MySQL/Redis，先运行使结果在 CI 可见、暂不阻断；
-        # 待补齐 service 容器并为集成测试打标记后，去掉 continue-on-error 转为硬门禁。
-        run: |
-          go test ./... -count=1 -vet=off
-        working-directory: ./server
-        continue-on-error: true
-
-  backend-jxc:
-    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'release'
-    name: Backend JXC (MySQL)
-    runs-on: ubuntu-latest
-    services:
-      mysql:
-        image: mysql:8.4
-        env:
-          MYSQL_ROOT_PASSWORD: "123456"
-          MYSQL_ROOT_HOST: "%"
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -p123456"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-    steps:
-      - name: Check out branch
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.24
-          cache-dependency-path: server/go.sum
-
-      - name: Test JXC integration
-        # 进销存的集成测试必须跑真 MySQL（行锁、唯一索引、ON DUPLICATE KEY 的行为
-        # 在 sqlite 上不可信）。这是硬门禁：不再 continue-on-error。
+        # 进销存集成测试必须跑真 MySQL（行锁/唯一索引/ON DUPLICATE KEY 在 sqlite 上不可信）。
+        # 全量测试现在是硬门禁：失败即阻断，不再 continue-on-error。
         env:
           JXC_IT_MYSQL_BASE: root:123456@tcp(127.0.0.1:3306)
-        run: go test ./service/jxc ./internal/ledger -count=1
+        run: |
+          go test ./... -count=1 -vet=off
         working-directory: ./server
 
   devops-test:
