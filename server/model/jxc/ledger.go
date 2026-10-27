@@ -69,9 +69,9 @@ const (
 // 为什么 Qty 有符号：金额、余额、汇总都能直接 SUM，不需要 CASE WHEN 方向列；
 // 旧实现用 direction 列带来的"必须双向/方向不能为 0"等特判在账本模型里不存在。
 type StockMove struct {
-	ID          uint `json:"ID" gorm:"primarykey"`
-	WarehouseID uint `json:"warehouseId" gorm:"column:warehouse_id;not null;comment:仓库ID"`
-	SkuID       uint `json:"skuId" gorm:"column:sku_id;not null;comment:SKU ID"`
+	ID          uint `json:"ID" gorm:"primarykey;index:idx_move_wh_sku_time,priority:4"`
+	WarehouseID uint `json:"warehouseId" gorm:"column:warehouse_id;not null;index:idx_move_wh_sku_time,priority:1;comment:仓库ID"`
+	SkuID       uint `json:"skuId" gorm:"column:sku_id;not null;index:idx_move_wh_sku_time,priority:2;comment:SKU ID"`
 
 	Qty      int     `json:"qty" gorm:"column:qty;not null;comment:有符号数量，入库正/出库负"`
 	UnitCost float64 `json:"unitCost" gorm:"column:unit_cost;type:decimal(12,2);not null;default:0;comment:入库单价或出库结转成本(COGS)"`
@@ -83,7 +83,7 @@ type StockMove struct {
 	SourceID     uint   `json:"sourceId" gorm:"column:source_id;not null;uniqueIndex:uk_move_idem,priority:2;comment:来源单据ID"`
 	SourceLineID uint   `json:"sourceLineId" gorm:"column:source_line_id;not null;default:0;uniqueIndex:uk_move_idem,priority:3;comment:来源明细ID"`
 
-	OccurredAt time.Time `json:"occurredAt" gorm:"column:occurred_at;not null;comment:业务发生时间"`
+	OccurredAt time.Time `json:"occurredAt" gorm:"column:occurred_at;not null;index:idx_move_wh_sku_time,priority:3;comment:业务发生时间"`
 	CreatedAt  time.Time `json:"createdAt" gorm:"column:created_at;autoCreateTime;comment:写入时间"`
 
 	ReversalOf *uint  `json:"reversalOf" gorm:"column:reversal_of;comment:被冲销的账本行ID"`
@@ -120,15 +120,15 @@ const (
 // StockReservation 预留：替代旧实现的 stock.lock_quantity（半成品，无归属无到期）。
 type StockReservation struct {
 	ID          uint `json:"ID" gorm:"primarykey"`
-	WarehouseID uint `json:"warehouseId" gorm:"column:warehouse_id;not null;comment:仓库ID"`
-	SkuID       uint `json:"skuId" gorm:"column:sku_id;not null;comment:SKU ID"`
+	WarehouseID uint `json:"warehouseId" gorm:"column:warehouse_id;not null;index:idx_res_wh_sku_status,priority:1;comment:仓库ID"`
+	SkuID       uint `json:"skuId" gorm:"column:sku_id;not null;index:idx_res_wh_sku_status,priority:2;comment:SKU ID"`
 	Qty         int  `json:"qty" gorm:"column:qty;not null;comment:预留数量"`
 
 	SourceType   string `json:"sourceType" gorm:"column:source_type;size:32;not null;uniqueIndex:uk_res,priority:1"`
 	SourceID     uint   `json:"sourceId" gorm:"column:source_id;not null;uniqueIndex:uk_res,priority:2"`
 	SourceLineID uint   `json:"sourceLineId" gorm:"column:source_line_id;not null;default:0;uniqueIndex:uk_res,priority:3"`
 
-	Status    int8       `json:"status" gorm:"column:status;not null;default:1;comment:1有效 2已释放 3已转出库"`
+	Status    int8       `json:"status" gorm:"column:status;not null;default:1;index:idx_res_wh_sku_status,priority:3;comment:1有效 2已释放 3已转出库"`
 	ExpiresAt *time.Time `json:"expiresAt" gorm:"column:expires_at;comment:到期自动失效"`
 	CreatedAt time.Time  `json:"createdAt" gorm:"column:created_at;autoCreateTime"`
 }
@@ -153,6 +153,19 @@ type AccountingPeriod struct {
 }
 
 func (AccountingPeriod) TableName() string { return "accounting_period" }
+
+// DocSequence 单据号发号器。
+//
+// 为什么不用 "SELECT MAX(order_no)+1"：两个事务同时读到同一个 max，后插入的会撞
+// 唯一索引；在 REPEATABLE READ 下重试仍读不到对方未提交的新行，重试多少次都一样。
+// 发号器用一行一条 (prefix-日期) 的记录，SELECT ... FOR UPDATE 串行化，
+// 单号唯一且不依赖扫描业务表（扫描 + 插入还会产生间隙锁死锁）。
+type DocSequence struct {
+	Scope     string `json:"scope" gorm:"column:scope;size:32;primaryKey;comment:如 SO-20261027"`
+	NextValue int    `json:"nextValue" gorm:"column:next_value;not null;default:1;comment:下一个可用序号"`
+}
+
+func (DocSequence) TableName() string { return "doc_sequence" }
 
 // StockBalanceSnapshot 结账时冻结的余额快照。之后所有人看到的"上月底库存"都是它。
 type StockBalanceSnapshot struct {
