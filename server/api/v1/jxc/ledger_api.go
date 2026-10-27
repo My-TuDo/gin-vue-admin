@@ -6,7 +6,7 @@ import (
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
 	"github.com/flipped-aurora/gin-vue-admin/server/internal/ledger"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/common/response"
-	"github.com/flipped-aurora/gin-vue-admin/server/service"
+	jxcsvc "github.com/flipped-aurora/gin-vue-admin/server/service/jxc"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -20,7 +20,7 @@ type LedgerApi struct{}
 // GetBalances 结存列表（含预留/可售/均价）
 func (a *LedgerApi) GetBalances(c *gin.Context) {
 	warehouseID, _ := strconv.ParseUint(c.DefaultQuery("warehouseId", "0"), 10, 64)
-	list, err := service.ServiceGroupApp.JxcServiceGroup.Ledger.Balances(c.Request.Context(), uint(warehouseID))
+	list, err := jxcsvc.ServiceGroupApp.Ledger.Balances(c.Request.Context(), uint(warehouseID))
 	if err != nil {
 		global.GVA_LOG.Error("获取结存失败", zap.Error(err))
 		response.FailWithMessage("获取结存失败", c)
@@ -35,7 +35,7 @@ func (a *LedgerApi) GetMoves(c *gin.Context) {
 	skuID, _ := strconv.ParseUint(c.DefaultQuery("skuId", "0"), 10, 64)
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("pageSize", "50"))
-	list, total, err := service.ServiceGroupApp.JxcServiceGroup.Ledger.Moves(
+	list, total, err := jxcsvc.ServiceGroupApp.Ledger.Moves(
 		c.Request.Context(), uint(warehouseID), uint(skuID), page, size)
 	if err != nil {
 		global.GVA_LOG.Error("获取账本流水失败", zap.Error(err))
@@ -48,7 +48,7 @@ func (a *LedgerApi) GetMoves(c *gin.Context) {
 // Reconcile 一键对账：返回所有不变量违规（空表示账是平的）
 func (a *LedgerApi) Reconcile(c *gin.Context) {
 	warehouseID, _ := strconv.ParseUint(c.DefaultQuery("warehouseId", "0"), 10, 64)
-	vs, err := service.ServiceGroupApp.JxcServiceGroup.Ledger.Reconcile(c.Request.Context(), uint(warehouseID))
+	vs, err := jxcsvc.ServiceGroupApp.Ledger.Reconcile(c.Request.Context(), uint(warehouseID))
 	if err != nil {
 		global.GVA_LOG.Error("对账失败", zap.Error(err))
 		response.FailWithMessage("对账失败", c)

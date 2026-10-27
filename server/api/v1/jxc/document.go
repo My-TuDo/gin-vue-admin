@@ -7,7 +7,7 @@ import (
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/common/response"
 	jxcmodel "github.com/flipped-aurora/gin-vue-admin/server/model/jxc"
-	"github.com/flipped-aurora/gin-vue-admin/server/service"
+	jxcsvc "github.com/flipped-aurora/gin-vue-admin/server/service/jxc"
 	"github.com/flipped-aurora/gin-vue-admin/server/utils"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -30,7 +30,7 @@ func (a *DocumentApi) CreatePurchase(c *gin.Context) {
 		response.FailWithMessage("请求参数错误："+err.Error(), c)
 		return
 	}
-	order, err := service.ServiceGroupApp.JxcServiceGroup.Purchase.Create(c.Request.Context(), &req)
+	order, err := jxcsvc.ServiceGroupApp.Purchase.Create(c.Request.Context(), &req)
 	if err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
@@ -44,7 +44,7 @@ func (a *DocumentApi) ApprovePurchase(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := service.ServiceGroupApp.JxcServiceGroup.Purchase.Approve(c.Request.Context(), id, operator(c)); err != nil {
+	if err := jxcsvc.ServiceGroupApp.Purchase.Approve(c.Request.Context(), id, operator(c)); err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
 	}
@@ -57,7 +57,7 @@ func (a *DocumentApi) ReceivePurchase(c *gin.Context) {
 	if !ok {
 		return
 	}
-	err := service.ServiceGroupApp.JxcServiceGroup.Purchase.Receive(c.Request.Context(), id, operator(c), parseOccurredAt(c))
+	err := jxcsvc.ServiceGroupApp.Purchase.Receive(c.Request.Context(), id, operator(c), parseOccurredAt(c))
 	if err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
@@ -71,7 +71,7 @@ func (a *DocumentApi) CancelPurchase(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := service.ServiceGroupApp.JxcServiceGroup.Purchase.Cancel(c.Request.Context(), id, operator(c)); err != nil {
+	if err := jxcsvc.ServiceGroupApp.Purchase.Cancel(c.Request.Context(), id, operator(c)); err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
 	}
@@ -84,7 +84,7 @@ func (a *DocumentApi) GetPurchase(c *gin.Context) {
 	if !ok {
 		return
 	}
-	order, err := service.ServiceGroupApp.JxcServiceGroup.Purchase.Get(c.Request.Context(), id)
+	order, err := jxcsvc.ServiceGroupApp.Purchase.Get(c.Request.Context(), id)
 	if err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
@@ -96,7 +96,7 @@ func (a *DocumentApi) GetPurchase(c *gin.Context) {
 func (a *DocumentApi) GetPurchasePage(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	list, total, err := service.ServiceGroupApp.JxcServiceGroup.Purchase.Page(c.Request.Context(), page, size)
+	list, total, err := jxcsvc.ServiceGroupApp.Purchase.Page(c.Request.Context(), page, size)
 	if err != nil {
 		global.GVA_LOG.Error("获取采购单列表失败", zap.Error(err))
 		response.FailWithMessage("获取采购单列表失败", c)
@@ -114,7 +114,7 @@ func (a *DocumentApi) CreateSale(c *gin.Context) {
 		response.FailWithMessage("请求参数错误："+err.Error(), c)
 		return
 	}
-	order, err := service.ServiceGroupApp.JxcServiceGroup.Sale.Create(c.Request.Context(), &req)
+	order, err := jxcsvc.ServiceGroupApp.Sale.Create(c.Request.Context(), &req)
 	if err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
@@ -128,7 +128,7 @@ func (a *DocumentApi) ShipSale(c *gin.Context) {
 	if !ok {
 		return
 	}
-	err := service.ServiceGroupApp.JxcServiceGroup.Sale.Ship(c.Request.Context(), id, operator(c), parseOccurredAt(c))
+	err := jxcsvc.ServiceGroupApp.Sale.Ship(c.Request.Context(), id, operator(c), parseOccurredAt(c))
 	if err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
@@ -142,7 +142,7 @@ func (a *DocumentApi) CancelSale(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := service.ServiceGroupApp.JxcServiceGroup.Sale.Cancel(c.Request.Context(), id, operator(c)); err != nil {
+	if err := jxcsvc.ServiceGroupApp.Sale.Cancel(c.Request.Context(), id, operator(c)); err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
 	}
@@ -155,7 +155,7 @@ func (a *DocumentApi) GetSale(c *gin.Context) {
 	if !ok {
 		return
 	}
-	order, err := service.ServiceGroupApp.JxcServiceGroup.Sale.Get(c.Request.Context(), id)
+	order, err := jxcsvc.ServiceGroupApp.Sale.Get(c.Request.Context(), id)
 	if err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
@@ -167,7 +167,7 @@ func (a *DocumentApi) GetSale(c *gin.Context) {
 func (a *DocumentApi) GetSalePage(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	list, total, err := service.ServiceGroupApp.JxcServiceGroup.Sale.Page(c.Request.Context(), page, size)
+	list, total, err := jxcsvc.ServiceGroupApp.Sale.Page(c.Request.Context(), page, size)
 	if err != nil {
 		global.GVA_LOG.Error("获取销售单列表失败", zap.Error(err))
 		response.FailWithMessage("获取销售单列表失败", c)
