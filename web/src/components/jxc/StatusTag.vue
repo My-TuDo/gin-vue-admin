@@ -1,68 +1,50 @@
 <template>
-  <span class="status" :class="tone">
-    <i class="dot"></i>{{ label }}
+  <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded border font-medium leading-none" :class="[toneClass, sizeClass]" :title="title || displayLabel">
+    <i v-if="dot" class="h-1.5 w-1.5 shrink-0 rounded-full bg-current" aria-hidden="true"></i>
+    <span>{{ displayLabel }}</span>
   </span>
 </template>
 
 <script setup>
 import { computed } from 'vue'
+import { statusMeta } from '@/view/jxc/shared/status'
 
-// 状态标签：**颜色 + 文字**。不靠颜色单独承载信息——
-// 色弱用户、打印出来的单据、截图转发都要能读懂。
+// 类名必须留在 .vue 文件里，UnoCSS 才会扫描生成；
+// 放到 shared/status.js 会静默丢色（content.pipeline 默认不扫业务 .js）。
+const TONE_CLASS = {
+  neutral: 'border-border bg-muted text-muted-foreground',
+  info: 'border-primary-200 bg-primary-50 text-primary-700',
+  success: 'border-success-200 bg-success-50 text-success-700',
+  warning: 'border-warning-200 bg-warning-50 text-warning-700',
+  danger: 'border-error-200 bg-error-50 text-error-700'
+}
+
+/**
+ * 状态标签：颜色 + 文字。颜色只辅助，不单独承载信息。
+ * 支持 purchase/sale/return/check/period/reversal/active 七类字典；
+ * 也可直接传 label + tone 覆盖（例如「已红冲」叠加在单据状态旁）。
+ */
 const props = defineProps({
-  kind: { type: String, required: true }, // purchase / sale
-  status: { type: Number, required: true }
+  kind: { type: String, default: 'active' },
+  status: { type: [Number, String], default: 1 },
+  label: { type: String, default: '' },
+  tone: { type: String, default: '' },
+  dot: { type: Boolean, default: true },
+  size: { type: String, default: 'md', validator: (v) => ['xs', 'sm'].includes(v) },
+  title: { type: String, default: '' }
 })
 
-const MAP = {
-  purchase: {
-    1: { label: '草稿', tone: 'muted' },
-    2: { label: '已审核', tone: 'info' },
-    3: { label: '已入库', tone: 'success' },
-    4: { label: '已取消', tone: 'muted' }
-  },
-  sale: {
-    1: { label: '待出库', tone: 'warning' },
-    2: { label: '已出库', tone: 'success' },
-    3: { label: '已取消', tone: 'muted' }
+const meta = computed(() => {
+  const fallback = statusMeta(props.kind, Number(props.status))
+  return {
+    label: props.label || fallback.label,
+    tone: props.tone || fallback.tone
   }
-}
+})
 
-const label = computed(() => MAP[props.kind]?.[props.status]?.label ?? '未知')
-const tone = computed(() => MAP[props.kind]?.[props.status]?.tone ?? 'muted')
+const displayLabel = computed(() => meta.value.label)
+const toneClass = computed(() => TONE_CLASS[meta.value.tone] || TONE_CLASS.neutral)
+const sizeClass = computed(() =>
+  props.size === 'xs' ? 'px-1.5 py-1 text-[10px]' : 'px-2 py-1 text-[11px]'
+)
 </script>
-
-<style scoped>
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  padding: 0 8px;
-  line-height: 20px;
-  border-radius: 10px;
-  white-space: nowrap;
-}
-.dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.success {
-  color: var(--el-color-success);
-  background: var(--el-color-success-light-9);
-}
-.warning {
-  color: var(--el-color-warning);
-  background: var(--el-color-warning-light-9);
-}
-.info {
-  color: var(--el-color-primary);
-  background: var(--el-color-primary-light-9);
-}
-.muted {
-  color: var(--el-text-color-secondary);
-  background: var(--el-fill-color-light);
-}
-</style>

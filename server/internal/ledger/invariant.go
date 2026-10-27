@@ -31,12 +31,12 @@ type Entry struct {
 
 // Violation 一条不变量违规
 type Violation struct {
-	Kind        string // qty_mismatch / value_mismatch / negative_available / orphan_balance
-	WarehouseID uint
-	SkuID       uint
-	Expected    string
-	Actual      string
-	Detail      string
+	Kind        string `json:"kind"` // qty_mismatch / value_mismatch / negative_available / orphan_balance
+	WarehouseID uint   `json:"warehouseId"`
+	SkuID       uint   `json:"skuId"`
+	Expected    string `json:"expected"`
+	Actual      string `json:"actual"`
+	Detail      string `json:"detail"`
 }
 
 func (v Violation) String() string {

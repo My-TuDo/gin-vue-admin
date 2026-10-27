@@ -1,0 +1,403 @@
+/* =========================================================================
+   进销存工作台 · 视觉层
+   -------------------------------------------------------------------------
+   只做两件事：
+   1. 在 .jxc-app 作用域内收敛 Element Plus 的尺寸/圆角/密度，让全站表格、
+      表单、抽屉看起来是同一套 B 端工作台，而不是默认组件拼装；
+   2. 提供工作台外壳的固定设计变量（深色侧栏）与滚动条等无法用原子类
+      表达的细节。
+
+   业务布局、间距、排版一律用 UnoCSS 原子类（见 AGENT.MD「前端样式」）；
+   这里不新增业务 class，也不覆盖 .jxc-app 之外的任何元素。
+   ========================================================================= */
+
+.jxc-app {
+  --jxc-rail-bg: #0d1524;
+  --jxc-rail-line: rgba(255, 255, 255, 0.08);
+  --jxc-rail-text: rgba(255, 255, 255, 0.62);
+  --jxc-rail-muted: rgba(255, 255, 255, 0.34);
+
+  /* Element Plus：更紧凑的 B 端密度 */
+  --el-font-size-base: 13px;
+  --el-font-size-small: 12px;
+  --el-border-radius-base: 6px;
+  --el-border-radius-small: 4px;
+  --el-border-color: #e4e7ec;
+  --el-border-color-light: #eaecf0;
+  --el-border-color-lighter: #f0f1f4;
+  --el-text-color-primary: #101828;
+  --el-text-color-regular: #344054;
+  --el-text-color-secondary: #667085;
+  --el-text-color-placeholder: #98a2b3;
+  --el-fill-color-light: #f6f7f9;
+  --el-fill-color-lighter: #f9fafb;
+  --el-fill-color-blank: #ffffff;
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #f5f6f8;
+
+  font-feature-settings: 'tnum';
+}
+
+html.dark .jxc-app {
+  --el-border-color: #2a3244;
+  --el-border-color-light: #252d3d;
+  --el-border-color-lighter: #202737;
+  --el-text-color-primary: #f2f4f7;
+  --el-text-color-regular: #d0d5dd;
+  --el-text-color-secondary: #98a2b3;
+  --el-text-color-placeholder: #667085;
+  --el-fill-color-light: #161d2b;
+  --el-fill-color-lighter: #131a27;
+  --el-fill-color-blank: #101725;
+  --el-bg-color: #101725;
+  --el-bg-color-page: #0b111c;
+}
+
+/* ---------- 原生按钮兜底 ----------
+   项目没有启用 button 背景重置式 preflight（为了与 Element Plus 共存），
+   浏览器会给裸 <button> 铺上 buttonface 灰底和 2px outset 边框。
+   工作台里有不少「按钮式行 / 筛选片 / 标签页」，必须显式清掉；
+   用 :where() 把特异性压到 0,0,1，Element Plus 与 UnoCSS 的背景类都能正常覆盖。 */
+:where(.jxc-app) button,
+:where(.jxc-overlay) button {
+  appearance: none;
+  border: 0;
+  background-color: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+/* ---------- 滚动条 ---------- */
+.jxc-app ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.jxc-app ::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background-clip: content-box;
+  background-color: var(--el-border-color);
+}
+.jxc-app ::-webkit-scrollbar-thumb:hover {
+  background-color: var(--el-text-color-placeholder);
+}
+.jxc-app ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- 按钮 ---------- */
+.jxc-app .el-button {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--el-border-radius-base);
+  font-weight: 500;
+}
+.jxc-app .el-button--large {
+  height: 38px;
+  padding: 0 18px;
+  font-size: 13px;
+}
+.jxc-app .el-button--small {
+  height: 26px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+.jxc-app .el-button.is-link {
+  height: auto;
+  padding: 0;
+  font-weight: 500;
+}
+.jxc-app .el-button.is-link.is-disabled {
+  color: var(--el-text-color-placeholder);
+}
+.jxc-app .el-button + .el-button {
+  margin-left: 0;
+}
+.jxc-app .el-button-group > .el-button:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.jxc-app .el-button-group > .el-button:last-child {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+/* ---------- 输入 / 选择 ---------- */
+.jxc-app .el-input__wrapper,
+.jxc-app .el-select__wrapper,
+.jxc-app .el-textarea__inner {
+  border-radius: var(--el-border-radius-base);
+  background-color: var(--el-fill-color-blank);
+  box-shadow: 0 0 0 1px var(--el-border-color) inset;
+  transition: box-shadow 0.15s ease;
+}
+.jxc-app .el-input__wrapper {
+  padding: 1px 10px;
+}
+.jxc-app .el-select__wrapper {
+  padding: 2px 10px;
+  min-height: 32px;
+}
+.jxc-app .el-textarea__inner {
+  padding: 8px 10px;
+  line-height: 1.6;
+}
+.jxc-app .el-input__wrapper:hover,
+.jxc-app .el-select__wrapper:hover,
+.jxc-app .el-textarea__inner:hover {
+  box-shadow: 0 0 0 1px var(--el-border-color-darker, #c8ced8) inset;
+}
+.jxc-app .el-input__wrapper.is-focus,
+.jxc-app .el-select__wrapper.is-focused,
+.jxc-app .el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--el-color-primary) inset;
+}
+.jxc-app .el-input__inner,
+.jxc-app .el-select__placeholder,
+.jxc-app .el-textarea__inner {
+  font-size: 13px;
+}
+.jxc-app .el-input-number {
+  width: 100%;
+}
+.jxc-app .el-input-number .el-input__wrapper {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.jxc-app .el-input-number.is-controls-right .el-input-number__increase,
+.jxc-app .el-input-number.is-controls-right .el-input-number__decrease {
+  border-left-color: var(--el-border-color-lighter);
+  background: var(--el-fill-color-lighter);
+}
+.jxc-app .el-form-item {
+  margin-bottom: 14px;
+}
+.jxc-app .el-form-item__label {
+  padding-bottom: 6px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--el-text-color-secondary);
+}
+.jxc-app .el-form-item__error {
+  padding-top: 3px;
+  font-size: 11px;
+}
+
+/* ---------- 表格 ---------- */
+.jxc-app .el-table {
+  --el-table-border-color: var(--el-border-color-lighter);
+  --el-table-header-bg-color: var(--el-fill-color-light);
+  --el-table-row-hover-bg-color: var(--el-fill-color-lighter);
+  --el-table-current-row-bg-color: var(--el-color-primary-light-9);
+  --el-table-text-color: var(--el-text-color-regular);
+  --el-table-header-text-color: var(--el-text-color-secondary);
+  font-size: 13px;
+  background-color: transparent;
+}
+.jxc-app .el-table tr,
+.jxc-app .el-table th.el-table__cell,
+.jxc-app .el-table td.el-table__cell {
+  background-color: transparent;
+}
+.jxc-app .el-table th.el-table__cell {
+  height: 38px;
+  padding: 0;
+  background-color: var(--el-fill-color-light);
+  font-size: 12px;
+  font-weight: 500;
+}
+.jxc-app .el-table td.el-table__cell {
+  height: 44px;
+  padding: 0;
+}
+.jxc-app .el-table .cell {
+  padding: 0 12px;
+  line-height: 20px;
+}
+.jxc-app .el-table__empty-block {
+  min-height: 180px;
+}
+.jxc-app .el-table__body tr {
+  cursor: default;
+}
+.jxc-app .el-table--clickable .el-table__body tr {
+  cursor: pointer;
+}
+.jxc-app .el-table-fixed-column--right {
+  background: var(--el-bg-color) !important;
+}
+.jxc-app .el-table .el-table__inner-wrapper::before {
+  background-color: var(--el-border-color-lighter);
+}
+
+/* ---------- 标签 / 徽标 ---------- */
+.jxc-app .el-tag {
+  border-radius: 4px;
+  font-weight: 500;
+}
+.jxc-app .el-tag--small {
+  height: 20px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+/* ---------- 页签 ---------- */
+.jxc-app .el-tabs__header {
+  margin: 0;
+}
+.jxc-app .el-tabs__nav-wrap::after {
+  height: 1px;
+  background-color: var(--el-border-color-lighter);
+}
+.jxc-app .el-tabs__item {
+  height: 40px;
+  padding: 0 14px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.jxc-app .el-tabs__item.is-active {
+  color: var(--el-text-color-primary);
+  font-weight: 600;
+}
+.jxc-app .el-tabs__item:hover {
+  color: var(--el-text-color-primary);
+}
+.jxc-app .el-tabs__active-bar {
+  height: 2px;
+  background-color: var(--el-color-primary);
+}
+.jxc-app .el-tabs__nav-wrap.is-scrollable {
+  padding: 0 24px;
+}
+
+/* ---------- 浮层：对话框 / 抽屉 ---------- */
+.jxc-app .el-dialog {
+  padding: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--el-border-color-lighter);
+}
+.jxc-app .el-dialog__header {
+  margin: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.jxc-app .el-dialog__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+.jxc-app .el-dialog__headerbtn {
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+}
+.jxc-app .el-dialog__body {
+  padding: 20px;
+  color: var(--el-text-color-regular);
+}
+.jxc-app .el-dialog__footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+.jxc-app .el-drawer {
+  background: var(--el-bg-color);
+}
+.jxc-app .el-drawer__header {
+  margin: 0;
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  color: var(--el-text-color-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+.jxc-app .el-drawer__body {
+  padding: 20px;
+}
+.jxc-app .el-drawer__footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+.jxc-app .el-overlay {
+  background-color: rgba(16, 24, 40, 0.35);
+}
+
+/* ---------- 描述 / 空态 ---------- */
+.jxc-app .el-empty {
+  padding: 32px 0;
+}
+.jxc-app .el-empty__description p {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+/* ---------- 分页 ---------- */
+.jxc-app .el-pagination {
+  --el-pagination-button-height: 28px;
+  --el-pagination-button-width: 28px;
+  --el-pagination-font-size: 12px;
+  font-size: 12px;
+}
+.jxc-app .el-pagination.is-background .el-pager li,
+.jxc-app .el-pagination.is-background .btn-prev,
+.jxc-app .el-pagination.is-background .btn-next {
+  border-radius: 4px;
+  background: transparent;
+}
+.jxc-app .el-pagination.is-background .el-pager li.is-active {
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+}
+
+/* ---------- 进度条 ---------- */
+.jxc-app .el-progress-bar__outer {
+  background-color: var(--el-fill-color-light);
+}
+.jxc-app .el-progress-bar__inner {
+  border-radius: 999px;
+}
+
+/* ---------- 提示条 ---------- */
+.jxc-app .el-alert {
+  border-radius: var(--el-border-radius-base);
+  padding: 10px 14px;
+}
+.jxc-app .el-alert__title {
+  font-size: 13px;
+}
+.jxc-app .el-alert__description {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ---------- 下拉 / 日期弹层（teleport 后仍用 EP 默认，仅收敛圆角与字号） ---------- */
+.el-select__popper.jxc-popper,
+.el-dropdown__popper.jxc-popper,
+.el-picker__popper.jxc-popper {
+  border-radius: 8px;
+  border: 1px solid var(--el-border-color-light);
+  box-shadow: var(--el-box-shadow-light);
+}
+.el-select__popper.jxc-popper .el-select-dropdown__item {
+  height: 34px;
+  line-height: 34px;
+  font-size: 12px;
+}
+
+/* ---------- 键盘提示 ---------- */
+.jxc-app .jxc-kbd {
+  display: inline-flex;
+  min-width: 16px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--el-border-color);
+  border-radius: 3px;
+  background: var(--el-bg-color);
+  padding: 0 3px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  line-height: 15px;
+  color: var(--el-text-color-secondary);
+}

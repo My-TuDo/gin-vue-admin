@@ -59,6 +59,16 @@ export const postReturn = (id) => service({ url: `/jxc/return/${id}/post`, metho
 export const cancelReturn = (id) => service({ url: `/jxc/return/${id}/cancel`, method: 'post' })
 export const getReturnable = (saleId) => service({ url: '/jxc/return/returnable', method: 'get', params: { saleId } })
 
+// ---------- 采购退货 ----------
+// 与销售退货不同：原单是采购单，退货金额按原采购单价精确出库；
+// 建单为草稿，过账（/:id/post）才产生负向账本行。
+export const createPurchaseReturn = (data) => service({ url: '/jxc/purchase-return', method: 'post', data })
+export const pagePurchaseReturn = (params) => service({ url: '/jxc/purchase-return/page', method: 'get', params })
+export const getPurchaseReturn = (id) => service({ url: `/jxc/purchase-return/${id}`, method: 'get' })
+export const getPurchaseReturnable = (purchaseId) => service({ url: '/jxc/purchase-return/returnable', method: 'get', params: { purchaseId } })
+export const postPurchaseReturn = (id) => service({ url: `/jxc/purchase-return/${id}/post`, method: 'post' })
+export const cancelPurchaseReturn = (id) => service({ url: `/jxc/purchase-return/${id}/cancel`, method: 'post' })
+
 // ---------- 盘点 ----------
 export const createCheck = (data) => service({ url: '/jxc/check', method: 'post', data })
 export const pageCheck = (params) => service({ url: '/jxc/check/page', method: 'get', params })

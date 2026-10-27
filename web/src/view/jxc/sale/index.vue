@@ -1,211 +1,487 @@
 <template>
-  <div class="sale-page">
-    <!-- 左：选货。点卡片直接进右侧明细，不弹窗（弹窗会遮挡上下文） -->
-    <section class="picker">
-      <div class="picker-head">
-        <el-input ref="searchRef" v-model="keyword" placeholder="扫码 / 搜索商品名、条码（按 / 聚焦）"
-          clearable size="default" @keydown.enter.prevent="onSearchEnter">
-          <template #prefix><span class="kbd">/</span></template>
-        </el-input>
-        <el-select v-model="warehouseId" placeholder="选择仓库" style="width: 150px" @change="loadBalances">
-          <el-option v-for="w in warehouses" :key="w.ID" :label="w.name" :value="w.ID" />
-        </el-select>
-      </div>
+  <div class="flex h-full min-h-0 flex-col gap-4">
+    <PageHeader
+      eyebrow="SALES"
+      title="开单"
+      description="扫码或搜索商品，点规格直接加入右侧；开单占用预留，出库才写账本。"
+    >
+      <template #actions>
+        <div class="flex items-center gap-2 rounded-md border border-border bg-container px-2.5 py-1.5 text-[11px] text-muted-foreground">
+          <kbd class="jxc-kbd">/</kbd><span>搜索</span>
+          <span class="h-3 w-px bg-border"></span>
+          <kbd class="jxc-kbd">Ctrl ↵</kbd><span>出库</span>
+          <span class="h-3 w-px bg-border"></span>
+          <kbd class="jxc-kbd">Esc</kbd><span>清空</span>
+        </div>
+      </template>
+    </PageHeader>
 
-      <div v-loading="loadingGoods" class="cards">
-        <div v-for="g in filteredGoods" :key="g.ID" class="goods-card">
-          <div class="g-name">{{ g.name }}</div>
-          <div class="g-code">{{ g.code }}</div>
-          <div class="skus">
-            <button v-for="s in g.skus" :key="s.ID" class="sku-chip"
-              :class="{ out: availableOf(s.ID) <= 0 }" :disabled="availableOf(s.ID) <= 0"
-              @click="addLine(s)">
-              <span class="spec">{{ s.color }}/{{ s.size }}</span>
-              <span class="avail">{{ availableOf(s.ID) > 0 ? `可售 ${availableOf(s.ID)}` : '缺货' }}</span>
+    <div class="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_440px]">
+      <!-- 左：选货。点规格直接进右侧明细，不弹窗 -->
+      <SectionCard title="选择商品" description="点规格加入明细" :padded="false" class="min-h-0">
+        <template #actions>
+          <span class="text-[11px] text-muted-foreground">{{ filteredGoods.length }} 个商品</span>
+        </template>
+
+        <div class="flex h-full min-h-0 flex-col">
+          <div class="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
+            <div class="min-w-[220px] flex-1">
+              <el-input
+                ref="searchRef"
+                v-model="keyword"
+                class="w-full"
+                placeholder="扫码 / 搜索商品名、编码、条码"
+                clearable
+                @keydown.enter="onSearchEnter"
+              >
+                <template #prefix><svg-icon icon="lucide:search" class="h-3.5 w-3.5" /></template>
+                <template #suffix>
+                  <kbd v-if="!keyword" class="jxc-kbd">/</kbd>
+                </template>
+              </el-input>
+            </div>
+            <div class="w-[148px] shrink-0">
+              <el-select v-model="warehouseId" class="w-full" placeholder="选择仓库" @change="onWarehouseChange">
+                <el-option v-for="w in warehouses" :key="w.ID" :label="w.name" :value="w.ID" />
+              </el-select>
+            </div>
+            <button
+              type="button"
+              class="flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[12px] transition-colors"
+              :class="hideOutOfStock ? 'border-primary-200 bg-primary-50 text-primary-700' : 'border-border text-muted-foreground hover:bg-muted'"
+              :aria-pressed="hideOutOfStock"
+              @click="hideOutOfStock = !hideOutOfStock"
+            >
+              <svg-icon icon="lucide:package-check" class="h-3.5 w-3.5" />
+              仅看有货
             </button>
           </div>
-        </div>
-        <el-empty v-if="!loadingGoods && filteredGoods.length === 0" description="没有匹配的商品" />
-      </div>
-    </section>
 
-    <!-- 右：当前单据 -->
-    <section class="cart">
-      <div class="cart-head">
-        <span class="doc-no">{{ orderNo || '新销售单' }}</span>
-        <span class="hint">Ctrl+Enter 出库 · Esc 清空</span>
-      </div>
-
-      <div class="lines">
-        <div v-for="(l, i) in lines" :key="l.skuId" class="line">
-          <div class="l-name">
-            <div>{{ l.goodsName }}</div>
-            <div class="l-spec">{{ l.color }}/{{ l.size }}</div>
+          <div v-if="!warehouses.length" class="border-b border-warning-200 bg-warning-50 px-4 py-2.5 text-[12px] text-warning-800">
+            还没有启用仓库。先到「基础资料 → 仓库」建一个，否则无法开单。
           </div>
-          <el-input-number v-model="l.qty" :min="1" :max="availableOf(l.skuId) + l.qty" size="small"
-            controls-position="right" style="width: 92px" />
-          <MoneyText :value="l.price" class="l-price" />
-          <MoneyText :value="l.qty * l.price" class="l-amount" />
-          <button class="rm" @click="lines.splice(i, 1)">×</button>
-        </div>
-        <div v-if="lines.length === 0" class="cart-empty">
-          点左侧规格加入明细<br />
-          <span class="sub">可售为 0 的规格会显示「缺货」并置灰</span>
-        </div>
-      </div>
 
-      <footer class="cart-foot">
-        <div class="total">
-          <span>合计</span>
-          <MoneyText :value="total" class="total-num" />
+          <div v-loading="loading || loadingBalances" class="min-h-0 flex-1 overflow-y-auto">
+            <div
+              v-for="product in filteredGoods"
+              :key="product.ID"
+              class="border-b border-border px-4 py-3 transition-colors last:border-b-0 hover:bg-muted"
+            >
+              <div class="flex items-baseline gap-2">
+                <span class="truncate text-[13px] font-medium text-base-text">{{ product.name }}</span>
+                <span class="shrink-0 font-mono text-[11px] text-muted-foreground">{{ product.code }}</span>
+              </div>
+              <div class="mt-2 flex flex-wrap gap-1.5">
+                <button
+                  v-for="sku in product.skus"
+                  :key="sku.ID"
+                  type="button"
+                  class="group inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[12px] transition-colors"
+                  :class="sku.avail > 0
+                    ? 'border-border bg-container hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700'
+                    : 'cursor-not-allowed border-dashed border-border bg-muted text-muted-foreground opacity-60'"
+                  :disabled="sku.avail <= 0"
+                  :title="`售价 ¥${Number(sku.salePrice || 0).toFixed(2)} · 条码 ${sku.skuCode}`"
+                  @click="addLine(sku, product)"
+                >
+                  <span class="font-medium">{{ sku.color }}/{{ sku.size }}</span>
+                  <span class="tabular-nums text-[11px]" :class="sku.avail > 0 ? 'text-muted-foreground group-hover:text-primary-600' : ''">
+                    {{ sku.avail > 0 ? `可售 ${sku.avail}` : '缺货' }}
+                  </span>
+                  <span class="text-[11px] tabular-nums text-muted-foreground group-hover:text-primary-600">¥{{ Number(sku.salePrice || 0).toFixed(2) }}</span>
+                </button>
+                <span v-if="!product.skus.length" class="text-[11px] text-muted-foreground">没有启用的规格</span>
+              </div>
+            </div>
+
+            <EmptyState
+              v-if="!loading && filteredGoods.length === 0"
+              icon="lucide:package-search"
+              :title="keyword ? '没有匹配的商品' : '当前仓库没有可售商品'"
+              :description="keyword ? '换个商品名、编码或条码后四位试试，或关闭「仅看有货」。' : '可以先补货入库，或切换到其他仓库。'"
+            >
+              <el-button v-if="!keyword" @click="hideOutOfStock = false">显示缺货商品</el-button>
+            </EmptyState>
+          </div>
+
+          <div class="flex shrink-0 items-center gap-2 border-t border-border bg-muted px-4 py-2 text-[11px] text-muted-foreground">
+            <svg-icon icon="lucide:keyboard" class="h-3.5 w-3.5" />
+            <span>扫码枪直接扫条码</span>
+            <span class="ml-auto">缺货规格仍可见但不可点</span>
+          </div>
         </div>
-        <div class="paid">
-          <span>实收</span>
-          <el-input-number v-model="paid" :min="0" :precision="2" size="small" style="width: 130px" />
-          <span v-if="change !== 0" class="change" :class="{ short: change < 0 }">
-            {{ change < 0 ? `还差 ${Math.abs(change).toFixed(2)}` : `找零 ${change.toFixed(2)}` }}
-          </span>
+      </SectionCard>
+
+      <!-- 右：当前单据 -->
+      <SectionCard :title="orderNo || '新销售单'" description="草稿 · 出库后生成账本" :padded="false" class="min-h-0">
+        <template #actions>
+          <el-button link :disabled="!lines.length && !lastResult" @click="resetCart">清空</el-button>
+        </template>
+
+        <div class="flex h-full min-h-0 flex-col">
+          <div class="grid shrink-0 grid-cols-2 gap-2 border-b border-border px-4 py-3">
+            <label class="block min-w-0">
+              <span class="mb-1.5 block text-[11px] text-muted-foreground">出库仓库</span>
+              <el-select v-model="warehouseId" class="w-full" placeholder="选择仓库" @change="onWarehouseChange">
+                <el-option v-for="w in warehouses" :key="w.ID" :label="w.name" :value="w.ID" />
+              </el-select>
+            </label>
+            <label class="block min-w-0">
+              <span class="mb-1.5 block text-[11px] text-muted-foreground">客户</span>
+              <el-select v-model="customerId" class="w-full" placeholder="散客（不记名）" clearable>
+                <el-option v-for="c in customers" :key="c.ID" :label="c.name" :value="c.ID" />
+              </el-select>
+            </label>
+          </div>
+
+          <div v-if="lastResult" class="shrink-0 border-b border-success-200 bg-success-50 px-4 py-2.5">
+            <div class="flex items-start gap-2">
+              <svg-icon icon="lucide:circle-check" class="mt-0.5 h-4 w-4 shrink-0 text-success" />
+              <div class="min-w-0 flex-1 text-[11.5px] leading-5 text-success-800">
+                <div class="flex items-center gap-2 font-medium">
+                  <span>已出库 {{ lastResult.orderNo }}</span>
+                  <button type="button" class="text-success-700/70 hover:text-success-800" aria-label="关闭结果" @click="lastResult = null">
+                    <svg-icon icon="lucide:x" class="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div class="flex flex-wrap items-center gap-x-2">
+                  <span>销售额 <MoneyText :value="lastResult.amount" size="xs" /></span>
+                  <span>成本 <MoneyText :value="lastResult.cost" size="xs" /></span>
+                  <span>毛利 <MoneyText :value="lastResult.gross" size="xs" /></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="min-h-0 flex-1 overflow-y-auto">
+            <template v-if="lines.length">
+              <div class="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_76px_62px_70px_20px] items-center gap-2 border-b border-border bg-container px-4 py-2 text-[11px] text-muted-foreground">
+                <span>商品</span>
+                <span class="text-center">数量</span>
+                <span class="text-right">单价</span>
+                <span class="text-right">小计</span>
+                <span></span>
+              </div>
+              <div
+                v-for="(line, index) in lines"
+                :key="line.skuId"
+                class="grid grid-cols-[minmax(0,1fr)_76px_62px_70px_20px] items-center gap-2 border-b border-border px-4 py-2.5 last:border-b-0"
+              >
+                <div class="min-w-0">
+                  <div class="truncate text-[12.5px] font-medium text-base-text">{{ line.goodsName }}</div>
+                  <div class="mt-0.5 truncate text-[11px] text-muted-foreground">{{ line.color }}/{{ line.size }} · {{ line.skuCode }}</div>
+                </div>
+                <div class="inline-flex h-7 items-center justify-self-center overflow-hidden rounded-md border border-border bg-container">
+                  <button
+                    type="button"
+                    class="grid h-full w-6 place-items-center text-muted-foreground transition-colors hover:bg-muted hover:text-base-text"
+                    aria-label="减少数量"
+                    @click="changeQty(line, -1)"
+                  >−</button>
+                  <input
+                    v-model.number="line.qty"
+                    type="number"
+                    min="1"
+                    class="h-full w-8 min-w-0 border-0 bg-transparent text-center text-[12px] tabular-nums text-base-text outline-none"
+                    :aria-label="`${line.goodsName} 数量`"
+                    @change="clampLine(line)"
+                  />
+                  <button
+                    type="button"
+                    class="grid h-full w-6 place-items-center text-muted-foreground transition-colors hover:bg-muted hover:text-base-text"
+                    aria-label="增加数量"
+                    @click="changeQty(line, 1)"
+                  >+</button>
+                </div>
+                <div class="text-right"><MoneyText :value="line.price" size="sm" /></div>
+                <div class="text-right"><MoneyText :value="round2(line.qty * line.price)" size="sm" strong /></div>
+                <button
+                  type="button"
+                  class="grid h-6 w-6 place-items-center justify-self-end rounded text-muted-foreground transition-colors hover:bg-error-50 hover:text-error"
+                  aria-label="移除该行"
+                  @click="removeLine(index)"
+                >
+                  <svg-icon icon="lucide:x" class="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </template>
+
+            <EmptyState
+              v-else-if="!lastResult"
+              icon="lucide:shopping-cart"
+              title="单据还是空的"
+              description="在左侧点任意规格加入明细。可售为 0 的规格会置灰，但仍可见——你知道有这款，只是没货。"
+            />
+            <div v-else class="px-6 py-10 text-center text-[12px] text-muted-foreground">
+              继续扫码或搜索下一件商品
+            </div>
+          </div>
+
+          <div class="shrink-0 border-t border-border px-4 py-3">
+            <div class="flex items-baseline justify-between">
+              <div class="flex items-baseline gap-2">
+                <span class="text-[12px] text-muted-foreground">合计</span>
+                <span class="text-[11px] text-muted-foreground">{{ totalQty }} 件</span>
+              </div>
+              <MoneyText :value="total" size="xl" strong />
+            </div>
+
+            <div class="mt-3 flex items-center gap-2">
+              <span class="shrink-0 text-[12px] text-muted-foreground">实收</span>
+              <el-input-number
+                v-model="paid"
+                class="!w-[132px] shrink-0"
+                :min="0"
+                :precision="2"
+                :step="1"
+                :controls="false"
+                @change="paidTouched = true"
+              />
+              <span class="ml-auto flex items-center gap-1 text-[11px]" :class="change < 0 ? 'text-error' : 'text-muted-foreground'">
+                {{ change < 0 ? '还差' : '找零' }}
+                <MoneyText :value="Math.abs(change)" size="xs" :muted="change >= 0" />
+              </span>
+            </div>
+
+            <div class="mt-3 flex items-center gap-2">
+              <el-button size="large" class="flex-1" @click="resetCart">清空</el-button>
+              <el-button
+                type="primary"
+                size="large"
+                class="flex-[2]"
+                :loading="saving"
+                :disabled="lines.length === 0 || !warehouseId"
+                @click="submit"
+              >
+                出库
+                <span class="ml-2 rounded border border-white/25 px-1 py-0.5 font-mono text-[10px] text-white/80">Ctrl ↵</span>
+              </el-button>
+            </div>
+            <div class="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+              <svg-icon icon="lucide:lock" class="h-3 w-3" />
+              <span>单价固定取规格售价，开单后改价由服务端拒绝</span>
+            </div>
+          </div>
         </div>
-        <div class="actions">
-          <el-button @click="reset">清空</el-button>
-          <el-button type="primary" :loading="saving" :disabled="lines.length === 0" @click="submit">
-            出库（Ctrl+Enter）
-          </el-button>
-        </div>
-        <div v-if="lastResult" class="result">
-          已出库 {{ lastResult.orderNo }}：销售额
-          <MoneyText :value="lastResult.amount" />，成本
-          <MoneyText :value="lastResult.cost" />，毛利
-          <MoneyText :value="lastResult.gross" :class="{ neg: lastResult.gross < 0 }" />
-        </div>
-      </footer>
-    </section>
+      </SectionCard>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import PageHeader from '@/components/jxc/PageHeader.vue'
+import SectionCard from '@/components/jxc/SectionCard.vue'
+import EmptyState from '@/components/jxc/EmptyState.vue'
 import MoneyText from '@/components/jxc/MoneyText.vue'
-import { cancelSale, createSale, ledgerBalances, listGoods, listWarehouses, shipSale } from '@/api/jxc'
+import { cancelSale, createSale, getSale, ledgerBalances, listGoods, listPartners, listWarehouses, shipSale } from '@/api/jxc'
+import { isTypingTarget } from '@/view/jxc/shared/keyboard'
+import { round2 } from '@/view/jxc/shared/format'
 
 const warehouses = ref([])
-const warehouseId = ref(null)
+const customers = ref([])
 const goods = ref([])
-const balances = ref({}) // skuId -> { available }
+const balances = ref({})
+const warehouseId = ref(null)
+const customerId = ref(null)
 const keyword = ref('')
+const hideOutOfStock = ref(true)
 const lines = ref([])
 const paid = ref(0)
+const paidTouched = ref(false)
 const saving = ref(false)
-const loadingGoods = ref(false)
+const loading = ref(false)
+const loadingBalances = ref(false)
 const orderNo = ref('')
 const lastResult = ref(null)
 const searchRef = ref(null)
 
-const availableOf = (skuId) => balances.value[skuId]?.available ?? 0
+const availableOf = (skuId) => {
+  const row = balances.value[skuId]
+  return row ? Number(row.available) || 0 : 0
+}
 
 const filteredGoods = computed(() => {
   const k = keyword.value.trim().toLowerCase()
-  if (!k) return goods.value
-  return goods.value.filter((g) => {
-    if (g.name?.toLowerCase().includes(k) || g.code?.toLowerCase().includes(k)) return true
-    return g.skus?.some((s) => s.skuCode?.toLowerCase().includes(k))
+  const rows = goods.value.map((product) => {
+    const skus = (product.skus || []).map((sku) => ({ ...sku, avail: availableOf(sku.ID) }))
+    return { ...product, skus, maxAvail: skus.reduce((max, sku) => Math.max(max, sku.avail), 0) }
   })
+
+  let list = rows
+  if (hideOutOfStock.value) list = list.filter((product) => product.skus.some((sku) => sku.avail > 0))
+  if (k) {
+    list = list.filter((product) => {
+      if ((product.name || '').toLowerCase().includes(k) || (product.code || '').toLowerCase().includes(k)) return true
+      return product.skus.some((sku) =>
+        `${sku.skuCode} ${sku.color} ${sku.size}`.toLowerCase().includes(k)
+      )
+    })
+  }
+  return list.sort((a, b) => b.maxAvail - a.maxAvail || String(a.name).localeCompare(String(b.name), 'zh-CN'))
 })
 
-const total = computed(() => lines.value.reduce((s, l) => s + l.qty * l.price, 0))
-const change = computed(() => Math.round((paid.value - total.value) * 100) / 100)
+const total = computed(() => round2(lines.value.reduce((sum, line) => sum + Number(line.qty || 0) * Number(line.price || 0), 0)))
+const totalQty = computed(() => lines.value.reduce((sum, line) => sum + Number(line.qty || 0), 0))
+const change = computed(() => round2(Number(paid.value || 0) - total.value))
+
+watch(total, (value) => {
+  if (!paidTouched.value) paid.value = value
+})
 
 const loadGoods = async () => {
-  loadingGoods.value = true
+  loading.value = true
   try {
     const res = await listGoods({ active: 1 })
-    if (res.code === 0) {
-      // 后端已按 status 过滤；这里再兜一层，避免状态切换后缓存里残留停用规格。
-      goods.value = (res.data || [])
-        .map((g) => ({ ...g, skus: (g.skus || []).filter((s) => s.status === 1) }))
-        .filter((g) => g.skus.length > 0)
-    } else ElMessage.error(res.msg || '加载商品失败')
+    if (res.code !== 0) return ElMessage.error(res.msg || '加载商品失败')
+    goods.value = (res.data || [])
+      .map((product) => ({ ...product, skus: (product.skus || []).filter((sku) => sku.status === 1) }))
+      .filter((product) => product.skus.length > 0)
   } finally {
-    loadingGoods.value = false
+    loading.value = false
   }
 }
 
 const loadBalances = async () => {
   balances.value = {}
   if (!warehouseId.value) return
-  const res = await ledgerBalances({ warehouseId: warehouseId.value })
-  if (res.code === 0) {
+  loadingBalances.value = true
+  try {
+    const res = await ledgerBalances({ warehouseId: warehouseId.value })
+    if (res.code !== 0) return ElMessage.error(res.msg || '加载可售库存失败')
     const map = {}
     for (const row of res.data || []) map[row.skuId] = row
     balances.value = map
+  } finally {
+    loadingBalances.value = false
   }
 }
 
-const addLine = (sku) => {
-  const exist = lines.value.find((l) => l.skuId === sku.ID)
+const addLine = (sku, product) => {
   const avail = availableOf(sku.ID)
+  if (avail <= 0) return
+  const exist = lines.value.find((line) => line.skuId === sku.ID)
   if (exist) {
     if (exist.qty + 1 > avail) {
       ElMessage.warning(`该规格可售 ${avail} 件，不能再加`)
       return
     }
     exist.qty += 1
-    return
+  } else {
+    lines.value.push({
+      skuId: sku.ID,
+      skuCode: sku.skuCode,
+      goodsName: product.name,
+      color: sku.color,
+      size: sku.size,
+      qty: 1,
+      price: Number(sku.salePrice) || 0
+    })
   }
-  if (avail <= 0) return
-  const g = goods.value.find((x) => x.ID === sku.goodsId)
-  lines.value.push({
-    skuId: sku.ID,
-    goodsName: g?.name ?? '',
-    color: sku.color,
-    size: sku.size,
-    qty: 1,
-    price: Number(sku.salePrice) || 0
-  })
-  paid.value = total.value
+  if (!paidTouched.value) paid.value = total.value
 }
 
 const addFirstMatch = () => {
-  const g = filteredGoods.value[0]
-  if (!g) return
-  const sku = (g.skus || []).find((s) => availableOf(s.ID) > 0)
-  if (sku) addLine(sku)
-  else ElMessage.warning('该商品没有可售规格')
+  const k = keyword.value.trim().toLowerCase()
+  if (!k) return
+
+  // 先找条码完全匹配（扫码枪场景），再找颜色/尺码/条码包含关键字的规格，
+  // 最后才退回「第一个有货规格」。否则搜「白/L」会加进第一行的黑/M。
+  let match = null
+  for (const product of filteredGoods.value) {
+    const exact = (product.skus || []).find((sku) => String(sku.skuCode || '').toLowerCase() === k && sku.avail > 0)
+    if (exact) {
+      match = { sku: exact, product }
+      break
+    }
+  }
+  if (!match) {
+    for (const product of filteredGoods.value) {
+      const hit = (product.skus || []).find((sku) =>
+        sku.avail > 0 && `${sku.skuCode} ${sku.color} ${sku.size}`.toLowerCase().includes(k)
+      )
+      if (hit) {
+        match = { sku: hit, product }
+        break
+      }
+    }
+  }
+  if (!match) {
+    const product = filteredGoods.value[0]
+    const sku = product?.skus?.find((item) => item.avail > 0)
+    if (sku) match = { sku, product }
+  }
+  if (!match) return ElMessage.warning('没有匹配的可售规格')
+
+  addLine(match.sku, match.product)
+  keyword.value = ''
+  nextTick(() => searchRef.value?.focus())
 }
 
-// 搜索框里的 Enter 是"加入当前匹配项"；Ctrl/Cmd+Enter 是"整单出库"，
-// 不能顺手再加一件（否则提交前数量多 1，实测踩到）。
-const onSearchEnter = (e) => {
-  if (e.ctrlKey || e.metaKey) return
+const onSearchEnter = (event) => {
+  if (event.ctrlKey || event.metaKey) return
+  event.preventDefault()
   addFirstMatch()
 }
 
-const reset = () => {
+const changeQty = (line, delta) => {
+  const next = Number(line.qty || 0) + delta
+  const max = availableOf(line.skuId)
+  if (next > max) {
+    ElMessage.warning(`该规格可售 ${max} 件`)
+    return
+  }
+  line.qty = Math.max(1, next)
+  if (!paidTouched.value) paid.value = total.value
+}
+
+const clampLine = (line) => {
+  const max = Math.max(1, availableOf(line.skuId))
+  line.qty = Math.min(max, Math.max(1, Math.floor(Number(line.qty) || 1)))
+  if (!paidTouched.value) paid.value = total.value
+}
+
+const removeLine = (index) => {
+  lines.value.splice(index, 1)
+  if (!paidTouched.value) paid.value = total.value
+}
+
+const resetCart = () => {
   lines.value = []
   paid.value = 0
+  paidTouched.value = false
   orderNo.value = ''
+  lastResult.value = null
+}
+
+const onWarehouseChange = async () => {
+  if (lines.value.length) {
+    resetCart()
+    ElMessage.info('已切换仓库，当前明细已清空')
+  }
+  await loadBalances()
 }
 
 const submit = async () => {
   if (saving.value) return
   if (!warehouseId.value) return ElMessage.warning('请先选择仓库')
-  if (lines.value.length === 0) return ElMessage.warning('请先添加商品')
+  if (!lines.value.length) return ElMessage.warning('请先添加商品')
+
   saving.value = true
   try {
-    const payload = {
+    const created = await createSale({
       warehouseId: warehouseId.value,
-      items: lines.value.map((l) => ({ skuId: l.skuId, qty: l.qty, price: l.price }))
-    }
-    const created = await createSale(payload)
+      customerId: customerId.value || null,
+      items: lines.value.map((line) => ({ skuId: line.skuId, qty: line.qty }))
+    })
     if (created.code !== 0) return ElMessage.error(created.msg || '开单失败')
+
     const id = created.data.ID
     orderNo.value = created.data.orderNo
 
     const shipped = await shipSale(id)
     if (shipped.code !== 0) {
-      // 开单成功但出库失败（例如可售库存在此期间被别人买走）时，
-      // 草稿单会继续占着预留。这里主动取消，避免"失败一次、库存被锁一次"。
       const canceled = await cancelSale(id)
       const hint = canceled.code === 0
         ? '草稿单已自动取消并释放预留'
@@ -213,247 +489,64 @@ const submit = async () => {
       return ElMessage.error(`${shipped.msg || '出库失败'}（${hint}）`)
     }
 
-    const detail = await import('@/api/jxc').then((m) => m.getSale(id))
+    const detail = await getSale(id)
     const order = detail.code === 0 ? detail.data : null
+    const amount = Number(order?.totalAmount ?? total.value)
+    const cost = Number(order?.costAmount ?? 0)
     lastResult.value = {
       orderNo: order?.orderNo ?? orderNo.value,
-      amount: Number(order?.totalAmount ?? total.value),
-      cost: Number(order?.costAmount ?? 0),
-      gross: Math.round((Number(order?.totalAmount ?? 0) - Number(order?.costAmount ?? 0)) * 100) / 100
+      amount,
+      cost,
+      gross: round2(amount - cost)
     }
     ElMessage.success(`出库成功 ${lastResult.value.orderNo}`)
-    reset()
+    orderNo.value = ''
+    lines.value = []
+    paid.value = 0
+    paidTouched.value = false
     await loadBalances()
   } finally {
     saving.value = false
   }
 }
 
-const isTyping = (el) => {
-  if (!el) return false
-  return ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable
-}
-
-// 键盘快捷键挂在 window 上：挂在页面 div 上时，只有焦点正好在 div 内才生效，
-// 从导航点进来后焦点在 body，Ctrl+Enter 会静默失灵。
-const onKeydown = (e) => {
-  if (e.key === '/' && !isTyping(e.target)) {
-    e.preventDefault()
+const onKeydown = (event) => {
+  if (event.key === '/' && !isTypingTarget(event.target)) {
+    event.preventDefault()
     searchRef.value?.focus()
     return
   }
-  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-    e.preventDefault()
+  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault()
     submit()
     return
   }
-  if (e.key === 'Escape') {
-    // 正在输入时 Esc 只退出输入，不能把整车货清空（误触代价太大）
-    if (isTyping(e.target)) {
-      e.target.blur()
+  if (event.key === 'Escape') {
+    if (isTypingTarget(event.target)) {
+      event.target.blur()
       return
     }
-    reset()
+    if (lines.value.length) resetCart()
   }
 }
 
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
-  await loadGoods()
-  const res = await listWarehouses({ active: 1 })
-  if (res.code === 0) {
-    warehouses.value = res.data || []
-    if (warehouses.value.length && !warehouseId.value) {
-      warehouseId.value = warehouses.value[0].ID
-      await loadBalances()
-    }
+  const [warehouseRes, customerRes] = await Promise.all([
+    listWarehouses({ active: 1 }),
+    listPartners('customer', { active: 1 })
+  ])
+  if (warehouseRes.code === 0) warehouses.value = warehouseRes.data || []
+  if (customerRes.code === 0) customers.value = customerRes.data || []
+  if (warehouses.value.length) {
+    warehouseId.value = warehouses.value[0].ID
+    await loadBalances()
   }
+  await loadGoods()
 })
-onUnmounted(() => {
-  window.removeEventListener('keydown', onKeydown)
-  lastResult.value = null
-})
-</script>
 
-<style scoped>
-.sale-page {
-  display: grid;
-  grid-template-columns: 1fr 460px;
-  gap: 16px;
-  height: calc(100vh - 48px - 32px);
-  min-height: 0;
-}
-.picker,
-.cart {
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-.picker-head {
-  display: flex;
-  gap: 8px;
-  padding: 12px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-}
-.kbd {
-  font-family: ui-monospace, monospace;
-  color: var(--el-text-color-placeholder);
-}
-.cards {
-  flex: 1;
-  overflow: auto;
-  padding: 12px;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 10px;
-  align-content: start;
-}
-.goods-card {
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 6px;
-  padding: 10px;
-}
-.g-name {
-  font-weight: 500;
-  margin-bottom: 2px;
-}
-.g-code {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-  font-family: ui-monospace, monospace;
-  margin-bottom: 8px;
-}
-.skus {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.sku-chip {
-  border: 1px solid var(--el-border-color);
-  background: var(--el-bg-color);
-  border-radius: 4px;
-  padding: 4px 8px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-  font-size: 12px;
-}
-.sku-chip:hover:not(:disabled) {
-  border-color: var(--el-color-primary);
-  color: var(--el-color-primary);
-}
-.sku-chip.out {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-.spec {
-  font-weight: 500;
-}
-.avail {
-  color: var(--el-text-color-secondary);
-  font-size: 11px;
-}
-.cart-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-}
-.doc-no {
-  font-family: ui-monospace, monospace;
-  font-weight: 500;
-}
-.hint {
-  color: var(--el-text-color-placeholder);
-  font-size: 12px;
-}
-.lines {
-  flex: 1;
-  overflow: auto;
-  padding: 8px 12px;
-}
-.line {
-  display: grid;
-  grid-template-columns: 1fr 100px 84px 84px 24px;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 0;
-  border-bottom: 1px dashed var(--el-border-color-lighter);
-}
-.l-name {
-  font-size: 13px;
-}
-.l-spec {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-}
-.rm {
-  border: 0;
-  background: none;
-  color: var(--el-text-color-placeholder);
-  cursor: pointer;
-  font-size: 16px;
-}
-.rm:hover {
-  color: var(--el-color-danger);
-}
-.cart-empty {
-  text-align: center;
-  color: var(--el-text-color-secondary);
-  padding: 40px 0;
-  font-size: 13px;
-}
-.sub {
-  font-size: 12px;
-  color: var(--el-text-color-placeholder);
-}
-.cart-foot {
-  border-top: 1px solid var(--el-border-color-lighter);
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.total {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-.total-num {
-  font-size: 22px;
-  font-weight: 600;
-}
-.paid {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.change {
-  color: var(--el-color-success);
-  font-size: 12px;
-}
-.change.short {
-  color: var(--el-color-danger);
-}
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-.result {
-  font-size: 12px;
-  color: var(--el-text-color-regular);
-  background: var(--el-fill-color-light);
-  border-radius: 6px;
-  padding: 8px 10px;
-}
-.neg {
-  color: var(--el-color-danger);
-}
-</style>
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+})
+
+</script>
