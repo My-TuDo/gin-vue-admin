@@ -18,7 +18,7 @@ SET NAMES utf8mb4;
 
 DELETE FROM casbin_rule WHERE ptype = 'p' AND v1 LIKE '/jxc/%';
 
--- 超级管理员（52 条）
+-- 超级管理员（54 条）
 INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','888','/jxc/master/warehouses','GET'),
   ('p','888','/jxc/master/warehouses','POST'),
@@ -54,6 +54,8 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','888','/jxc/ledger/balance','GET'),
   ('p','888','/jxc/ledger/moves','GET'),
   ('p','888','/jxc/ledger/reconcile','GET'),
+  ('p','888','/jxc/ledger/reconcile/last','GET'),
+  ('p','888','/jxc/dashboard/summary','GET'),
   ('p','888','/jxc/reversal','POST'),
   ('p','888','/jxc/reversal/page','GET'),
   ('p','888','/jxc/return','POST'),
@@ -73,7 +75,7 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','888','/jxc/period/snapshot','GET'),
   ('p','888','/jxc/period/summary','GET');
 
--- 老板（52 条）
+-- 老板（54 条）
 INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9001','/jxc/master/warehouses','GET'),
   ('p','9001','/jxc/master/warehouses','POST'),
@@ -109,6 +111,8 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9001','/jxc/ledger/balance','GET'),
   ('p','9001','/jxc/ledger/moves','GET'),
   ('p','9001','/jxc/ledger/reconcile','GET'),
+  ('p','9001','/jxc/ledger/reconcile/last','GET'),
+  ('p','9001','/jxc/dashboard/summary','GET'),
   ('p','9001','/jxc/reversal','POST'),
   ('p','9001','/jxc/reversal/page','GET'),
   ('p','9001','/jxc/return','POST'),
@@ -128,7 +132,7 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9001','/jxc/period/snapshot','GET'),
   ('p','9001','/jxc/period/summary','GET');
 
--- 店长（50 条）
+-- 店长（52 条）
 INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9002','/jxc/master/warehouses','GET'),
   ('p','9002','/jxc/master/warehouses','POST'),
@@ -164,6 +168,8 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9002','/jxc/ledger/balance','GET'),
   ('p','9002','/jxc/ledger/moves','GET'),
   ('p','9002','/jxc/ledger/reconcile','GET'),
+  ('p','9002','/jxc/ledger/reconcile/last','GET'),
+  ('p','9002','/jxc/dashboard/summary','GET'),
   ('p','9002','/jxc/reversal/page','GET'),
   ('p','9002','/jxc/return','POST'),
   ('p','9002','/jxc/return/page','GET'),
@@ -181,7 +187,7 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9002','/jxc/period/snapshot','GET'),
   ('p','9002','/jxc/period/summary','GET');
 
--- 店员（23 条）
+-- 店员（24 条）
 INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9003','/jxc/master/warehouses','GET'),
   ('p','9003','/jxc/master/goods','GET'),
@@ -205,9 +211,10 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9003','/jxc/check/:id','GET'),
   ('p','9003','/jxc/check/:id/items','POST'),
   ('p','9003','/jxc/period','GET'),
-  ('p','9003','/jxc/period/summary','GET');
+  ('p','9003','/jxc/period/summary','GET'),
+  ('p','9003','/jxc/dashboard/summary','GET');
 
--- 只读（20 条）
+-- 只读（22 条）
 INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','8881','/jxc/master/warehouses','GET'),
   ('p','8881','/jxc/master/goods','GET'),
@@ -220,6 +227,8 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','8881','/jxc/ledger/balance','GET'),
   ('p','8881','/jxc/ledger/moves','GET'),
   ('p','8881','/jxc/ledger/reconcile','GET'),
+  ('p','8881','/jxc/ledger/reconcile/last','GET'),
+  ('p','8881','/jxc/dashboard/summary','GET'),
   ('p','8881','/jxc/reversal/page','GET'),
   ('p','8881','/jxc/return/page','GET'),
   ('p','8881','/jxc/return/:id','GET'),
