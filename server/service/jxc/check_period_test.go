@@ -175,17 +175,18 @@ func TestPeriod_SummaryCompoundsReturns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("取月报失败: %v", err)
 	}
-	// 销售 4×100=400，退 1×100=100 → 净销售额 300；成本 4×50=200，退 1×50=50 → 净成本 150
-	if sum.SalesAmount != 300 {
-		t.Errorf("净销售额应为 300，实际 %.2f", sum.SalesAmount)
+	// 单价固定取 SKU 售价 99：销售 4×99=396，退 1×99=99 → 净销售额 297
+	// 成本 4×50=200，退 1×50=50 → 净成本 150，毛利 147
+	if sum.SalesAmount != 297 {
+		t.Errorf("净销售额应为 297，实际 %.2f", sum.SalesAmount)
 	}
 	if sum.SalesCost != 150 {
 		t.Errorf("净成本应为 150，实际 %.2f", sum.SalesCost)
 	}
-	if sum.Gross != 150 {
-		t.Errorf("毛利应为 150，实际 %.2f", sum.Gross)
+	if sum.Gross != 147 {
+		t.Errorf("毛利应为 147，实际 %.2f", sum.Gross)
 	}
-	if sum.ReturnAmount != 100 || sum.ReturnOrders != 1 {
+	if sum.ReturnAmount != 99 || sum.ReturnOrders != 1 {
 		t.Errorf("退货口径不对：%.2f / %d", sum.ReturnAmount, sum.ReturnOrders)
 	}
 	_ = db

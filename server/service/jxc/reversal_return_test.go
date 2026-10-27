@@ -169,8 +169,8 @@ func TestReturn_PartialWithOriginalCost(t *testing.T) {
 	if ret.CostAmount != 176 {
 		t.Errorf("退货成本应为 2×88=176（原单成本），实际 %.2f", ret.CostAmount)
 	}
-	if ret.Amount != 398 {
-		t.Errorf("退款金额应为 2×199=398，实际 %.2f", ret.Amount)
+	if ret.Amount != 198 {
+		t.Errorf("退款金额应为 2×99=198（单价取 SKU 售价，前端传 199 不生效），实际 %.2f", ret.Amount)
 	}
 
 	if err := rts.Post(ctx, ret.ID, "t", time.Now()); err != nil {

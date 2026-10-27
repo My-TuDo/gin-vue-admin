@@ -86,6 +86,44 @@ func TestMoves_DisplaySemantics(t *testing.T) {
 	}
 }
 
+// TestMoves_BalanceAfterAcrossPages 结存必须按全量过账顺序算，不能只按当前页从 0 累加。
+func TestMoves_BalanceAfterAcrossPages(t *testing.T) {
+	db := newLedgerTestDB(t)
+	wh, sku := seedSku(t, db)
+	seedStock(t, db, wh, sku, 10, 10)
+	_, ss, ls := newTestServices()
+	ctx := context.Background()
+
+	for i := 0; i < 3; i++ {
+		so, err := ss.Create(ctx, &jxc.SaleOrder{WarehouseID: wh,
+			Items: []jxc.SaleItem{{SkuID: sku, Qty: 1}}})
+		if err != nil {
+			t.Fatalf("开单失败: %v", err)
+		}
+		if err := ss.Ship(ctx, so.ID, "t", time.Now()); err != nil {
+			t.Fatalf("出库失败: %v", err)
+		}
+	}
+
+	all, total, err := ls.Moves(ctx, wh, sku, 1, 10)
+	if err != nil {
+		t.Fatalf("取流水失败: %v", err)
+	}
+	if total != 4 || len(all) != 4 {
+		t.Fatalf("应有 4 条流水（1 入 + 3 出），实际 total=%d len=%d", total, len(all))
+	}
+	// 最新在前：出库后结存 7/8/9/10（最后一笔是最早的入库）
+	want := []int{7, 8, 9, 10}
+	for i, r := range all {
+		if r.BalanceAfter == nil {
+			t.Fatalf("流水 %d 缺少 balanceAfter", r.ID)
+		}
+		if *r.BalanceAfter != want[i] {
+			t.Errorf("第 %d 条流水结存应为 %d，实际 %d", i, want[i], *r.BalanceAfter)
+		}
+	}
+}
+
 func absF(v float64) float64 {
 	if v < 0 {
 		return -v

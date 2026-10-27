@@ -337,7 +337,12 @@ func writeOutgoingEdges(b *strings.Builder, n autoModel.CliScenarioNode, edges [
 // MCP 预览路径不做过滤）时给出可读占位，避免渲染出空的 backtick。
 func edgeTargetLabel(nodeByID map[string]autoModel.CliScenarioNode, id string) string {
 	if n, ok := nodeByID[id]; ok {
-		return nodeLabel(n)
+		if n.Type == "decision" {
+			return "判断"
+		}
+		// 流转目标只写命令名：别名在步骤行里已经展示过一次，
+		// 条件行再带一次会让「若 X → notify-send（别名：notify）」变啰嗦。
+		return "`" + strings.TrimSpace(n.CommandName) + "`"
 	}
 	return "（未知节点）"
 }
@@ -354,13 +359,6 @@ func edgesCarryFlow(edges []autoModel.CliScenarioEdge) bool {
 		}
 	}
 	return false
-}
-
-func nodeLabel(n autoModel.CliScenarioNode) string {
-	if n.Type == "decision" {
-		return "判断"
-	}
-	return "`" + strings.TrimSpace(n.CommandName) + "（别名：" + strings.TrimSpace(n.Alias) + "）`"
 }
 
 // topologicalOrder 返回节点 ID 的拓扑序列；入度为 0 的节点优先（按 nodes 顺序入队保证稳定）。
