@@ -45,6 +45,12 @@ export default ({ mode }) => {
       // 如果使用docker-compose开发模式，设置为false
       open: true,
       port: Number(env.VITE_CLI_PORT),
+      watch: {
+        // 编辑器/工具原子写入时会在源码目录留下 *.tmpdir/*.tmp；
+        // chokidar 去 watch 这些正在被写的临时文件会 EBUSY，直接把 dev server 打崩。
+        // 这里必须按路径忽略，.gitignore 对 Vite 的 watcher 不生效。
+        ignored: ['**/*.tmpdir/**', '**/*.tmp', '**/.*.tmpdir/**']
+      },
       proxy: {
         // 把key的路径代理到target位置
         // detail: https://cli.vuejs.org/config/#devserver-proxy
