@@ -85,10 +85,11 @@ def main():
 
     # 盘点：实盘 5 → 盘亏 2
     chk = must(call(base, "/jxc/check", "POST", {"warehouseId": wh, "remark": "冒烟盘点"}), "建盘点单")
-    items = chk["items"]
-    assert len(items) == 1
+    # 盘点覆盖全部在售 SKU（期初建账要靠这个），所以这里按 SKU 找到本仓这一行
+    rows = [i for i in chk["items"] if i["skuId"] == sku]
+    assert len(rows) == 1, [i["skuId"] for i in chk["items"]]
     must(call(base, f"/jxc/check/{chk['ID']}/items", "POST",
-              {"items": [{"id": items[0]["ID"], "actualQty": 5}]}), "录实盘")
+              {"items": [{"id": rows[0]["ID"], "actualQty": 5}]}), "录实盘")
     must(call(base, f"/jxc/check/{chk['ID']}/post", "POST"), "完成盘点")
     assert qty() == 5, qty()
     ok("盘点盘亏 2 件，台账 5（差异进账本，不是覆盖余额）")
