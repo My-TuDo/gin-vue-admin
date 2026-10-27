@@ -267,6 +267,13 @@ func (s *PurchaseReturnService) Search(ctx context.Context, info jxcReq.Document
 	if info.PartnerID > 0 {
 		db = db.Where("purchase_return.supplier_id = ?", info.PartnerID)
 	}
+	if info.Reversed != nil {
+		if *info.Reversed {
+			db = db.Where("purchase_return.reversed_at IS NOT NULL")
+		} else {
+			db = db.Where("purchase_return.reversed_at IS NULL")
+		}
+	}
 	if kw := keywordPattern(info.Keyword); kw != "" {
 		db = db.Where("(purchase_return.return_no LIKE ? OR purchase_return.purchase_no LIKE ? OR purchase_return.reason LIKE ? OR p.name LIKE ? OR p.code LIKE ?)",
 			kw, kw, kw, kw, kw)
@@ -350,7 +357,9 @@ func aggregatePurchaseItems(items []jxc.PurchaseItem) (map[uint]int, map[uint]mo
 	return qty, cost
 }
 
-// purchaseReturnedQty 已退数量（只统计已出库的采购退货单）
+// purchaseReturnedQty 已退数量（只统计已出库且未被红冲的采购退货单）。
+// 被红冲的退货单已经通过反向账本把货加回来了，不能再占用“已退数量”，
+// 否则退错并红冲后，供应商那批货就永远退不了了。
 func purchaseReturnedQty(db *gorm.DB, purchaseID uint) (map[uint]int, error) {
 	type row struct {
 		SkuID uint
@@ -360,7 +369,8 @@ func purchaseReturnedQty(db *gorm.DB, purchaseID uint) (map[uint]int, error) {
 	err := db.Table("purchase_return_item i").
 		Select("i.sku_id AS sku_id, SUM(i.qty) AS qty").
 		Joins("JOIN purchase_return r ON r.id = i.return_id").
-		Where("r.purchase_id = ? AND r.status = ?", purchaseID, jxc.PurchaseReturnStatusPosted).
+		Where("r.purchase_id = ? AND r.status = ? AND r.reversed_at IS NULL",
+			purchaseID, jxc.PurchaseReturnStatusPosted).
 		Group("i.sku_id").Scan(&rows).Error
 	if err != nil {
 		return nil, err

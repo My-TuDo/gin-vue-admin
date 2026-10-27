@@ -195,7 +195,7 @@ func (s *PeriodService) Summary(ctx context.Context, yearMonth string) (*Monthly
 	}
 	if err := db.Model(&jxc.PurchaseReturn{}).
 		Select("COUNT(*) AS cnt, COALESCE(SUM(amount),0) AS amount").
-		Where("status = ? AND posted_at >= ? AND posted_at < ?",
+		Where("status = ? AND reversed_at IS NULL AND posted_at >= ? AND posted_at < ?",
 			jxc.PurchaseReturnStatusPosted, start, end).
 		Scan(&prAgg).Error; err != nil {
 		return nil, err

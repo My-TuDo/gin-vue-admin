@@ -17,8 +17,9 @@ import (
 
 // 红冲来源（被冲销的单据类型）
 const (
-	ReversalSourcePurchase = "purchase"
-	ReversalSourceSale     = "sale"
+	ReversalSourcePurchase       = "purchase"
+	ReversalSourceSale           = "sale"
+	ReversalSourcePurchaseReturn = "purchase_return"
 )
 
 // 红冲单状态：红冲是即时生效的，没有草稿态（避免"半吊子红冲"挂在半空）

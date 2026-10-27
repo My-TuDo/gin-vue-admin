@@ -31,6 +31,7 @@ type PurchaseReturn struct {
 	Status      int8       `json:"status" gorm:"column:status;not null;default:1;index:idx_pr_status;comment:1草稿 2已退货 3已取消"`
 	Amount      float64    `json:"amount" gorm:"column:amount;type:decimal(14,2);not null;default:0;comment:退货金额（按原采购单价）"`
 	PostedAt    *time.Time `json:"postedAt" gorm:"column:posted_at;index:idx_pr_posted;comment:过账时间"`
+	ReversedAt  *time.Time `json:"reversedAt" gorm:"column:reversed_at;comment:红冲时间（非空表示已整单冲销）"`
 	Reason      string     `json:"reason" gorm:"column:reason;size:500"`
 
 	// 以下是列表展示字段，不落库。供应商/仓库名由 Search 的 join 带出，

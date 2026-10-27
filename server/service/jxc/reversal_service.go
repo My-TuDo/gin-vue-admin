@@ -32,13 +32,14 @@ func NewReversalService() *ReversalService {
 	return &ReversalService{ledger: new(LedgerService)}
 }
 
-// Reverse 对一张采购单/销售单做整单红冲。
+// Reverse 对一张采购单/销售单/采购退货单做整单红冲。
 func (s *ReversalService) Reverse(ctx context.Context, sourceType string, sourceID uint, reason, operator string) (*jxc.StockReversal, error) {
 	if sourceID == 0 {
 		return nil, errors.New("请选择要红冲的单据")
 	}
-	if sourceType != jxc.ReversalSourcePurchase && sourceType != jxc.ReversalSourceSale {
-		return nil, errors.New("红冲来源只能是采购单或销售单")
+	if sourceType != jxc.ReversalSourcePurchase && sourceType != jxc.ReversalSourceSale &&
+		sourceType != jxc.ReversalSourcePurchaseReturn {
+		return nil, errors.New("红冲来源只能是采购单、销售单或采购退货单")
 	}
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
@@ -84,6 +85,18 @@ func (s *ReversalService) Reverse(ctx context.Context, sourceType string, source
 				return errors.New("该销售单已存在退货单（草稿或已入库），不能整单红冲；请先取消退货单，或改用退货处理")
 			}
 			docNo, moveSrc, docID = so.OrderNo, jxc.MoveSourceSaleOut, so.ID
+		case jxc.ReversalSourcePurchaseReturn:
+			var pr jxc.PurchaseReturn
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&pr, sourceID).Error; err != nil {
+				return errors.New("采购退货单不存在")
+			}
+			if pr.Status != jxc.PurchaseReturnStatusPosted {
+				return errors.New("只有已退货的采购退货单可以红冲")
+			}
+			if pr.ReversedAt != nil {
+				return errors.New("该采购退货单已经红冲过了")
+			}
+			docNo, moveSrc, docID = pr.ReturnNo, jxc.MoveSourcePurchaseReturn, pr.ID
 		}
 
 		// 2) 不能重复红冲
@@ -169,8 +182,11 @@ func (s *ReversalService) Reverse(ctx context.Context, sourceType string, source
 		// 7) 标记原单据（保留状态，只加时间戳，避免状态码语义膨胀）
 		now := time.Now()
 		table := "purchase_order"
-		if sourceType == jxc.ReversalSourceSale {
+		switch sourceType {
+		case jxc.ReversalSourceSale:
 			table = "sale_order"
+		case jxc.ReversalSourcePurchaseReturn:
+			table = "purchase_return"
 		}
 		return tx.Table(table).Where("id = ?", docID).Update("reversed_at", now).Error
 	})
@@ -194,24 +210,26 @@ func (s *ReversalService) Search(ctx context.Context, info jxcReq.DocumentSearch
 	info.Normalize()
 	db := global.GVA_DB.WithContext(ctx).Model(&jxc.StockReversal{}).
 		Joins("LEFT JOIN sale_order so ON stock_reversal.source_type = 'sale' AND so.id = stock_reversal.source_id").
-		Joins("LEFT JOIN purchase_order po ON stock_reversal.source_type = 'purchase' AND po.id = stock_reversal.source_id")
+		Joins("LEFT JOIN purchase_order po ON stock_reversal.source_type = 'purchase' AND po.id = stock_reversal.source_id").
+		Joins("LEFT JOIN purchase_return pr ON stock_reversal.source_type = 'purchase_return' AND pr.id = stock_reversal.source_id")
 
 	if info.Status != nil && *info.Status != jxc.ReversalPosted {
 		db = db.Where("1 = 0")
 	}
 	if info.SourceType != "" {
-		if info.SourceType != jxc.ReversalSourcePurchase && info.SourceType != jxc.ReversalSourceSale {
-			return nil, 0, errors.New("sourceType 只能是 purchase 或 sale")
+		if info.SourceType != jxc.ReversalSourcePurchase && info.SourceType != jxc.ReversalSourceSale &&
+			info.SourceType != jxc.ReversalSourcePurchaseReturn {
+			return nil, 0, errors.New("sourceType 只能是 purchase、sale 或 purchase_return")
 		}
 		db = db.Where("stock_reversal.source_type = ?", info.SourceType)
 	}
 	if info.WarehouseID > 0 {
-		db = db.Where("((stock_reversal.source_type = 'sale' AND so.warehouse_id = ?) OR (stock_reversal.source_type = 'purchase' AND po.warehouse_id = ?))",
-			info.WarehouseID, info.WarehouseID)
+		db = db.Where("((stock_reversal.source_type = 'sale' AND so.warehouse_id = ?) OR (stock_reversal.source_type = 'purchase' AND po.warehouse_id = ?) OR (stock_reversal.source_type = 'purchase_return' AND pr.warehouse_id = ?))",
+			info.WarehouseID, info.WarehouseID, info.WarehouseID)
 	}
 	if info.PartnerID > 0 {
-		db = db.Where("((stock_reversal.source_type = 'sale' AND so.customer_id = ?) OR (stock_reversal.source_type = 'purchase' AND po.supplier_id = ?))",
-			info.PartnerID, info.PartnerID)
+		db = db.Where("((stock_reversal.source_type = 'sale' AND so.customer_id = ?) OR (stock_reversal.source_type = 'purchase' AND po.supplier_id = ?) OR (stock_reversal.source_type = 'purchase_return' AND pr.supplier_id = ?))",
+			info.PartnerID, info.PartnerID, info.PartnerID)
 	}
 	if kw := keywordPattern(info.Keyword); kw != "" {
 		db = db.Where("(stock_reversal.reversal_no LIKE ? OR stock_reversal.source_no LIKE ? OR stock_reversal.reason LIKE ?)",
