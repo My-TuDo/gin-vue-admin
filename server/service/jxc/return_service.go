@@ -68,6 +68,7 @@ func (s *ReturnService) Create(ctx context.Context, ret *jxc.SaleReturn) (*jxc.S
 			return err
 		}
 		sold, bySku := aggregateSaleItems(saleItems)
+		costBySku := saleCostBySku(saleItems)
 		returned, err := s.returnedQty(tx, sale.ID)
 		if err != nil {
 			return err
@@ -88,15 +89,18 @@ func (s *ReturnService) Create(ctx context.Context, ret *jxc.SaleReturn) (*jxc.S
 				return fmt.Errorf("SKU %d 最多可退 %d 件（原单 %d，已退 %d）",
 					it.SkuID, canReturn, sold[it.SkuID], returned[it.SkuID])
 			}
-			// 单价与成本都取原单，不接受前端传值
+			// 单价与成本都取原单，不接受前端传值。
+			// 成本按该 SKU 的**原始总成本 / 原始总数量**求均价，而不是取某一行，
+			// 同一 SKU 分多行销售时也能算对。
 			it.Price = orig.Price
 			it.Amount = money.FromYuan(orig.Price).MulQty(it.Qty).Yuan()
-			if orig.Qty > 0 {
-				unit := money.FromYuan(orig.CostAmt).Yuan() / float64(orig.Qty)
-				it.UnitCost = money.FromYuan(unit).Yuan()
+			if sold[it.SkuID] > 0 {
+				unit := money.FromYuan(costBySku[it.SkuID].Yuan() / float64(sold[it.SkuID]))
+				it.UnitCost = unit.Yuan()
+				it.CostAmount = unit.MulQty(it.Qty).Yuan()
 			}
 			amount = amount.Add(money.FromYuan(it.Amount))
-			cost = cost.Add(money.FromYuan(it.UnitCost).MulQty(it.Qty))
+			cost = cost.Add(money.FromYuan(it.CostAmount))
 		}
 
 		no, err := nextOrderNo(tx, "RT")
@@ -177,12 +181,51 @@ func (s *ReturnService) Post(ctx context.Context, id uint, operator string, occu
 			}
 		}
 
+		// 计算本次每一行实际回补的成本。
+		// 若不是"最后一次退货"，按原单均价 × 数量；如果是最后一次，则把
+		// 原单总成本减去历史已退成本后的**全部余额**放在这一行上，
+		// 吸收"100.00 / 3 件 = 33.33"这类分位残差。否则退完三件只回来 99.99。
+		costBySku := saleCostBySku(saleItems)
+		returnedCost, err := s.returnedCost(tx, sale.ID)
+		if err != nil {
+			return err
+		}
+		lastIdx := make(map[uint]int, len(items))
+		for i := range items {
+			lastIdx[items[i].SkuID] = i
+		}
+		allocated := map[uint]money.Cents{}
+		var totalCost money.Cents
 		moves := make([]MoveInput, 0, len(items))
-		for _, it := range items {
+		for i := range items {
+			it := &items[i]
+			unit := money.FromYuan(it.UnitCost)
+			lineCost := unit.MulQty(it.Qty)
+			isLastLine := lastIdx[it.SkuID] == i
+			isFinalReturn := returned[it.SkuID]+thisQty[it.SkuID] == sold[it.SkuID]
+			if isFinalReturn && isLastLine {
+				remaining := costBySku[it.SkuID].Sub(returnedCost[it.SkuID]).Sub(allocated[it.SkuID])
+				if remaining < 0 {
+					return fmt.Errorf("SKU %d 的退货成本异常（原单成本 %s，已退 %s，本次已分配 %s）",
+						it.SkuID, costBySku[it.SkuID], returnedCost[it.SkuID], allocated[it.SkuID])
+				}
+				lineCost = remaining
+			}
+			allocated[it.SkuID] = allocated[it.SkuID].Add(lineCost)
+			it.CostAmount = lineCost.Yuan()
+			totalCost = totalCost.Add(lineCost)
+
+			if err := tx.Model(&jxc.SaleReturnItem{}).Where("id = ?", it.ID).
+				Update("cost_amount", lineCost.Yuan()).Error; err != nil {
+				return err
+			}
+			// 金额按精确值入账；UnitCost 仅作为展示/参考，不再反乘出金额。
+			exact := lineCost
 			moves = append(moves, MoveInput{
 				WarehouseID: ret.WarehouseID, SkuID: it.SkuID,
-				Qty: it.Qty, UnitCost: it.UnitCost, // 正数入库，成本取原单
-				SourceType: jxc.MoveSourceSaleReturn, SourceID: ret.ID, SourceLineID: it.ID,
+				Qty: it.Qty, UnitCost: it.UnitCost,
+				AmountOverride: &exact,
+				SourceType:     jxc.MoveSourceSaleReturn, SourceID: ret.ID, SourceLineID: it.ID,
 				OccurredAt: occurredAt, Operator: operator,
 			})
 		}
@@ -191,7 +234,10 @@ func (s *ReturnService) Post(ctx context.Context, id uint, operator string, occu
 		}
 
 		return tx.Model(&jxc.SaleReturn{}).Where("id = ?", id).
-			Updates(map[string]interface{}{"status": jxc.ReturnStatusPosted, "posted_at": occurredAt}).Error
+			Updates(map[string]interface{}{
+				"status": jxc.ReturnStatusPosted, "posted_at": occurredAt,
+				"cost_amount": totalCost.Yuan(),
+			}).Error
 	})
 }
 
@@ -252,12 +298,13 @@ func (s *ReturnService) Returnable(ctx context.Context, saleID uint) ([]Returnab
 		return nil, err
 	}
 	sold, bySku := aggregateSaleItems(items)
+	costBySku := saleCostBySku(items)
 	out := make([]ReturnableLine, 0, len(items))
 	for _, it := range items {
 		orig := bySku[it.SkuID]
 		var unitCost float64
-		if orig.Qty > 0 {
-			unitCost = money.FromYuan(orig.CostAmt).Yuan() / float64(orig.Qty)
+		if sold[it.SkuID] > 0 {
+			unitCost = money.FromYuan(costBySku[it.SkuID].Yuan() / float64(sold[it.SkuID])).Yuan()
 		}
 		out = append(out, ReturnableLine{
 			SkuID: it.SkuID, SoldQty: sold[it.SkuID], ReturnedQty: returned[it.SkuID],
@@ -278,6 +325,17 @@ func aggregateSaleItems(items []jxc.SaleItem) (map[uint]int, map[uint]jxc.SaleIt
 		bySku[it.SkuID] = it
 	}
 	return sold, bySku
+}
+
+// saleCostBySku 原单每个 SKU 的冻结总成本。
+// 退货成本的分母必须是"这个 SKU 的总数量"，而不是某一行的数量——
+// 同一 SKU 分多行销售时，按某一行算会把成本摊错。
+func saleCostBySku(items []jxc.SaleItem) map[uint]money.Cents {
+	out := map[uint]money.Cents{}
+	for _, it := range items {
+		out[it.SkuID] = out[it.SkuID].Add(money.FromYuan(it.CostAmt))
+	}
+	return out
 }
 
 // ReturnableLine 可退明细
@@ -308,6 +366,31 @@ func (s *ReturnService) returnedQty(db *gorm.DB, saleID uint) (map[uint]int, err
 	out := map[uint]int{}
 	for _, r := range rows {
 		out[r.SkuID] = r.Qty
+	}
+	return out, nil
+}
+
+// returnedCost 已退成本（只统计已入库的退货单）。
+//
+// cost_amount 是本轮新增的"精确回补金额"；老库的历史退货行没有这一列，
+// 用 qty × unit_cost 兜底，迁移后不会把已退成本算成 0。
+func (s *ReturnService) returnedCost(db *gorm.DB, saleID uint) (map[uint]money.Cents, error) {
+	type row struct {
+		SkuID uint
+		Cost  float64
+	}
+	var rows []row
+	err := db.Table("sale_return_item i").
+		Select("i.sku_id AS sku_id, COALESCE(SUM(CASE WHEN i.cost_amount <> 0 THEN i.cost_amount ELSE i.qty * i.unit_cost END),0) AS cost").
+		Joins("JOIN sale_return r ON r.id = i.return_id").
+		Where("r.sale_id = ? AND r.status = ?", saleID, jxc.ReturnStatusPosted).
+		Group("i.sku_id").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := map[uint]money.Cents{}
+	for _, r := range rows {
+		out[r.SkuID] = money.FromYuan(r.Cost)
 	}
 	return out, nil
 }

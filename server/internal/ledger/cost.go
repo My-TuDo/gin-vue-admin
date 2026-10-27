@@ -75,6 +75,10 @@ func (p Position) ApplyOutbound(qty int) (cost money.Cents, after Position, err 
 // 剩余批次的金额被改写成 60，而正确结果是 70。
 //
 // qty 有符号：正数增加、负数减少。减少时不允许把数量或金额冲成负数。
+//
+// 注意：它按"单价 × 数量"算金额。出库成本是移动加权平均后四舍五入到分的，
+// 一条 3 件/100.00 的出库行单价只能是 33.33，再乘 3 就是 99.99。
+// 因此红冲与"最后一次退货"必须走 ApplyAmount，按原账本行/原单的**精确金额**反向。
 func (p Position) ApplyAtCost(qty int, unitCost money.Cents) (Position, error) {
 	if qty == 0 {
 		return p, errors.New("数量不能为 0")
@@ -91,6 +95,37 @@ func (p Position) ApplyAtCost(qty int, unitCost money.Cents) (Position, error) {
 	}
 	if after.Qty == 0 && after.Value != 0 {
 		return p, errors.New("按原价冲回后数量归零但结存金额不为零；该批货很可能已被部分销售")
+	}
+	return after, nil
+}
+
+// ApplyAmount 按**精确金额**增减库存，不经过"单价 × 数量"。
+//
+// 为什么需要它：金额是账本的真相，单价只是展示/参考值。移动加权平均出库时
+// 一条 3 件/100.00 的账本行单价只能是 33.33，若红冲按 33.33×3=99.99 反向，
+// 就会永久留下 0.01 的残差。退货也有同样的问题：原单 3 件 100.00，分三次退，
+// 前两次各 33.33，最后一次必须退 33.34 才能把原成本恰好退完。
+//
+// qty 有符号，amount 有符号且方向必须与 qty 一致；减少时不允许把数量或金额冲成负数。
+func (p Position) ApplyAmount(qty int, amount money.Cents) (Position, error) {
+	if qty == 0 {
+		return p, errors.New("数量不能为 0")
+	}
+	if amount != 0 && (amount > 0) != (qty > 0) {
+		return p, errors.New("金额方向与数量方向不一致")
+	}
+	if qty < 0 && -qty > p.Qty {
+		return p, errors.New("结存不足")
+	}
+	after := Position{Qty: p.Qty + qty, Value: p.Value + amount}
+	if after.Qty < 0 {
+		return p, errors.New("结存数量不能为负")
+	}
+	if after.Value < 0 {
+		return p, errors.New("结存金额不能为负")
+	}
+	if after.Qty == 0 && after.Value != 0 {
+		return p, errors.New("数量归零但结存金额不为零；该批货很可能已被部分销售，或存在分位残差")
 	}
 	return after, nil
 }

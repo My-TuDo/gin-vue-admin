@@ -42,6 +42,13 @@ type MoveInput struct {
 	OccurredAt   time.Time
 	Operator     string
 	ReversalOf   *uint // 红冲时指向被冲销的账本行
+
+	// AmountOverride 精确金额（仅退货入库使用）。
+	// 退货要按原单成本回补，而原单成本除以数量后往往不是整分：
+	// 3 件 100.00 的单，前两次各退 33.33，最后一次必须退 33.34。
+	// 只传 UnitCost 无法表达这个残差，所以在"最后一次退货"上用它把金额钉死。
+	// 为 nil 时仍按 UnitCost × Qty 计算。
+	AmountOverride *money.Cents
 }
 
 // 允许的出入方向（防止把退货单当成出库这类错用）
@@ -67,6 +74,16 @@ func (m MoveInput) validate() error {
 	}
 	if m.OccurredAt.IsZero() {
 		return errors.New("业务发生时间不能为空")
+	}
+	if m.AmountOverride != nil {
+		// 精确金额只用于退货残差吸收；其它来源必须由成本方法推导，避免调用方
+		// 用"随便传一个金额"绕过移动加权平均。
+		if m.SourceType != jxc.MoveSourceSaleReturn {
+			return errors.New("只有退货入库可以指定精确金额")
+		}
+		if *m.AmountOverride != 0 && (*m.AmountOverride > 0) != (m.Qty > 0) {
+			return errors.New("精确金额的方向必须与数量方向一致")
+		}
 	}
 	switch {
 	case inboundTypes[m.SourceType]:
@@ -175,15 +192,27 @@ func (s *LedgerService) postTx(ctx context.Context, tx *gorm.DB, moves []MoveInp
 				return errors.New("红冲失败：冲销数量必须与原账本行数量相反")
 			}
 			unitCost = money.FromYuan(orig.UnitCost)
-			after, err = pos.ApplyAtCost(m.Qty, unitCost)
+			// 按被冲销账本行的**精确金额**反向，而不是"单价 × 数量"。
+			// 出库单价是移动加权平均后四舍五入到分的，乘回去会差 1 分：
+			// 3 件/100.00 的出库行单价 33.33，按单价冲只回来 99.99。
+			amount = money.FromYuan(orig.Amount).Neg()
+			after, err = pos.ApplyAmount(m.Qty, amount)
 			if err != nil {
 				return fmt.Errorf("红冲失败：SKU %d %w", m.SkuID, err)
 			}
-			amount = unitCost.MulQty(m.Qty)
 		case m.Qty > 0:
 			unitCost = money.FromYuan(m.UnitCost)
-			amount = unitCost.MulQty(m.Qty)
-			after = pos.ApplyInbound(m.Qty, unitCost)
+			if m.AmountOverride != nil {
+				// 退货残差：数量按明细，金额按原单剩余成本精确回补。
+				amount = *m.AmountOverride
+				after, err = pos.ApplyAmount(m.Qty, amount)
+				if err != nil {
+					return fmt.Errorf("入库失败：SKU %d %w", m.SkuID, err)
+				}
+			} else {
+				amount = unitCost.MulQty(m.Qty)
+				after = pos.ApplyInbound(m.Qty, unitCost)
+			}
 		default:
 			cost, next, err := pos.ApplyOutbound(-m.Qty)
 			if err != nil {

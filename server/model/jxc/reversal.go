@@ -73,14 +73,19 @@ func (SaleReturn) TableName() string { return "sale_return" }
 // SaleReturnItem 退货明细。
 // UnitCost 来自**原销售单出库时冻结的成本**，不是当前均价——
 // 用当前成本退，等于用今天的成本改写上个月的毛利。
+//
+// CostAmount 是这一行实际回补的**精确成本金额**。为什么不能只存 UnitCost：
+// 原单 3 件 100.00 时单价只能是 33.33，分三次退各乘 3 会少 1 分；
+// 最后一次退货把这 1 分吸收进 CostAmount，账本金额才能精确回到 100.00。
 type SaleReturnItem struct {
-	ID       uint    `json:"ID" gorm:"primarykey"`
-	ReturnID uint    `json:"returnId" gorm:"column:return_id;not null;index"`
-	SkuID    uint    `json:"skuId" gorm:"column:sku_id;not null"`
-	Qty      int     `json:"qty" gorm:"column:qty;not null"`
-	Price    float64 `json:"price" gorm:"column:price;type:decimal(12,2);not null;default:0;comment:原售价"`
-	Amount   float64 `json:"amount" gorm:"column:amount;type:decimal(14,2);not null;default:0"`
-	UnitCost float64 `json:"unitCost" gorm:"column:unit_cost;type:decimal(12,2);not null;default:0;comment:原出库成本"`
+	ID         uint    `json:"ID" gorm:"primarykey"`
+	ReturnID   uint    `json:"returnId" gorm:"column:return_id;not null;index"`
+	SkuID      uint    `json:"skuId" gorm:"column:sku_id;not null"`
+	Qty        int     `json:"qty" gorm:"column:qty;not null"`
+	Price      float64 `json:"price" gorm:"column:price;type:decimal(12,2);not null;default:0;comment:原售价"`
+	Amount     float64 `json:"amount" gorm:"column:amount;type:decimal(14,2);not null;default:0"`
+	UnitCost   float64 `json:"unitCost" gorm:"column:unit_cost;type:decimal(12,2);not null;default:0;comment:原出库成本"`
+	CostAmount float64 `json:"costAmount" gorm:"column:cost_amount;type:decimal(14,2);not null;default:0;comment:本行实际回补成本金额（吸收分位残差）"`
 }
 
 func (SaleReturnItem) TableName() string { return "sale_return_item" }

@@ -131,6 +131,48 @@ func TestApplyAtCost_Guards(t *testing.T) {
 	}
 }
 
+// TestApplyAmount_ExactReversal 精确金额反向：3 件/100.00 的出库行单价只能是
+// 33.33，按单价乘回去会差 0.01；按原金额反向必须精确归零。
+func TestApplyAmount_ExactReversal(t *testing.T) {
+	// 出库后结存 0；红冲把 3 件/100.00 原样加回
+	p := Position{}
+	after, err := p.ApplyAmount(3, c(100))
+	if err != nil {
+		t.Fatalf("精确金额入库失败: %v", err)
+	}
+	if after.Qty != 3 || after.Value != c(100) {
+		t.Fatalf("应为 3 件 / 100.00，实际 %d / %s", after.Qty, after.Value)
+	}
+	// 再按精确金额 -100 冲回，必须精确归零（按单价 33.33×3 会留 0.01）
+	back, err := after.ApplyAmount(-3, c(-100))
+	if err != nil {
+		t.Fatalf("精确金额冲回失败: %v", err)
+	}
+	if back.Qty != 0 || back.Value != 0 {
+		t.Fatalf("精确冲回后必须归零，实际 %d / %s", back.Qty, back.Value)
+	}
+}
+
+func TestApplyAmount_Guards(t *testing.T) {
+	p := Position{Qty: 3, Value: c(100)}
+	if _, err := p.ApplyAmount(1, c(-1)); err == nil {
+		t.Error("金额方向与数量方向不一致应报错")
+	}
+	if _, err := p.ApplyAmount(-4, c(-10)); err == nil {
+		t.Error("冲回数量超过结存应报错")
+	}
+	if _, err := p.ApplyAmount(0, c(1)); err == nil {
+		t.Error("数量为 0 应报错")
+	}
+	// 冲掉 3 件只回 1 元，数量归零但金额不为零，必须拒绝
+	if _, err := p.ApplyAmount(-3, c(-1)); err == nil {
+		t.Error("数量归零但金额不为零应报错")
+	}
+	if _, err := p.ApplyAmount(1, c(-1)); err == nil {
+		t.Error("正数量配负金额应报错")
+	}
+}
+
 func TestApplyOutbound_Guards(t *testing.T) {
 	if _, _, err := (Position{}).ApplyOutbound(1); err == nil {
 		t.Error("结存 0 时出库应报错")
