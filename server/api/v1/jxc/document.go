@@ -124,6 +124,31 @@ func (a *DocumentApi) CreateSale(c *gin.Context) {
 	response.OkWithData(order, c)
 }
 
+// CheckoutSale 开单并出库（单事务，原子）
+//
+// @Tags      JxcSale
+// @Summary   开单并出库（一次请求完成预留+出库）
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     data         body      jxcmodel.SaleOrder  true  "warehouseId + items[{skuId,qty}]"
+// @Param     occurredAt   query     string              false "补录业务时间，默认当前时间"
+// @Success   200          {object}  response.Response{data=jxcmodel.SaleOrder,msg=string}
+// @Router    /jxc/sale/checkout [post]
+func (a *DocumentApi) CheckoutSale(c *gin.Context) {
+	var req jxcmodel.SaleOrder
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage("请求参数错误："+err.Error(), c)
+		return
+	}
+	order, err := jxcsvc.ServiceGroupApp.Sale.CreateAndShip(c.Request.Context(), &req, operator(c), parseOccurredAt(c))
+	if err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithData(order, c)
+}
+
 // ShipSale 销售出库（产生账本行并回填成本）
 func (a *DocumentApi) ShipSale(c *gin.Context) {
 	id, ok := parseID(c)

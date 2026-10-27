@@ -26,6 +26,7 @@ func (r *DocumentRouter) InitDocumentRouter(router *gin.RouterGroup) {
 	sale := router.Group("jxc/sale")
 	{
 		sale.POST("", api.CreateSale)
+		sale.POST("checkout", api.CheckoutSale)
 		sale.GET("page", api.GetSalePage)
 		sale.GET(":id", api.GetSale)
 		sale.POST(":id/ship", api.ShipSale)
