@@ -16,5 +16,6 @@ func (r *LedgerRouter) InitLedgerRouter(router *gin.RouterGroup) {
 		g.GET("balance", api.GetBalances)
 		g.GET("moves", api.GetMoves)
 		g.GET("reconcile", api.Reconcile)
+		g.GET("reconcile/last", api.GetLastReconcile)
 	}
 }

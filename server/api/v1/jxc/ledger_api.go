@@ -1,10 +1,10 @@
 package jxc
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
-	"github.com/flipped-aurora/gin-vue-admin/server/internal/ledger"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/common/response"
 	jxcsvc "github.com/flipped-aurora/gin-vue-admin/server/service/jxc"
 	"github.com/gin-gonic/gin"
@@ -45,21 +45,41 @@ func (a *LedgerApi) GetMoves(c *gin.Context) {
 	response.OkWithData(response.PageResult{List: list, Total: total, Page: page, PageSize: size}, c)
 }
 
-// Reconcile 一键对账：返回所有不变量违规（空表示账是平的）
+// Reconcile 一键对账：执行一次校验并缓存结果。
 func (a *LedgerApi) Reconcile(c *gin.Context) {
 	warehouseID, _ := strconv.ParseUint(c.DefaultQuery("warehouseId", "0"), 10, 64)
-	vs, err := jxcsvc.ServiceGroupApp.Ledger.Reconcile(c.Request.Context(), uint(warehouseID))
+	res, err := jxcsvc.ServiceGroupApp.Ledger.Check(c.Request.Context(), uint(warehouseID))
 	if err != nil {
 		global.GVA_LOG.Error("对账失败", zap.Error(err))
 		response.FailWithMessage("对账失败", c)
 		return
 	}
-	if vs == nil {
-		vs = []ledger.Violation{}
+	response.OkWithData(res, c)
+}
+
+// GetLastReconcile
+// @Tags      JxcLedger
+// @Summary   最近一次对账结果（不触发扫描）
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     warehouseId  query     int  false  "仓库ID；0=全部"
+// @Success   200          {object}  response.Response{data=jxcsvc.ReconcileResult,msg=string}
+// @Router    /jxc/ledger/reconcile/last [get]
+func (a *LedgerApi) GetLastReconcile(c *gin.Context) {
+	warehouseID, _ := strconv.ParseUint(c.DefaultQuery("warehouseId", "0"), 10, 64)
+	id := uint(warehouseID)
+	res := jxcsvc.ServiceGroupApp.Ledger.LastReconcile(id)
+	if res == nil {
+		scope := "all"
+		if id > 0 {
+			scope = fmt.Sprintf("warehouse:%d", id)
+		}
+		response.OkWithData(gin.H{
+			"ok": false, "checkedAt": nil, "durationMs": 0, "scope": scope,
+			"checkedSkus": 0, "count": 0, "violations": []interface{}{}, "stale": true,
+		}, c)
+		return
 	}
-	response.OkWithData(gin.H{
-		"ok":         len(vs) == 0,
-		"violations": vs,
-		"count":      len(vs),
-	}, c)
+	response.OkWithData(res, c)
 }

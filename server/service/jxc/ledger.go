@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
@@ -388,9 +389,42 @@ func (s *LedgerService) ReleaseReservation(ctx context.Context, db *gorm.DB, sou
 
 // ============ 对账 ============
 
-// Reconcile 校验某仓库（warehouseID=0 表示全部）的账本与余额是否一致。
-// 这是"一键对账"的后端实现：返回空表示账是平的。
-func (s *LedgerService) Reconcile(ctx context.Context, warehouseID uint) ([]ledger.Violation, error) {
+// ReconcileResult 一次对账的完整结果，也用于"最近一次对账"。
+type ReconcileResult struct {
+	OK          bool               `json:"ok"`
+	CheckedAt   time.Time          `json:"checkedAt"`
+	DurationMs  int64              `json:"durationMs"`
+	Scope       string             `json:"scope"`
+	CheckedSkus int                `json:"checkedSkus"`
+	Count       int                `json:"count"`
+	Violations  []ledger.Violation `json:"violations"`
+	// Stale 仅由 LastReconcile 设置：结果超过 TTL 仍可查看，但不应被当成"刚刚校验过"。
+	Stale bool `json:"stale"`
+}
+
+const reconcileCacheTTL = 60 * time.Second
+
+type reconcileSnapshot struct {
+	result ReconcileResult
+	at     time.Time
+}
+
+var reconcileCache = struct {
+	sync.RWMutex
+	m map[uint]reconcileSnapshot
+}{m: map[uint]reconcileSnapshot{}}
+
+func reconcileScope(warehouseID uint) string {
+	if warehouseID == 0 {
+		return "all"
+	}
+	return fmt.Sprintf("warehouse:%d", warehouseID)
+}
+
+// Check 执行一次对账并缓存结果。warehouseID=0 表示全部仓库。
+// 这是"一键对账"的后端实现：返回的 Violations 为空表示账是平的。
+func (s *LedgerService) Check(ctx context.Context, warehouseID uint) (*ReconcileResult, error) {
+	started := time.Now()
 	db := global.GVA_DB.WithContext(ctx)
 
 	// 只把聚合结果读进内存：流水表可能有百万行，直接 Find 全部会 OOM，
@@ -457,7 +491,47 @@ func (s *LedgerService) Reconcile(ctx context.Context, warehouseID uint) ([]ledg
 	for _, r := range reservations {
 		rs = append(rs, ledger.ReservationRow{WarehouseID: r.WarehouseID, SkuID: r.SkuID, Qty: r.Qty, Status: jxc.ReservationActive})
 	}
-	return ledger.Check(bs, es, rs), nil
+	violations := ledger.Check(bs, es, rs)
+	if violations == nil {
+		violations = []ledger.Violation{}
+	}
+	res := &ReconcileResult{
+		OK:          len(violations) == 0,
+		CheckedAt:   time.Now(),
+		DurationMs:  time.Since(started).Milliseconds(),
+		Scope:       reconcileScope(warehouseID),
+		CheckedSkus: len(balances),
+		Count:       len(violations),
+		Violations:  violations,
+	}
+	reconcileCache.Lock()
+	reconcileCache.m[warehouseID] = reconcileSnapshot{result: *res, at: res.CheckedAt}
+	reconcileCache.Unlock()
+	return res, nil
+}
+
+// Reconcile 兼容旧调用：返回违规列表（空表示账是平的）。
+func (s *LedgerService) Reconcile(ctx context.Context, warehouseID uint) ([]ledger.Violation, error) {
+	res, err := s.Check(ctx, warehouseID)
+	if err != nil {
+		return nil, err
+	}
+	return res.Violations, nil
+}
+
+// LastReconcile 返回最近一次对账结果；没有结果时返回 nil。
+// 结果超过 TTL 不会被删除，但会标记 Stale，前端可以显示"上次检查（已过期）"。
+func (s *LedgerService) LastReconcile(warehouseID uint) *ReconcileResult {
+	reconcileCache.RLock()
+	snap, ok := reconcileCache.m[warehouseID]
+	reconcileCache.RUnlock()
+	if !ok {
+		return nil
+	}
+	res := snap.result
+	res.Violations = append([]ledger.Violation(nil), snap.result.Violations...)
+	res.Stale = time.Since(snap.at) > reconcileCacheTTL
+	return &res
 }
 
 // BalanceRow 余额行（带 SKU 展示信息，供前端表格用）
