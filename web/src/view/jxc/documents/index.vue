@@ -46,7 +46,7 @@
         <el-table v-loading="loading" :data="purchases" size="small">
           <el-table-column label="单号" width="170">
             <template #default="{ row }">
-              <el-button link type="primary" class="mono" @click="openDetail('sale', row)">{{ row.orderNo }}</el-button>
+              <el-button link type="primary" class="mono" @click="openDetail('purchase', row)">{{ row.orderNo }}</el-button>
             </template>
           </el-table-column>
           <el-table-column label="状态" width="110">

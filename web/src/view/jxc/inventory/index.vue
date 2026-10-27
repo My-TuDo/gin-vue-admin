@@ -92,14 +92,19 @@
             </el-tooltip>
           </template>
         </el-table-column>
-        <!-- 结存：这一笔之后还剩多少。只在单 SKU 视图里算，跨 SKU 混排会看不懂 -->
+        <!-- 结存：这一笔之后还剩多少。由后端按 id 顺序算，翻页也正确 -->
         <el-table-column label="结存" width="80" align="right">
-          <template #default="{ row }">{{ row.balance ?? '—' }}</template>
+          <template #default="{ row }">{{ row.balanceAfter ?? '—' }}</template>
         </el-table-column>
         <el-table-column label="操作人" min-width="80">
           <template #default="{ row }">{{ row.operator || '—' }}</template>
         </el-table-column>
       </el-table>
+      <div v-if="moves.length < moveTotal" class="more">
+        <el-button :loading="loadingMore" size="small" @click="loadMoreMoves">
+          加载更多（已显示 {{ moves.length }} / {{ moveTotal }} 条）
+        </el-button>
+      </div>
     </el-drawer>
 
     <!-- 对账结果：要么通过，要么说清差额与可能原因 -->
@@ -142,8 +147,11 @@ const loading = ref(false)
 const drawer = ref(false)
 const moves = ref([])
 const loadingMoves = ref(false)
+const loadingMore = ref(false)
 const currentSku = ref(null)
 const drawerTitle = ref('')
+const movePage = ref(1)
+const moveTotal = ref(0)
 
 const reconDialog = ref(false)
 const reconing = ref(false)
@@ -187,24 +195,45 @@ const load = async () => {
   }
 }
 
+const fetchMoves = async (page) => {
+  const row = currentSku.value
+  const res = await ledgerMoves({
+    warehouseId: row.warehouseId, skuId: row.skuId, page, pageSize: 200
+  })
+  if (res.code !== 0) {
+    ElMessage.error(res.msg || '加载流水失败')
+    return null
+  }
+  moveTotal.value = Number(res.data.total || 0)
+  return res.data.list || []
+}
+
 const openMoves = async (row) => {
   currentSku.value = row
   drawerTitle.value = `${row.goodsName} ${row.color}/${row.size}（${row.skuCode}）的库存流水`
   drawer.value = true
   loadingMoves.value = true
+  movePage.value = 1
+  moves.value = []
   try {
-    const res = await ledgerMoves({ warehouseId: row.warehouseId, skuId: row.skuId, page: 1, pageSize: 200 })
-    const list = res.code === 0 ? res.data.list || [] : []
-    // 接口按 id 倒序返回；结存要从最早一笔往后累加，所以先反转再算，最后翻回来展示
-    let running = 0
-    const asc = [...list].reverse()
-    for (const mv of asc) {
-      running += mv.qty
-      mv.balance = running
-    }
-    moves.value = asc.reverse()
+    // 结存由后端算：前端只拿到当前页，按页从 0 累加会算错（尤其是第 2 页以后）
+    moves.value = (await fetchMoves(1)) || []
   } finally {
     loadingMoves.value = false
+  }
+}
+
+const loadMoreMoves = async () => {
+  if (loadingMore.value) return
+  loadingMore.value = true
+  try {
+    const next = await fetchMoves(movePage.value + 1)
+    if (next) {
+      moves.value = moves.value.concat(next)
+      movePage.value += 1
+    }
+  } finally {
+    loadingMore.value = false
   }
 }
 
@@ -270,6 +299,10 @@ onMounted(async () => {
 }
 .inv-body {
   min-height: 0;
+}
+.more {
+  text-align: center;
+  padding: 10px 0;
 }
 .recon-ok {
   text-align: center;

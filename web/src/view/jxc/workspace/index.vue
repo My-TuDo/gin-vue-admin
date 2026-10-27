@@ -59,7 +59,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import MoneyText from '@/components/jxc/MoneyText.vue'
-import { ledgerBalances, ledgerMoves, pagePurchase, pageSale } from '@/api/jxc'
+import { ledgerBalances, ledgerMoves, pagePurchase, pageReturn, pageSale } from '@/api/jxc'
 
 const loading = ref(false)
 const moves = ref([])
@@ -87,11 +87,12 @@ const isToday = (s) => {
 onMounted(async () => {
   loading.value = true
   try {
-    const [bal, mv, sales, purchases] = await Promise.all([
+    const [bal, mv, sales, purchases, returns] = await Promise.all([
       ledgerBalances({}),
       ledgerMoves({ page: 1, pageSize: 15 }),
       pageSale({ page: 1, pageSize: 100 }),
-      pagePurchase({ page: 1, pageSize: 100 })
+      pagePurchase({ page: 1, pageSize: 100 }),
+      pageReturn({ page: 1, pageSize: 100 })
     ])
 
     if (bal.code === 0) {
@@ -105,12 +106,27 @@ onMounted(async () => {
       // 注意：GVA 的 GVA_MODEL 没给 CreatedAt 加 json tag，所以字段名是大写 CreatedAt。
       // 这里同时兼容两种写法，避免以后加了 tag 又静默失效。
       const created = (o) => o.postedAt || o.CreatedAt || o.createdAt
-      const list = (sales.data.list || []).filter((o) => o.status === 2 && isToday(created(o)))
+      // 已红冲的单不能算今日销售；退货要冲减销售额与成本
+      const list = (sales.data.list || []).filter(
+        (o) => o.status === 2 && !o.reversedAt && isToday(created(o))
+      )
       stats.todayOrders = list.length
-      stats.todayAmount = list.reduce((s, o) => s + Number(o.totalAmount || 0), 0)
-      const cost = list.reduce((s, o) => s + Number(o.costAmount || 0), 0)
-      stats.todayGross = Math.round((stats.todayAmount - cost) * 100) / 100
+      const saleAmount = list.reduce((s, o) => s + Number(o.totalAmount || 0), 0)
+      const saleCost = list.reduce((s, o) => s + Number(o.costAmount || 0), 0)
       stats.toShip = (sales.data.list || []).filter((o) => o.status === 1).length
+
+      let returnAmount = 0
+      let returnCost = 0
+      if (returns.code === 0) {
+        for (const r of returns.data.list || []) {
+          if (r.status === 2 && isToday(r.postedAt)) {
+            returnAmount += Number(r.amount || 0)
+            returnCost += Number(r.costAmount || 0)
+          }
+        }
+      }
+      stats.todayAmount = Math.round((saleAmount - returnAmount) * 100) / 100
+      stats.todayGross = Math.round((saleAmount - returnAmount - (saleCost - returnCost)) * 100) / 100
     }
     if (purchases.code === 0) {
       const list = purchases.data.list || []

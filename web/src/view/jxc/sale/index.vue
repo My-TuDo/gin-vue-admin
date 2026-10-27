@@ -1,10 +1,10 @@
 <template>
-  <div class="sale-page" @keydown="onKeydown">
+  <div class="sale-page">
     <!-- 左：选货。点卡片直接进右侧明细，不弹窗（弹窗会遮挡上下文） -->
     <section class="picker">
       <div class="picker-head">
         <el-input ref="searchRef" v-model="keyword" placeholder="扫码 / 搜索商品名、条码（按 / 聚焦）"
-          clearable size="default" @keydown.enter.prevent="addFirstMatch">
+          clearable size="default" @keydown.enter.prevent="onSearchEnter">
           <template #prefix><span class="kbd">/</span></template>
         </el-input>
         <el-select v-model="warehouseId" placeholder="选择仓库" style="width: 150px" @change="loadBalances">
@@ -87,7 +87,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import MoneyText from '@/components/jxc/MoneyText.vue'
-import { createSale, ledgerBalances, listGoods, listWarehouses, shipSale } from '@/api/jxc'
+import { cancelSale, createSale, ledgerBalances, listGoods, listWarehouses, shipSale } from '@/api/jxc'
 
 const warehouses = ref([])
 const warehouseId = ref(null)
@@ -170,6 +170,13 @@ const addFirstMatch = () => {
   else ElMessage.warning('该商品没有可售规格')
 }
 
+// 搜索框里的 Enter 是"加入当前匹配项"；Ctrl/Cmd+Enter 是"整单出库"，
+// 不能顺手再加一件（否则提交前数量多 1，实测踩到）。
+const onSearchEnter = (e) => {
+  if (e.ctrlKey || e.metaKey) return
+  addFirstMatch()
+}
+
 const reset = () => {
   lines.value = []
   paid.value = 0
@@ -192,7 +199,15 @@ const submit = async () => {
     orderNo.value = created.data.orderNo
 
     const shipped = await shipSale(id)
-    if (shipped.code !== 0) return ElMessage.error(shipped.msg || '出库失败')
+    if (shipped.code !== 0) {
+      // 开单成功但出库失败（例如可售库存在此期间被别人买走）时，
+      // 草稿单会继续占着预留。这里主动取消，避免"失败一次、库存被锁一次"。
+      const canceled = await cancelSale(id)
+      const hint = canceled.code === 0
+        ? '草稿单已自动取消并释放预留'
+        : `草稿单 ${orderNo.value} 未能自动取消，请到「单据」里手动取消`
+      return ElMessage.error(`${shipped.msg || '出库失败'}（${hint}）`)
+    }
 
     const detail = await import('@/api/jxc').then((m) => m.getSale(id))
     const order = detail.code === 0 ? detail.data : null
@@ -210,19 +225,36 @@ const submit = async () => {
   }
 }
 
+const isTyping = (el) => {
+  if (!el) return false
+  return ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable
+}
+
+// 键盘快捷键挂在 window 上：挂在页面 div 上时，只有焦点正好在 div 内才生效，
+// 从导航点进来后焦点在 body，Ctrl+Enter 会静默失灵。
 const onKeydown = (e) => {
-  if (e.key === '/' && e.target.tagName !== 'INPUT') {
+  if (e.key === '/' && !isTyping(e.target)) {
     e.preventDefault()
     searchRef.value?.focus()
+    return
   }
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault()
     submit()
+    return
   }
-  if (e.key === 'Escape') reset()
+  if (e.key === 'Escape') {
+    // 正在输入时 Esc 只退出输入，不能把整车货清空（误触代价太大）
+    if (isTyping(e.target)) {
+      e.target.blur()
+      return
+    }
+    reset()
+  }
 }
 
 onMounted(async () => {
+  window.addEventListener('keydown', onKeydown)
   await loadGoods()
   const res = await listWarehouses()
   if (res.code === 0) {
@@ -234,6 +266,7 @@ onMounted(async () => {
   }
 })
 onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
   lastResult.value = null
 })
 </script>

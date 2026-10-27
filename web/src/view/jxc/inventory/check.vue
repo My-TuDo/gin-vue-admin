@@ -40,7 +40,7 @@
     <el-drawer v-model="drawer" :title="current?.checkNo || '盘点'" size="720px">
       <div class="hint">
         账面上的数在建单时已快照；录入实盘数后点「完成」，差异会生成盘盈/盘亏账本行，
-        <b>不会直接改库存</b>。
+        <b>不会直接改库存</b>。盘盈行请填写成本单价（期初建账尤其重要），否则库存金额会一直是 0。
       </div>
       <el-table :data="current?.items || []" size="small" max-height="520">
         <el-table-column prop="skuId" label="SKU" width="70" />
@@ -57,8 +57,14 @@
             <span v-else :class="diffTone(row)">{{ row.actualQty - row.bookQty > 0 ? '+' : '' }}{{ row.actualQty - row.bookQty }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="成本单价" width="110" align="right">
-          <template #default="{ row }"><MoneyText :value="row.unitCost" /></template>
+        <el-table-column label="成本单价" width="140" align="right">
+          <template #default="{ row }">
+            <!-- 盘盈/期初建账必须能填成本，否则库存有数量、金额为 0，卖出去就是 100% 毛利 -->
+            <el-input-number v-if="current?.status === 1 && row.actualQty > row.bookQty"
+              v-model="row.unitCost" :min="0" :precision="2" size="small" controls-position="right"
+              style="width: 118px" />
+            <MoneyText v-else :value="row.unitCost" />
+          </template>
         </el-table-column>
       </el-table>
       <template #footer>
@@ -129,6 +135,7 @@ const open = async (row) => {
   current.value = res.data
   current.value.items = (res.data.items || []).map((i) => ({
     ...i,
+    unitCost: Number(i.unitCost || 0),
     actualQty: i.actualQty === null || i.actualQty === undefined ? i.bookQty : i.actualQty
   }))
   drawer.value = true
@@ -137,7 +144,11 @@ const open = async (row) => {
 const saveItems = async () => {
   const items = current.value.items
     .filter((i) => i.actualQty !== null && i.actualQty !== undefined)
-    .map((i) => ({ id: i.ID, actualQty: Number(i.actualQty) }))
+    .map((i) => ({
+      id: i.ID,
+      actualQty: Number(i.actualQty),
+      ...(i.actualQty > i.bookQty ? { unitCost: Number(i.unitCost || 0) } : {})
+    }))
   if (items.length === 0) return ElMessage.warning('请先录入实盘数')
   const res = await updateCheckItems(current.value.ID, items)
   if (res.code !== 0) return ElMessage.error(res.msg)
@@ -149,7 +160,11 @@ const finish = async (row) => {
   await ElMessageBox.confirm('完成后差异会写入账本，盘点单不可再改。确认完成？', '完成盘点', { type: 'warning' })
   const items = (current.value?.ID === row.ID ? current.value.items : row.items || [])
     .filter((i) => i.actualQty !== null && i.actualQty !== undefined)
-    .map((i) => ({ id: i.ID, actualQty: Number(i.actualQty) }))
+    .map((i) => ({
+      id: i.ID,
+      actualQty: Number(i.actualQty),
+      ...(i.actualQty > i.bookQty ? { unitCost: Number(i.unitCost || 0) } : {})
+    }))
   if (items.length) {
     const saved = await updateCheckItems(row.ID, items)
     if (saved.code !== 0) return ElMessage.error(saved.msg)

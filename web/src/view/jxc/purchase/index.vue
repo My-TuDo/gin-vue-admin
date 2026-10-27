@@ -14,7 +14,8 @@
 
       <div class="rows">
         <div v-for="(l, i) in lines" :key="i" class="row">
-          <el-select v-model="l.skuId" filterable placeholder="选择规格（条码/颜色尺码）" style="flex: 1">
+          <el-select v-model="l.skuId" filterable placeholder="选择规格（条码/颜色尺码）" style="flex: 1"
+            @change="onSkuChange(l)">
             <el-option v-for="s in skus" :key="s.ID" :label="`${s.skuCode}  ${s.color}/${s.size}`" :value="s.ID" />
           </el-select>
           <el-input-number v-model="l.qty" :min="1" size="small" controls-position="right" style="width: 100px" />
@@ -54,6 +55,12 @@ const saving = ref(false)
 const total = computed(() => lines.value.reduce((s, l) => s + l.qty * l.unitCost, 0))
 
 const addRow = () => lines.value.push({ skuId: null, qty: 1, unitCost: 0 })
+
+// 选规格后带出参考进价，省得每次翻上次的进货价；仍可手改
+const onSkuChange = (line) => {
+  const sku = skus.value.find((s) => s.ID === line.skuId)
+  if (sku) line.unitCost = Number(sku.refCost || 0)
+}
 
 
 const submit = async () => {
