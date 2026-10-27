@@ -31,6 +31,7 @@ func bizModel() error {
 		&jxc.SaleReturnItem{},
 		&jxc.StockCheck{},
 		&jxc.StockCheckItem{},
+		&jxc.DocSequence{},
 	)
 	if err != nil {
 		return err

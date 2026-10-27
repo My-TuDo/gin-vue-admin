@@ -68,6 +68,33 @@ func (p Position) ApplyOutbound(qty int) (cost money.Cents, after Position, err 
 	return cost, Position{Qty: p.Qty - qty, Value: p.Value - cost}, nil
 }
 
+// ApplyAtCost 按指定单价增减库存，不经过移动加权平均。
+//
+// 只用于红冲：红冲必须按**原账本行的单价**精确反向，才能让金额抵消。
+// 如果走 ApplyOutbound（当前移动均价），"10@5 + 10@7 后冲掉 10@5" 会按 6 元冲，
+// 剩余批次的金额被改写成 60，而正确结果是 70。
+//
+// qty 有符号：正数增加、负数减少。减少时不允许把数量或金额冲成负数。
+func (p Position) ApplyAtCost(qty int, unitCost money.Cents) (Position, error) {
+	if qty == 0 {
+		return p, errors.New("数量不能为 0")
+	}
+	if unitCost < 0 {
+		return p, errors.New("单价不能为负")
+	}
+	if qty < 0 && -qty > p.Qty {
+		return p, errors.New("结存不足")
+	}
+	after := Position{Qty: p.Qty + qty, Value: p.Value + unitCost.MulQty(qty)}
+	if after.Value < 0 {
+		return p, errors.New("按原价冲回后结存金额为负")
+	}
+	if after.Qty == 0 && after.Value != 0 {
+		return p, errors.New("按原价冲回后数量归零但结存金额不为零；该批货很可能已被部分销售")
+	}
+	return after, nil
+}
+
 // roundDiv 整数除法四舍五入（对齐到"分"）
 func roundDiv(a, b int64) int64 {
 	if b == 0 {

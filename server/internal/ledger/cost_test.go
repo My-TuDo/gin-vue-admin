@@ -87,13 +87,47 @@ func TestApplyOutbound_PartialKeepsResidual(t *testing.T) {
 	if after.Qty != 2 || after.Value != c(66.67) {
 		t.Errorf("应为 2 件 / 66.67，实际 %d / %s", after.Qty, after.Value)
 	}
-	// 再清空，残差必须被吸收
-	cost2, after2, _ := p.ApplyOutbound(1)
-	_ = cost2
-	cost3, after3, _ := after.ApplyOutbound(2)
-	_ = cost3
-	if after2.Value+after3.Value != 0 || after3.Qty != 0 {
-		t.Logf("中间值 %s / %s（仅确认最终归零）", after2.Value, after3.Value)
+	// 再清空：剩余 2 件应结转全部 66.67，残差被吸收，余额精确归零
+	cost2, after2, err := after.ApplyOutbound(2)
+	if err != nil {
+		t.Fatalf("清空失败: %v", err)
+	}
+	if cost2 != c(66.67) {
+		t.Errorf("清空应结转剩余 66.67，实际 %s", cost2)
+	}
+	if after2.Qty != 0 || after2.Value != 0 {
+		t.Errorf("最终应精确归零，实际 %d / %s", after2.Qty, after2.Value)
+	}
+}
+
+// TestApplyAtCost_Reversal 红冲按原单价反向，而不是当前均价。
+func TestApplyAtCost_Reversal(t *testing.T) {
+	// 10@5 + 10@7 = 20 件 / 120，均价 6
+	p := Position{Qty: 20, Value: c(120)}
+	after, err := p.ApplyAtCost(-10, c(5))
+	if err != nil {
+		t.Fatalf("按原价冲回失败: %v", err)
+	}
+	// 冲掉第一张 10@5 后，剩余的是第二批 10@7
+	if after.Qty != 10 || after.Value != c(70) {
+		t.Fatalf("应为 10 件 / 70.00，实际 %d / %s", after.Qty, after.Value)
+	}
+}
+
+func TestApplyAtCost_Guards(t *testing.T) {
+	p := Position{Qty: 3, Value: c(100)}
+	if _, err := p.ApplyAtCost(-4, c(10)); err == nil {
+		t.Error("冲回数量超过结存应报错")
+	}
+	if _, err := p.ApplyAtCost(0, c(10)); err == nil {
+		t.Error("数量为 0 应报错")
+	}
+	if _, err := p.ApplyAtCost(1, c(-1)); err == nil {
+		t.Error("负单价应报错")
+	}
+	// 按 1 元冲掉 3 件会让金额变成 97，数量归零但金额不为零，必须拒绝
+	if _, err := p.ApplyAtCost(-3, c(1)); err == nil {
+		t.Error("数量归零但金额不为零应报错")
 	}
 }
 
