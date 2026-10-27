@@ -18,7 +18,7 @@ SET NAMES utf8mb4;
 
 DELETE FROM casbin_rule WHERE ptype = 'p' AND v1 LIKE '/jxc/%';
 
--- 超级管理员（54 条）
+-- 超级管理员（55 条）
 INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','888','/jxc/master/warehouses','GET'),
   ('p','888','/jxc/master/warehouses','POST'),
@@ -47,6 +47,7 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','888','/jxc/purchase-return/:id/post','POST'),
   ('p','888','/jxc/purchase-return/:id/cancel','POST'),
   ('p','888','/jxc/sale','POST'),
+  ('p','888','/jxc/sale/checkout','POST'),
   ('p','888','/jxc/sale/page','GET'),
   ('p','888','/jxc/sale/:id','GET'),
   ('p','888','/jxc/sale/:id/ship','POST'),
@@ -75,7 +76,7 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','888','/jxc/period/snapshot','GET'),
   ('p','888','/jxc/period/summary','GET');
 
--- 老板（54 条）
+-- 老板（55 条）
 INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9001','/jxc/master/warehouses','GET'),
   ('p','9001','/jxc/master/warehouses','POST'),
@@ -104,6 +105,7 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9001','/jxc/purchase-return/:id/post','POST'),
   ('p','9001','/jxc/purchase-return/:id/cancel','POST'),
   ('p','9001','/jxc/sale','POST'),
+  ('p','9001','/jxc/sale/checkout','POST'),
   ('p','9001','/jxc/sale/page','GET'),
   ('p','9001','/jxc/sale/:id','GET'),
   ('p','9001','/jxc/sale/:id/ship','POST'),
@@ -132,7 +134,7 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9001','/jxc/period/snapshot','GET'),
   ('p','9001','/jxc/period/summary','GET');
 
--- 店长（52 条）
+-- 店长（53 条）
 INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9002','/jxc/master/warehouses','GET'),
   ('p','9002','/jxc/master/warehouses','POST'),
@@ -161,6 +163,7 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9002','/jxc/purchase-return/:id/post','POST'),
   ('p','9002','/jxc/purchase-return/:id/cancel','POST'),
   ('p','9002','/jxc/sale','POST'),
+  ('p','9002','/jxc/sale/checkout','POST'),
   ('p','9002','/jxc/sale/page','GET'),
   ('p','9002','/jxc/sale/:id','GET'),
   ('p','9002','/jxc/sale/:id/ship','POST'),
@@ -187,7 +190,7 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9002','/jxc/period/snapshot','GET'),
   ('p','9002','/jxc/period/summary','GET');
 
--- 店员（24 条）
+-- 店员（25 条）
 INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9003','/jxc/master/warehouses','GET'),
   ('p','9003','/jxc/master/goods','GET'),
@@ -196,6 +199,7 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','9003','/jxc/purchase/page','GET'),
   ('p','9003','/jxc/purchase/:id','GET'),
   ('p','9003','/jxc/sale','POST'),
+  ('p','9003','/jxc/sale/checkout','POST'),
   ('p','9003','/jxc/sale/page','GET'),
   ('p','9003','/jxc/sale/:id','GET'),
   ('p','9003','/jxc/sale/:id/ship','POST'),
