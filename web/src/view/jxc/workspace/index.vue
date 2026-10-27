@@ -28,7 +28,7 @@
       <MetricTile label="今日销售额（净）" icon="lucide:receipt">
         <MoneyText :value="stats.todayAmount" size="xl" strong />
         <template #hint>
-          {{ stats.todayOrders }} 单 · 退货 {{ stats.todayReturns }} 单冲减
+          {{ ordersHint }} · 退货 {{ stats.todayReturns }} 单冲减
           <MoneyText :value="stats.returnAmount" size="xs" muted />
         </template>
       </MetricTile>
@@ -188,6 +188,7 @@ const stats = reactive({
   skuCount: 0,
   todayAmount: 0,
   todayOrders: 0,
+  reversedOrders: 0,
   todayGross: 0,
   returnAmount: 0,
   todayReturns: 0,
@@ -203,6 +204,10 @@ const stats = reactive({
 
 const grossMargin = computed(() => marginOf(stats.todayGross, stats.todayAmount))
 const grossMarginText = computed(() => (grossMargin.value === null ? '—' : formatPercent(grossMargin.value)))
+const ordersHint = computed(() => {
+  const base = `${stats.todayOrders} 单`
+  return stats.reversedOrders > 0 ? `${base}（含 ${stats.reversedOrders} 张已红冲）` : base
+})
 const lowStockDescription = computed(() => `可售 ≤ ${stats.lowStockThreshold} · 共 ${stats.lowStockCount} 个`)
 
 const tasks = computed(() => [
@@ -232,6 +237,7 @@ const load = async () => {
         skuCount: Number(data.skuCount) || 0,
         todayAmount: Number(data.todaySalesAmount) || 0,
         todayOrders: Number(data.todaySalesOrders) || 0,
+        reversedOrders: Number(data.todaySalesOrdersReversed) || 0,
         todayGross: Number(data.todayGross) || 0,
         returnAmount: Number(data.todayReturnAmount) || 0,
         todayReturns: Number(data.todayReturnOrders) || 0,

@@ -11,6 +11,12 @@ import { useStorage } from '@vueuse/core'
 import { useThemeStore } from '@/pinia'
 import { clearCachedThemeSettings } from '@/theme/shared'
 
+// 进销存角色默认落到 /jxc/workspace，而不是 GVA 的 dashboard。
+// 888 超管也走这里；壳层保留「返回管理后台」入口。
+const JXC_AUTHORITY_IDS = [888, 9001, 9002, 9003, 8881]
+const isJxcAuthority = (user) =>
+  JXC_AUTHORITY_IDS.includes(Number(user?.authority?.authorityId))
+
 export const useUserStore = defineStore('user', () => {
   const themeStore = useThemeStore()
   const loadingInstance = ref(null)
@@ -90,8 +96,17 @@ export const useUserStore = defineStore('user', () => {
         router.addRoute(asyncRouter)
       })
 
-      if(router.currentRoute.value.query.redirect) {
+      const isWindows = /windows/i.test(navigator.userAgent)
+      window.localStorage.setItem('osType', isWindows ? 'WIN' : 'MAC')
+
+      if (router.currentRoute.value.query.redirect) {
         await router.replace(router.currentRoute.value.query.redirect)
+        return true
+      }
+
+      // 进销存账号登录即进入工作台，不再依赖 GVA 的 dashboard 默认菜单。
+      if (isJxcAuthority(userInfo.value)) {
+        await router.replace('/jxc/workspace')
         return true
       }
 
@@ -100,9 +115,6 @@ export const useUserStore = defineStore('user', () => {
       } else {
         await router.replace({ name: userInfo.value.authority.defaultRouter })
       }
-
-      const isWindows = /windows/i.test(navigator.userAgent)
-      window.localStorage.setItem('osType', isWindows ? 'WIN' : 'MAC')
 
       // 全部操作均结束，关闭loading并返回
       return true

@@ -25,7 +25,7 @@
       <MetricTile label="销售额（净）" icon="lucide:receipt">
         <MoneyText :value="summary.salesAmount" size="xl" strong />
         <template #hint>
-          {{ summary.salesOrders }} 单 · 退货 {{ summary.returnOrders }} 单冲减
+          {{ ordersHint }} · 退货 {{ summary.returnOrders }} 单冲减
           <MoneyText :value="summary.returnAmount" size="xs" muted />
         </template>
       </MetricTile>
@@ -83,7 +83,12 @@
           </div>
           <div class="bg-container px-3 py-2.5">
             <div class="text-[10.5px] text-muted-foreground">销售单</div>
-            <div class="mt-0.5 text-[16px] font-semibold tabular-nums">{{ summary.salesOrders }}</div>
+            <div class="mt-0.5 flex items-baseline gap-1 text-[16px] font-semibold tabular-nums">
+              {{ summary.salesOrders }}
+              <span v-if="summary.salesOrdersReversed > 0" class="text-[9.5px] font-normal text-muted-foreground">
+                含 {{ summary.salesOrdersReversed }} 张红冲
+              </span>
+            </div>
           </div>
           <div class="bg-container px-3 py-2.5">
             <div class="text-[10.5px] text-muted-foreground">退货单</div>
@@ -178,7 +183,7 @@ const now = new Date()
 const month = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
 const summary = reactive({
   salesAmount: 0, salesCost: 0, gross: 0, stockValue: 0,
-  salesOrders: 0, returnOrders: 0, returnAmount: 0, returnCost: 0,
+  salesOrders: 0, salesOrdersReversed: 0, returnOrders: 0, returnAmount: 0, returnCost: 0,
   purchaseAmount: 0, purchaseReturnAmount: 0
 })
 const periods = ref([])
@@ -199,6 +204,10 @@ const costPercent = computed(() => {
   return Math.max(0, Math.min(100, Math.round((summary.salesCost / summary.salesAmount) * 100)))
 })
 const grossPercent = computed(() => Math.max(0, 100 - costPercent.value))
+const ordersHint = computed(() => {
+  const base = `${summary.salesOrders} 单`
+  return summary.salesOrdersReversed > 0 ? `${base}（含 ${summary.salesOrdersReversed} 张已红冲）` : base
+})
 const currentClosed = computed(() => periods.value.some((item) => item.periodMonth === month.value && item.status === 2))
 const snapTotalValue = computed(() => round2(snapshots.value.reduce((sum, row) => sum + Number(row.value || 0), 0)))
 
@@ -210,7 +219,7 @@ const loadSummary = async () => {
   if (res.code !== 0) return ElMessage.error(res.msg || '加载月报失败')
   Object.assign(summary, {
     salesAmount: 0, salesCost: 0, gross: 0, stockValue: 0,
-    salesOrders: 0, returnOrders: 0, returnAmount: 0, returnCost: 0,
+    salesOrders: 0, salesOrdersReversed: 0, returnOrders: 0, returnAmount: 0, returnCost: 0,
     purchaseAmount: 0, purchaseReturnAmount: 0,
     ...(res.data || {})
   })

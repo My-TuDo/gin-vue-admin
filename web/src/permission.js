@@ -15,6 +15,11 @@ Nprogress.configure({
 // 白名单路由
 const WHITE_LIST = ['Login', 'Init']
 
+// 进销存角色已登录时回自己的首页，不回到 GVA dashboard。
+const JXC_AUTHORITY_IDS = [888, 9001, 9002, 9003, 8881]
+const isJxcAuthority = (userStore) =>
+  JXC_AUTHORITY_IDS.includes(Number(userStore.userInfo?.authority?.authorityId))
+
 function isExternalUrl(val) {
   return typeof val === 'string' && /^(https?:)?\/\//.test(val)
 }
@@ -175,7 +180,10 @@ router.beforeEach(async (to, from) => {
       if(!routerStore.asyncRouterFlag){
         await setupRouter(userStore)
       }
-      if(userStore.userInfo.authority.defaultRouter){
+      if (isJxcAuthority(userStore)) {
+        return { path: '/jxc/workspace' }
+      }
+      if (userStore.userInfo.authority.defaultRouter) {
         return { name: userStore.userInfo.authority.defaultRouter }
       }
     }

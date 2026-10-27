@@ -50,6 +50,7 @@
           </div>
         </div>
         <button
+          v-if="isAdmin"
           type="button"
           class="mt-1 flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[11px] text-white/40 transition-colors hover:bg-white/5 hover:text-white/75"
           @click="router.push('/layout/dashboard')"
@@ -161,6 +162,7 @@ const paletteItems = computed(() => {
 
 const userName = computed(() => userStore.userInfo.nickName || userStore.userInfo.userName || '管理员')
 const authorityName = computed(() => userStore.userInfo.authority?.authorityName || '工作台用户')
+const isAdmin = computed(() => Number(userStore.userInfo.authority?.authorityId) === 888)
 const userInitial = computed(() => (userName.value || '管').slice(0, 1).toUpperCase())
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '')
