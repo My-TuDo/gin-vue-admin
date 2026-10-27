@@ -9,7 +9,7 @@
 --   9001 老板         —— 全量（与 888 一致，便于把超管账号留给运维）
 --   9002 店长         —— 除「红冲」「月结」外的全部（这两件事影响历史账，必须老板拍板）
 --   9003 店员         —— 只做开单/退货/盘点录入 + 查询，不能采购入库、不能红冲、不能结账
---   8881 只读         —— GVA 自带测试角色，仅查询
+--   8881 只读         —— GVA 自带普通用户子角色，这里只授查询
 --
 -- 使用：mysql -u root -p erp_v3 < docs/sql/jxc-casbin.sql
 -- 执行后**必须重启后端**（casbin enforcer 有进程内缓存，不重启会一直报权限不足）。
@@ -18,7 +18,7 @@ SET NAMES utf8mb4;
 
 DELETE FROM casbin_rule WHERE ptype = 'p' AND v1 LIKE '/jxc/%';
 
--- 超级管理员（37 条）
+-- 超级管理员（39 条）
 INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','888','/jxc/master/warehouses','GET'),
   ('p','888','/jxc/master/warehouses','POST'),
