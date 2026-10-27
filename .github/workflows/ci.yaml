@@ -89,6 +89,41 @@ jobs:
         working-directory: ./server
         continue-on-error: true
 
+  backend-jxc:
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'release'
+    name: Backend JXC (MySQL)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: "123456"
+          MYSQL_ROOT_HOST: "%"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -p123456"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.24
+          cache-dependency-path: server/go.sum
+
+      - name: Test JXC integration
+        # 进销存的集成测试必须跑真 MySQL（行锁、唯一索引、ON DUPLICATE KEY 的行为
+        # 在 sqlite 上不可信）。这是硬门禁：不再 continue-on-error。
+        env:
+          JXC_IT_MYSQL_BASE: root:123456@tcp(127.0.0.1:3306)
+        run: go test ./service/jxc ./internal/ledger -count=1
+        working-directory: ./server
+
   devops-test:
     if: github.ref == 'refs/heads/test'
     name: devops-test
