@@ -36,6 +36,16 @@ func (s *PurchaseService) Create(ctx context.Context, order *jxc.PurchaseOrder) 
 	if err := ensureWarehouse(db, order.WarehouseID); err != nil {
 		return nil, err
 	}
+	if order.SupplierID != nil && *order.SupplierID > 0 {
+		var cnt int64
+		if err := db.Model(&jxc.Partner{}).
+			Where("id = ? AND kind = ?", *order.SupplierID, jxc.PartnerSupplier).Count(&cnt).Error; err != nil {
+			return nil, err
+		}
+		if cnt == 0 {
+			return nil, errors.New("供应商不存在")
+		}
+	}
 	total, err := normalizePurchaseItems(db, order.Items)
 	if err != nil {
 		return nil, err

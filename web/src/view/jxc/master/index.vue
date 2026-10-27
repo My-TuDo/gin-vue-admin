@@ -22,6 +22,24 @@
         </el-table>
       </el-tab-pane>
 
+      <el-tab-pane label="往来单位" name="partner">
+        <div class="toolbar">
+          <el-radio-group v-model="partnerKind" @change="loadPartners">
+            <el-radio-button label="supplier">供应商</el-radio-button>
+            <el-radio-button label="customer">客户</el-radio-button>
+          </el-radio-group>
+          <div class="spacer"></div>
+          <el-button type="primary" @click="openPartner">新建{{ partnerKind === 'supplier' ? '供应商' : '客户' }}</el-button>
+        </div>
+        <el-table v-loading="loadingPartner" :data="partners" size="small">
+          <el-table-column prop="code" label="编码" width="140" />
+          <el-table-column prop="name" label="名称" min-width="160" />
+          <el-table-column prop="contact" label="联系人" width="110" />
+          <el-table-column prop="phone" label="电话" width="140" />
+          <el-table-column prop="address" label="地址" min-width="180" />
+        </el-table>
+      </el-tab-pane>
+
       <el-tab-pane label="仓库" name="warehouse">
         <div class="toolbar">
           <div class="spacer"></div>
@@ -64,6 +82,20 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="partnerDialog" :title="`新建${partnerKind === 'supplier' ? '供应商' : '客户'}`" width="460px">
+      <el-form label-width="80px">
+        <el-form-item label="编码"><el-input v-model="partner.code" placeholder="如 GYS-001" /></el-form-item>
+        <el-form-item label="名称"><el-input v-model="partner.name" /></el-form-item>
+        <el-form-item label="联系人"><el-input v-model="partner.contact" /></el-form-item>
+        <el-form-item label="电话"><el-input v-model="partner.phone" /></el-form-item>
+        <el-form-item label="地址"><el-input v-model="partner.address" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="partnerDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="submitPartner">保存</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="whDialog" title="新建仓库" width="420px">
       <el-form label-width="80px">
         <el-form-item label="编码"><el-input v-model="wh.code" placeholder="如 WH1" /></el-form-item>
@@ -80,7 +112,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { createGoods, createWarehouse, listGoods, listWarehouses } from '@/api/jxc'
+import { createGoods, createPartner, createWarehouse, listGoods, listPartners, listWarehouses } from '@/api/jxc'
 
 const tab = ref('goods')
 const kw = ref('')
@@ -94,6 +126,11 @@ const goodsDialog = ref(false)
 const whDialog = ref(false)
 
 const form = reactive({ code: '', name: '', skus: [] })
+const partners = ref([])
+const partnerKind = ref('supplier')
+const partnerDialog = ref(false)
+const loadingPartner = ref(false)
+const partner = reactive({ code: '', name: '', contact: '', phone: '', address: '' })
 const wh = reactive({ code: '', name: '' })
 
 const filteredGoods = computed(() => {
@@ -165,9 +202,39 @@ const submitWh = async () => {
   }
 }
 
+const loadPartners = async () => {
+  loadingPartner.value = true
+  try {
+    const res = await listPartners(partnerKind.value)
+    partners.value = res.code === 0 ? res.data || [] : []
+  } finally {
+    loadingPartner.value = false
+  }
+}
+
+const openPartner = () => {
+  Object.assign(partner, { code: '', name: '', contact: '', phone: '', address: '' })
+  partnerDialog.value = true
+}
+
+const submitPartner = async () => {
+  if (!partner.code || !partner.name) return ElMessage.warning('编码与名称必填')
+  saving.value = true
+  try {
+    const res = await createPartner({ ...partner, kind: partnerKind.value })
+    if (res.code !== 0) return ElMessage.error(res.msg || '保存失败')
+    ElMessage.success('已创建')
+    partnerDialog.value = false
+    await loadPartners()
+  } finally {
+    saving.value = false
+  }
+}
+
 onMounted(() => {
   loadGoods()
   loadWarehouses()
+  loadPartners()
 })
 </script>
 

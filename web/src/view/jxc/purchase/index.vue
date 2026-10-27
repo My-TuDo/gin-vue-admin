@@ -4,6 +4,9 @@
       <div class="panel-head">
         <span class="title">新建采购单</span>
         <div class="spacer"></div>
+        <el-select v-model="supplierId" placeholder="供应商（可空）" clearable style="width: 170px">
+          <el-option v-for="s in suppliers" :key="s.ID" :label="s.name" :value="s.ID" />
+        </el-select>
         <el-select v-model="warehouseId" placeholder="入库仓库" style="width: 150px">
           <el-option v-for="w in warehouses" :key="w.ID" :label="w.name" :value="w.ID" />
         </el-select>
@@ -38,9 +41,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import MoneyText from '@/components/jxc/MoneyText.vue'
-import { createPurchase, listSkus, listWarehouses } from '@/api/jxc'
+import { createPurchase, listPartners, listSkus, listWarehouses } from '@/api/jxc'
 
 const warehouses = ref([])
+const suppliers = ref([])
+const supplierId = ref(null)
 const warehouseId = ref(null)
 const skus = ref([])
 const lines = ref([])
@@ -59,6 +64,7 @@ const submit = async () => {
   try {
     const res = await createPurchase({
       warehouseId: warehouseId.value,
+      supplierId: supplierId.value || null,
       items: items.map((l) => ({ skuId: l.skuId, qty: l.qty, unitCost: l.unitCost }))
     })
     if (res.code !== 0) return ElMessage.error(res.msg || '创建失败')
@@ -73,12 +79,13 @@ const submit = async () => {
 
 
 onMounted(async () => {
-  const [w, s] = await Promise.all([listWarehouses(), listSkus({})])
+  const [w, s, sp] = await Promise.all([listWarehouses(), listSkus({}), listPartners('supplier')])
   if (w.code === 0) {
     warehouses.value = w.data || []
     if (warehouses.value.length) warehouseId.value = warehouses.value[0].ID
   }
   if (s.code === 0) skus.value = s.data || []
+  if (sp.code === 0) suppliers.value = sp.data || []
 })
 </script>
 

@@ -10,4 +10,5 @@ type RouterGroup struct {
 	ReturnRouter
 	CheckRouter
 	PeriodRouter
+	PartnerRouter
 }

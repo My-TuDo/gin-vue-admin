@@ -8,6 +8,8 @@ export const createWarehouse = (data) => service({ url: '/jxc/master/warehouses'
 export const listGoods = () => service({ url: '/jxc/master/goods', method: 'get' })
 export const createGoods = (data) => service({ url: '/jxc/master/goods', method: 'post', data })
 export const listSkus = (params) => service({ url: '/jxc/master/skus', method: 'get', params })
+export const listPartners = (kind) => service({ url: '/jxc/master/partners', method: 'get', params: { kind } })
+export const createPartner = (data) => service({ url: '/jxc/master/partners', method: 'post', data })
 
 // ---------- 采购 ----------
 export const createPurchase = (data) => service({ url: '/jxc/purchase', method: 'post', data })

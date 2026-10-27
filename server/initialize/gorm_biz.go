@@ -16,6 +16,7 @@ func bizModel() error {
 		&jxc.Warehouse{},
 		&jxc.Goods{},
 		&jxc.GoodsSku{},
+		&jxc.Partner{},
 		&jxc.StockMove{},
 		&jxc.StockBalance{},
 		&jxc.StockReservation{},

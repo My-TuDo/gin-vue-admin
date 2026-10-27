@@ -164,3 +164,26 @@ type StockBalanceSnapshot struct {
 }
 
 func (StockBalanceSnapshot) TableName() string { return "stock_balance_snapshot" }
+
+// 往来单位类型
+const (
+	PartnerSupplier = "supplier" // 供应商
+	PartnerCustomer = "customer" // 客户
+)
+
+// Partner 往来单位（供应商 / 客户）。
+// 用一张表 + kind 字段而不是两张表：字段完全一致，报表也常常"按往来单位汇总"，
+// 分成两张表只会让查询与前端多一倍分支。
+type Partner struct {
+	global.GVA_MODEL
+	Kind    string `json:"kind" gorm:"column:kind;size:16;not null;index;comment:supplier/customer"`
+	Code    string `json:"code" gorm:"column:code;size:50;not null;uniqueIndex:uk_partner_code;comment:编码"`
+	Name    string `json:"name" gorm:"column:name;size:100;not null;comment:名称"`
+	Contact string `json:"contact" gorm:"column:contact;size:50;comment:联系人"`
+	Phone   string `json:"phone" gorm:"column:phone;size:30;comment:电话"`
+	Address string `json:"address" gorm:"column:address;size:200;comment:地址"`
+	Remark  string `json:"remark" gorm:"column:remark;size:500"`
+	Status  int8   `json:"status" gorm:"column:status;not null;default:1;comment:1启用 0停用"`
+}
+
+func (Partner) TableName() string { return "jxc_partner" }

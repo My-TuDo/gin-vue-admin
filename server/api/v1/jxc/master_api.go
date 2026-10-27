@@ -150,3 +150,46 @@ func (a *MasterApi) ListSkus(c *gin.Context) {
 	}
 	response.OkWithData(list, c)
 }
+
+// ---------- 往来单位（供应商 / 客户） ----------
+
+// ListPartners 列表，kind 可过滤
+func (a *MasterApi) ListPartners(c *gin.Context) {
+	kind := c.DefaultQuery("kind", "")
+	db := global.GVA_DB.WithContext(c.Request.Context()).Model(&jxcmodel.Partner{})
+	if kind != "" {
+		db = db.Where("kind = ?", kind)
+	}
+	var list []jxcmodel.Partner
+	if err := db.Order("id desc").Limit(1000).Find(&list).Error; err != nil {
+		global.GVA_LOG.Error("获取往来单位失败", zap.Error(err))
+		response.FailWithMessage("获取往来单位失败", c)
+		return
+	}
+	response.OkWithData(list, c)
+}
+
+// CreatePartner 新建往来单位
+func (a *MasterApi) CreatePartner(c *gin.Context) {
+	var req jxcmodel.Partner
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage("请求参数错误："+err.Error(), c)
+		return
+	}
+	if req.Kind != jxcmodel.PartnerSupplier && req.Kind != jxcmodel.PartnerCustomer {
+		response.FailWithMessage("类型只能是供应商或客户", c)
+		return
+	}
+	if req.Code == "" || req.Name == "" {
+		response.FailWithMessage("编码与名称不能为空", c)
+		return
+	}
+	if req.Status == 0 {
+		req.Status = 1
+	}
+	if err := global.GVA_DB.WithContext(c.Request.Context()).Create(&req).Error; err != nil {
+		response.FailWithMessage("创建失败："+err.Error(), c)
+		return
+	}
+	response.OkWithData(req, c)
+}

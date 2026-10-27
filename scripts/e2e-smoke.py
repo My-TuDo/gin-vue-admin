@@ -4,7 +4,7 @@
 
 用法：python scripts/e2e-smoke.py --base http://127.0.0.1:8888 --password Admin@123456
 """
-import argparse, json, sys, urllib.request
+import argparse, json, sys, time, urllib.request
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -45,9 +45,13 @@ def main():
     TOKEN = must(call(base, "/base/login", "POST", {"username": a.user, "password": a.password}), "登录")["token"]
     ok("登录成功")
 
-    wh = must(call(base, "/jxc/master/warehouses", "POST", {"code": "WH-SMOKE", "name": "冒烟仓"}), "建仓")["ID"]
-    g = must(call(base, "/jxc/master/goods", "POST", {"code": "SMOKE-1", "name": "冒烟商品",
-        "skus": [{"color": "黑", "size": "M", "skuCode": "SMOKE-1-BK-M", "salePrice": 100}]}), "建商品")
+    # 每次用一套全新的仓库+商品：冒烟要断言绝对数量，复用旧数据会被上一轮污染
+    tag = str(int(time.time()))[-6:]
+    wh = must(call(base, "/jxc/master/warehouses", "POST",
+                   {"code": f"WH-SMOKE-{tag}", "name": f"冒烟仓{tag}"}), "建仓")["ID"]
+    g = must(call(base, "/jxc/master/goods", "POST",
+                  {"code": f"SMOKE-{tag}", "name": "冒烟商品",
+                   "skus": [{"color": "黑", "size": "M", "skuCode": f"SMOKE-{tag}-BK-M", "salePrice": 100}]}), "建商品")
     sku = g["skus"][0]["ID"]
     ok(f"基础资料：仓库 {wh} / SKU {sku}")
 
