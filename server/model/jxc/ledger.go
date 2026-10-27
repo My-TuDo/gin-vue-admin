@@ -54,14 +54,15 @@ func (GoodsSku) TableName() string { return "goods_sku" }
 
 // 账本来源类型。写入后不再变更，报表与追溯都靠它。
 const (
-	MoveSourcePurchaseIn = "purchase_in" // 采购入库
-	MoveSourceSaleOut    = "sale_out"    // 销售出库
-	MoveSourceSaleReturn = "sale_return" // 退货入库（成本取原单）
-	MoveSourceDirectIn   = "direct_in"   // 直接入库
-	MoveSourceDirectOut  = "direct_out"  // 直接出库
-	MoveSourceCheckGain  = "check_gain"  // 盘盈
-	MoveSourceCheckLoss  = "check_loss"  // 盘亏
-	MoveSourceReversal   = "reversal"    // 红冲（配合 ReversalOf 指向被冲销行）
+	MoveSourcePurchaseIn     = "purchase_in"     // 采购入库
+	MoveSourcePurchaseReturn = "purchase_return" // 采购退货出库（成本取原采购价）
+	MoveSourceSaleOut        = "sale_out"        // 销售出库
+	MoveSourceSaleReturn     = "sale_return"     // 退货入库（成本取原单）
+	MoveSourceDirectIn       = "direct_in"       // 直接入库
+	MoveSourceDirectOut      = "direct_out"      // 直接出库
+	MoveSourceCheckGain      = "check_gain"      // 盘盈
+	MoveSourceCheckLoss      = "check_loss"      // 盘亏
+	MoveSourceReversal       = "reversal"        // 红冲（配合 ReversalOf 指向被冲销行）
 )
 
 // StockMove 库存账本行。只允许 INSERT。

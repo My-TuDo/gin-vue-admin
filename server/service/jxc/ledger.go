@@ -59,9 +59,10 @@ var inboundTypes = map[string]bool{
 	jxc.MoveSourceCheckGain:  true,
 }
 var outboundTypes = map[string]bool{
-	jxc.MoveSourceSaleOut:   true,
-	jxc.MoveSourceDirectOut: true,
-	jxc.MoveSourceCheckLoss: true,
+	jxc.MoveSourcePurchaseReturn: true,
+	jxc.MoveSourceSaleOut:        true,
+	jxc.MoveSourceDirectOut:      true,
+	jxc.MoveSourceCheckLoss:      true,
 }
 
 // validate 校验单条移动的语义
@@ -78,8 +79,8 @@ func (m MoveInput) validate() error {
 	if m.AmountOverride != nil {
 		// 精确金额只用于退货残差吸收；其它来源必须由成本方法推导，避免调用方
 		// 用"随便传一个金额"绕过移动加权平均。
-		if m.SourceType != jxc.MoveSourceSaleReturn {
-			return errors.New("只有退货入库可以指定精确金额")
+		if m.SourceType != jxc.MoveSourceSaleReturn && m.SourceType != jxc.MoveSourcePurchaseReturn {
+			return errors.New("只有退货（销售退货入库/采购退货出库）可以指定精确金额")
 		}
 		if *m.AmountOverride != 0 && (*m.AmountOverride > 0) != (m.Qty > 0) {
 			return errors.New("精确金额的方向必须与数量方向一致")
@@ -214,13 +215,25 @@ func (s *LedgerService) postTx(ctx context.Context, tx *gorm.DB, moves []MoveInp
 				after = pos.ApplyInbound(m.Qty, unitCost)
 			}
 		default:
-			cost, next, err := pos.ApplyOutbound(-m.Qty)
-			if err != nil {
-				return fmt.Errorf("出库失败：SKU %d %w", m.SkuID, err)
+			if m.AmountOverride != nil {
+				// 采购退货必须按原采购单价出库，不能走当前移动加权平均：
+				// 供应商按原价退款，账上却按今天的均价减成本，差额会凭空出现。
+				// 与销售退货一样，金额由 Service 精确给出，这里只做方向/结存校验。
+				unitCost = money.FromYuan(m.UnitCost)
+				amount = *m.AmountOverride
+				after, err = pos.ApplyAmount(m.Qty, amount)
+				if err != nil {
+					return fmt.Errorf("出库失败：SKU %d %w", m.SkuID, err)
+				}
+			} else {
+				cost, next, err := pos.ApplyOutbound(-m.Qty)
+				if err != nil {
+					return fmt.Errorf("出库失败：SKU %d %w", m.SkuID, err)
+				}
+				unitCost = money.FromYuan(cost.Yuan() / float64(-m.Qty))
+				amount = cost.Neg()
+				after = next
 			}
-			unitCost = money.FromYuan(cost.Yuan() / float64(-m.Qty))
-			amount = cost.Neg()
-			after = next
 		}
 
 		// 5) 可售量不得为负（卖超必须挡住）
@@ -533,12 +546,13 @@ var sourceNoTable = map[string]struct {
 	table  string
 	column string
 }{
-	jxc.MoveSourcePurchaseIn: {"purchase_order", "order_no"},
-	jxc.MoveSourceSaleOut:    {"sale_order", "order_no"},
-	jxc.MoveSourceSaleReturn: {"sale_return", "return_no"},
-	jxc.MoveSourceCheckGain:  {"stock_check", "check_no"},
-	jxc.MoveSourceCheckLoss:  {"stock_check", "check_no"},
-	jxc.MoveSourceReversal:   {"stock_reversal", "reversal_no"},
+	jxc.MoveSourcePurchaseIn:     {"purchase_order", "order_no"},
+	jxc.MoveSourcePurchaseReturn: {"purchase_return", "return_no"},
+	jxc.MoveSourceSaleOut:        {"sale_order", "order_no"},
+	jxc.MoveSourceSaleReturn:     {"sale_return", "return_no"},
+	jxc.MoveSourceCheckGain:      {"stock_check", "check_no"},
+	jxc.MoveSourceCheckLoss:      {"stock_check", "check_no"},
+	jxc.MoveSourceReversal:       {"stock_reversal", "reversal_no"},
 }
 
 // Moves 账本流水（分页，按发生时间倒序）

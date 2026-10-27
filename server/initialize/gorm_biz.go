@@ -24,6 +24,8 @@ func bizModel() error {
 		&jxc.StockBalanceSnapshot{},
 		&jxc.PurchaseOrder{},
 		&jxc.PurchaseItem{},
+		&jxc.PurchaseReturn{},
+		&jxc.PurchaseReturnItem{},
 		&jxc.SaleOrder{},
 		&jxc.SaleItem{},
 		&jxc.StockReversal{},

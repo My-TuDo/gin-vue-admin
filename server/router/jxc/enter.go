@@ -4,6 +4,7 @@ package jxc
 // 与 GVA 生态保持一致：业务路由一律挂在 PrivateGroup 下（JWT + Casbin + DataScope）。
 type RouterGroup struct {
 	DocumentRouter
+	PurchaseReturnRouter
 	LedgerRouter
 	MasterRouter
 	ReversalRouter

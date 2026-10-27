@@ -274,7 +274,7 @@ func existingMaxSeq(tx *gorm.DB, prefix, date string) (int, error) {
 	// 单纯按字符串排序会把 999 当成最大。
 	if err := tx.Unscoped().Table(meta.table).
 		Where(meta.column+" LIKE ?", like).
-		Order("LENGTH(" + meta.column + ") DESC, " + meta.column + " DESC").Limit(1).
+		Order("LENGTH("+meta.column+") DESC, "+meta.column+" DESC").Limit(1).
 		Pluck(meta.column, &maxNo).Error; err != nil {
 		return 0, err
 	}
@@ -297,6 +297,7 @@ var orderNoTables = map[string]struct {
 	column string
 }{
 	"PO": {"purchase_order", "order_no"},
+	"PR": {"purchase_return", "return_no"},
 	"SO": {"sale_order", "order_no"},
 	"RT": {"sale_return", "return_no"},
 	"PD": {"stock_check", "check_no"},

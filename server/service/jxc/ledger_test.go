@@ -68,6 +68,7 @@ func newLedgerTestDB(t *testing.T) *gorm.DB {
 		&jxc.StockMove{}, &jxc.StockBalance{}, &jxc.StockReservation{},
 		&jxc.AccountingPeriod{}, &jxc.StockBalanceSnapshot{},
 		&jxc.PurchaseOrder{}, &jxc.PurchaseItem{},
+		&jxc.PurchaseReturn{}, &jxc.PurchaseReturnItem{},
 		&jxc.SaleOrder{}, &jxc.SaleItem{},
 		&jxc.StockReversal{}, &jxc.SaleReturn{}, &jxc.SaleReturnItem{},
 		&jxc.StockCheck{}, &jxc.StockCheckItem{},
