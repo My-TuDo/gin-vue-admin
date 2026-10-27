@@ -9,6 +9,7 @@
 - [jxc-sale-checkout](jxc-sale-checkout.md)：2026-10-27 销售开单+出库原子接口
 - [jxc-purchase-return-reversal](jxc-purchase-return-reversal.md)：2026-10-27 采购退货红冲
 - [jxc-backend-regression-hardening](jxc-backend-regression-hardening.md)：2026-10-27 后端回归与 CI 硬化
+- [jxc-launch-demo](jxc-launch-demo.md)：2026-10-27 上线演示库、演示数据与验收
 
 - [jxc-handover-audit](jxc-handover-audit.md)：2026-10-27 接手审计与账务缺陷修复
 - [jxc-ledger-exact-cost](jxc-ledger-exact-cost.md)：2026-10-27 红冲/退货分位残差修复
