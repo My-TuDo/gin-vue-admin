@@ -31,23 +31,25 @@
         <el-button link @click="$router.push('/jxc/inventory')">查看台账 →</el-button>
       </div>
       <el-table v-loading="loading" :data="moves" size="small" max-height="420">
-        <el-table-column label="时间" width="150">
+        <el-table-column label="时间" width="140">
           <template #default="{ row }">{{ fmt(row.occurredAt) }}</template>
         </el-table-column>
-        <el-table-column label="来源" width="110">
-          <template #default="{ row }">{{ sourceLabel(row.sourceType) }}</template>
+        <el-table-column label="单据" width="170">
+          <template #default="{ row }">{{ row.sourceNo || sourceLabel(row.sourceType) }}</template>
         </el-table-column>
-        <el-table-column prop="skuId" label="SKU" width="70" />
-        <el-table-column label="数量" width="80" align="right">
+        <el-table-column label="商品" min-width="160">
+          <template #default="{ row }">{{ row.goodsName }} {{ row.color }}/{{ row.size }}</template>
+        </el-table-column>
+        <el-table-column label="方向" width="64">
           <template #default="{ row }">
-            <span :class="{ neg: row.qty < 0 }">{{ row.qty > 0 ? '+' + row.qty : row.qty }}</span>
+            <span :class="row.qty > 0 ? 'in' : 'out'">{{ row.qty > 0 ? '入' : '出' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="金额" width="120" align="right">
-          <template #default="{ row }"><MoneyText :value="row.amount" /></template>
+        <el-table-column label="数量" width="72" align="right">
+          <template #default="{ row }">{{ Math.abs(row.qty) }}</template>
         </el-table-column>
-        <el-table-column label="单据" min-width="140">
-          <template #default="{ row }">{{ row.sourceType }}#{{ row.sourceId }}</template>
+        <el-table-column label="成本金额" width="110" align="right">
+          <template #default="{ row }"><MoneyText :value="row.cost" /></template>
         </el-table-column>
       </el-table>
     </div>
@@ -182,5 +184,13 @@ onMounted(async () => {
 }
 .neg {
   color: var(--el-color-danger);
+}
+.in {
+  color: var(--el-color-success);
+  font-weight: 500;
+}
+.out {
+  color: var(--el-color-warning);
+  font-weight: 500;
 }
 </style>

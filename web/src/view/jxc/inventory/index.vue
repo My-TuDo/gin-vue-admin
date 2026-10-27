@@ -55,26 +55,36 @@
     <!-- 流水：账本的原始事实，只读 -->
     <el-drawer v-model="drawer" :title="drawerTitle" size="720px">
       <el-table v-loading="loadingMoves" :data="moves" size="small">
-        <el-table-column prop="ID" label="#" width="56" />
-        <el-table-column label="时间" width="150">
+        <el-table-column label="时间" width="140">
           <template #default="{ row }">{{ fmt(row.occurredAt) }}</template>
         </el-table-column>
-        <el-table-column label="来源" width="120">
-          <template #default="{ row }">{{ sourceLabel(row.sourceType) }}</template>
-        </el-table-column>
-        <el-table-column label="数量" width="80" align="right">
+        <el-table-column label="单据" width="170">
           <template #default="{ row }">
-            <span :class="{ neg: row.qty < 0 }">{{ row.qty > 0 ? '+' + row.qty : row.qty }}</span>
+            <span class="doc" :title="row.sourceType">{{ row.sourceNo || sourceLabel(row.sourceType) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="单价" width="100" align="right">
+        <el-table-column label="方向" width="64">
+          <template #default="{ row }">
+            <span :class="row.qty > 0 ? 'in' : 'out'">{{ row.qty > 0 ? '入' : '出' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="数量" width="72" align="right">
+          <template #default="{ row }">{{ Math.abs(row.qty) }}</template>
+        </el-table-column>
+        <el-table-column label="成本单价" width="100" align="right">
           <template #default="{ row }"><MoneyText :value="row.unitCost" /></template>
         </el-table-column>
-        <el-table-column label="金额" width="110" align="right">
-          <template #default="{ row }"><MoneyText :value="row.amount" /></template>
+        <!-- 成本金额取绝对值：出库是"货变成了成本"，不是亏损。
+             账本里 amount 有符号是为不变量服务，不该直接摆给用户看。 -->
+        <el-table-column label="成本金额" width="110" align="right">
+          <template #default="{ row }">
+            <el-tooltip placement="top" :content="row.qty > 0 ? '入库成本（采购价）' : '出库结转成本（出库时冻结）'">
+              <span><MoneyText :value="row.cost" /></span>
+            </el-tooltip>
+          </template>
         </el-table-column>
-        <el-table-column label="单据" min-width="120">
-          <template #default="{ row }">{{ row.sourceType }}#{{ row.sourceId }}/{{ row.sourceLineId }}</template>
+        <el-table-column label="操作人" min-width="80">
+          <template #default="{ row }">{{ row.operator || '—' }}</template>
         </el-table-column>
       </el-table>
     </el-drawer>
@@ -164,7 +174,7 @@ const load = async () => {
 
 const openMoves = async (row) => {
   currentSku.value = row
-  drawerTitle.value = `${row.goodsName} ${row.color}/${row.size} 的库存流水`
+  drawerTitle.value = `${row.goodsName} ${row.color}/${row.size}（${row.skuCode}）的库存流水`
   drawer.value = true
   loadingMoves.value = true
   try {
@@ -220,6 +230,17 @@ onMounted(async () => {
 .bad,
 .neg {
   color: var(--el-color-danger);
+}
+.in {
+  color: var(--el-color-success);
+  font-weight: 500;
+}
+.out {
+  color: var(--el-color-warning);
+  font-weight: 500;
+}
+.doc {
+  font-family: ui-monospace, monospace;
 }
 .recon-ok {
   text-align: center;

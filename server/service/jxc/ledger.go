@@ -396,28 +396,120 @@ func (s *LedgerService) Balances(ctx context.Context, warehouseID uint) ([]Balan
 	return rows, nil
 }
 
-// Moves 账本流水（分页），供"库存流水"页追溯每一次进出。
-func (s *LedgerService) Moves(ctx context.Context, warehouseID, skuID uint, page, size int) ([]jxc.StockMove, int64, error) {
+// MoveRow 一条账本流水。**面向展示**，不是在 StockMove 上直接返回：
+//   - 账本的 Qty/Amount 是有符号的（入正出负），这是不变量成立的前提；
+//   - 但给人看的表格里，"金额"是成本金额，"数量"要带方向，
+//     直接把负数金额摆出来会被读成"卖了 -264 元"，属于语义误导。
+//   - 裸的 sku_id / sale_out#2 也没法读，这里补齐商品名、规格、单据号。
+type MoveRow struct {
+	ID          uint    `json:"ID"`
+	WarehouseID uint    `json:"warehouseId"`
+	Warehouse   string  `json:"warehouseName"`
+	SkuID       uint    `json:"skuId"`
+	GoodsName   string  `json:"goodsName"`
+	SkuCode     string  `json:"skuCode"`
+	Color       string  `json:"color"`
+	Size        string  `json:"size"`
+	Qty         int     `json:"qty"` // 有符号：入库正、出库负
+	UnitCost    float64 `json:"unitCost"`
+	Amount      float64 `json:"amount"` // 有符号金额（账本原始语义，累加等于余额金额）
+	// Cost 成本金额，恒为正。
+	// 为什么单独给一个字段：展示层需要的是"这笔移动涉及多少成本"，
+	// 直接渲染 Amount 会把出库显示成负数金额，被读成"卖亏了"。
+	// 与其让每个调用方自己 Math.abs()（迟早有人忘），不如在这里给出正确语义。
+	Cost       float64   `json:"cost"`
+	SourceType string    `json:"sourceType"`
+	SourceID   uint      `json:"sourceId"`
+	SourceNo   string    `json:"sourceNo"`
+	OccurredAt time.Time `json:"occurredAt"`
+	Operator   string    `json:"operator"`
+	ReversalOf *uint     `json:"reversalOf"`
+}
+
+// 单据号来源表：把账本行回溯到"人认识的那个单号"
+var sourceNoTable = map[string]struct {
+	table  string
+	column string
+}{
+	jxc.MoveSourcePurchaseIn: {"purchase_order", "order_no"},
+	jxc.MoveSourceSaleOut:    {"sale_order", "order_no"},
+}
+
+// Moves 账本流水（分页，按发生时间倒序）
+func (s *LedgerService) Moves(ctx context.Context, warehouseID, skuID uint, page, size int) ([]MoveRow, int64, error) {
 	if page <= 0 {
 		page = 1
 	}
 	if size <= 0 || size > 200 {
 		size = 50
 	}
-	db := global.GVA_DB.WithContext(ctx).Model(&jxc.StockMove{})
+	db := global.GVA_DB.WithContext(ctx)
+	q := db.Table("stock_move m").
+		Select(`m.id, m.warehouse_id, w.name AS warehouse, m.sku_id,
+		        g.name AS goods_name, sk.sku_code, sk.color, sk.size,
+		        m.qty, m.unit_cost, m.amount,
+		        m.source_type, m.source_id, m.occurred_at, m.operator, m.reversal_of`).
+		Joins("LEFT JOIN warehouse w ON w.id = m.warehouse_id").
+		Joins("LEFT JOIN goods_sku sk ON sk.id = m.sku_id").
+		Joins("LEFT JOIN goods g ON g.id = sk.goods_id")
 	if warehouseID > 0 {
-		db = db.Where("warehouse_id = ?", warehouseID)
+		q = q.Where("m.warehouse_id = ?", warehouseID)
 	}
 	if skuID > 0 {
-		db = db.Where("sku_id = ?", skuID)
+		q = q.Where("m.sku_id = ?", skuID)
 	}
+
 	var total int64
-	if err := db.Count(&total).Error; err != nil {
+	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	var list []jxc.StockMove
-	err := db.Order("id desc").Offset((page - 1) * size).Limit(size).Find(&list).Error
-	return list, total, err
+
+	var rows []MoveRow
+	if err := q.Order("m.id desc").Offset((page - 1) * size).Limit(size).Scan(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 批量补单据号：按来源类型分组查，避免 N+1
+	pairs := map[string]map[uint]string{}
+	for _, r := range rows {
+		meta, ok := sourceNoTable[r.SourceType]
+		if !ok || r.SourceID == 0 {
+			continue
+		}
+		if pairs[meta.table] == nil {
+			pairs[meta.table] = map[uint]string{}
+		}
+		pairs[meta.table][r.SourceID] = ""
+	}
+	for table, ids := range pairs {
+		idList := make([]uint, 0, len(ids))
+		for id := range ids {
+			idList = append(idList, id)
+		}
+		type noRow struct {
+			ID      uint
+			OrderNo string
+		}
+		var nos []noRow
+		col := "order_no"
+		if err := db.Table(table).Select("id, "+col+" AS order_no").Where("id IN ?", idList).Scan(&nos).Error; err != nil {
+			return nil, 0, err
+		}
+		for _, n := range nos {
+			pairs[table][n.ID] = n.OrderNo
+		}
+	}
+	for i := range rows {
+		if meta, ok := sourceNoTable[rows[i].SourceType]; ok {
+			rows[i].SourceNo = pairs[meta.table][rows[i].SourceID]
+		}
+		if rows[i].Amount < 0 {
+			rows[i].Cost = -rows[i].Amount
+		} else {
+			rows[i].Cost = rows[i].Amount
+		}
+	}
+	return rows, total, nil
 }
 
 // isDuplicateKeyErr 判定唯一键冲突（MySQL 1062 / sqlite UNIQUE）
