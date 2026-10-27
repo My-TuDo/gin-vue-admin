@@ -38,5 +38,7 @@ func bizModel() error {
 	if err != nil {
 		return err
 	}
-	return nil
+	// 复合索引不能靠 AutoMigrate 的字段 tag 表达（created_at 在 GVA_MODEL 里），
+	// 这里在迁移后幂等补齐；MySQL 之外的方言自动跳过。
+	return ensurePerfIndexes(db)
 }
