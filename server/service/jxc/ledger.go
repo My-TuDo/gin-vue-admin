@@ -43,11 +43,12 @@ type MoveInput struct {
 	Operator     string
 	ReversalOf   *uint // 红冲时指向被冲销的账本行
 
-	// AmountOverride 精确金额（仅退货入库使用）。
-	// 退货要按原单成本回补，而原单成本除以数量后往往不是整分：
+	// AmountOverride 精确金额（销售退货入库 / 采购退货出库使用）。
+	// 销售退货要按原单成本回补，而原单成本除以数量后往往不是整分：
 	// 3 件 100.00 的单，前两次各退 33.33，最后一次必须退 33.34。
-	// 只传 UnitCost 无法表达这个残差，所以在"最后一次退货"上用它把金额钉死。
-	// 为 nil 时仍按 UnitCost × Qty 计算。
+	// 采购退货则要按原采购价扣减，不能走当前移动加权平均。
+	// 只传 UnitCost 无法表达这两类语义，所以用金额把结果钉死；
+	// 为 nil 时仍按 UnitCost × Qty / 当前均价计算。
 	AmountOverride *money.Cents
 }
 
