@@ -37,7 +37,17 @@ func (s *StockCheckService) Create(ctx context.Context, warehouseID uint, remark
 
 	var check *jxc.StockCheck
 	err := db.Transaction(func(tx *gorm.DB) error {
-		// 同一仓库不允许有未完成的盘点单，否则两次盘点会互相覆盖
+		// 同一仓库不允许有未完成的盘点单，否则两次盘点会互相覆盖。
+		//
+		// "先 count 再 insert" 在并发下不是原子的：两个请求都读到 0，就会各建一张。
+		// MySQL 没有条件唯一索引（status=1 时才唯一），所以用仓库行锁做串行化：
+		// 同一仓库的建单请求在这里排队，后到的一定能看到先到者已提交的盘点单。
+		// 锁顺序与 Ledger.Post（按仓库/SKU）一致，不会引入新的死锁路径。
+		var wh jxc.Warehouse
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&wh, warehouseID).Error; err != nil {
+			return errors.New("仓库不存在")
+		}
 		var open int64
 		if err := tx.Model(&jxc.StockCheck{}).
 			Where("warehouse_id = ? AND status = ?", warehouseID, jxc.StockCheckDraft).
