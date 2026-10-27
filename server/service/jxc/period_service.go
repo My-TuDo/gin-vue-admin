@@ -27,12 +27,12 @@ func NewPeriodService() *PeriodService { return new(PeriodService) }
 
 // Close 结账。幂等：已结账会报错而不是覆盖快照。
 func (s *PeriodService) Close(ctx context.Context, yearMonth, operator string) (*jxc.AccountingPeriod, error) {
-	start, err := time.ParseInLocation("2006-01", yearMonth, time.Local)
+	start, err := time.ParseInLocation("2006-01", yearMonth, jxcLocation)
 	if err != nil {
 		return nil, errors.New("期间格式应为 YYYY-MM")
 	}
 	// 结未来的账没有意义，还会让所有正常单据被"已结账"挡住
-	nowMonth := time.Now().Format("2006-01")
+	nowMonth := time.Now().In(jxcLocation).Format("2006-01")
 	if yearMonth > nowMonth {
 		return nil, fmt.Errorf("不能结未来的账（%s）", yearMonth)
 	}
@@ -141,20 +141,21 @@ func (s *PeriodService) Snapshot(ctx context.Context, periodID uint) ([]jxc.Stoc
 //   - 采购额 = 已入库且未红冲的采购单金额合计
 //   - 期末库存 = 当前结存金额（若已结账，应等于该期间快照）
 type MonthlySummary struct {
-	Month          string  `json:"month"`
-	SalesAmount    float64 `json:"salesAmount"`
-	SalesCost      float64 `json:"salesCost"`
-	ReturnAmount   float64 `json:"returnAmount"`
-	ReturnCost     float64 `json:"returnCost"`
-	Gross          float64 `json:"gross"`
-	SalesOrders    int64   `json:"salesOrders"`
-	ReturnOrders   int64   `json:"returnOrders"`
-	PurchaseAmount float64 `json:"purchaseAmount"`
-	StockValue     float64 `json:"stockValue"`
+	Month                string  `json:"month"`
+	SalesAmount          float64 `json:"salesAmount"`
+	SalesCost            float64 `json:"salesCost"`
+	ReturnAmount         float64 `json:"returnAmount"`
+	ReturnCost           float64 `json:"returnCost"`
+	Gross                float64 `json:"gross"`
+	SalesOrders          int64   `json:"salesOrders"`
+	ReturnOrders         int64   `json:"returnOrders"`
+	PurchaseAmount       float64 `json:"purchaseAmount"`       // 净采购额 = 已入库采购 − 采购红冲 − 采购退货
+	PurchaseReturnAmount float64 `json:"purchaseReturnAmount"` // 本月采购退货金额（正数）
+	StockValue           float64 `json:"stockValue"`
 }
 
 func (s *PeriodService) Summary(ctx context.Context, yearMonth string) (*MonthlySummary, error) {
-	start, err := time.ParseInLocation("2006-01", yearMonth, time.Local)
+	start, err := time.ParseInLocation("2006-01", yearMonth, jxcLocation)
 	if err != nil {
 		return nil, errors.New("期间格式应为 YYYY-MM")
 	}
@@ -167,7 +168,7 @@ func (s *PeriodService) Summary(ctx context.Context, yearMonth string) (*Monthly
 		Amount float64
 		Cost   float64
 	}
-	var saleAgg, retAgg, purAgg, revSaleAgg, revPurAgg agg
+	var saleAgg, retAgg, purAgg, prAgg, revSaleAgg, revPurAgg agg
 
 	// 当月发生的销售，不按"现在是否已红冲"过滤。
 	// 9 月卖、10 月红的单，必须仍然算 9 月销售、10 月冲减；
@@ -190,6 +191,13 @@ func (s *PeriodService) Summary(ctx context.Context, yearMonth string) (*Monthly
 		Where("status = ? AND posted_at >= ? AND posted_at < ?",
 			jxc.PurchaseStatusReceived, start, end).
 		Scan(&purAgg).Error; err != nil {
+		return nil, err
+	}
+	if err := db.Model(&jxc.PurchaseReturn{}).
+		Select("COUNT(*) AS cnt, COALESCE(SUM(amount),0) AS amount").
+		Where("status = ? AND posted_at >= ? AND posted_at < ?",
+			jxc.PurchaseReturnStatusPosted, start, end).
+		Scan(&prAgg).Error; err != nil {
 		return nil, err
 	}
 
@@ -225,6 +233,9 @@ func (s *PeriodService) Summary(ctx context.Context, yearMonth string) (*Monthly
 	out.ReturnAmount = money.FromYuan(retAgg.Amount).Yuan()
 	out.ReturnCost = money.FromYuan(retAgg.Cost).Yuan()
 	out.Gross = money.FromYuan(out.SalesAmount).Sub(money.FromYuan(out.SalesCost)).Yuan()
-	out.PurchaseAmount = money.FromYuan(purAgg.Amount - revPurAgg.Amount).Yuan()
+	out.PurchaseReturnAmount = money.FromYuan(prAgg.Amount).Yuan()
+	// 采购侧净额：入库 − 采购红冲 − 采购退货。采购退货计入退货发生月，
+	// 不追溯修改原采购月（与销售红冲的月份口径一致）。
+	out.PurchaseAmount = money.FromYuan(purAgg.Amount - revPurAgg.Amount - prAgg.Amount).Yuan()
 	return out, nil
 }

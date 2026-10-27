@@ -4,6 +4,7 @@ package jxc
 type ApiGroup struct {
 	DocumentApi
 	PurchaseReturnApi
+	DashboardApi
 	LedgerApi
 	MasterApi
 	ReversalApi

@@ -23,6 +23,7 @@ func initBizRouter(routers ...*gin.RouterGroup) {
 	router.RouterGroupApp.Jxc.InitPartnerRouter(privateGroup)
 	router.RouterGroupApp.Jxc.InitDocumentRouter(privateGroup)
 	router.RouterGroupApp.Jxc.InitPurchaseReturnRouter(privateGroup)
+	router.RouterGroupApp.Jxc.InitDashboardRouter(privateGroup)
 	router.RouterGroupApp.Jxc.InitLedgerRouter(privateGroup)
 	router.RouterGroupApp.Jxc.InitReversalRouter(privateGroup)
 	router.RouterGroupApp.Jxc.InitReturnRouter(privateGroup)

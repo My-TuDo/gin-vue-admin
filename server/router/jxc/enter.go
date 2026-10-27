@@ -5,6 +5,7 @@ package jxc
 type RouterGroup struct {
 	DocumentRouter
 	PurchaseReturnRouter
+	DashboardRouter
 	LedgerRouter
 	MasterRouter
 	ReversalRouter
