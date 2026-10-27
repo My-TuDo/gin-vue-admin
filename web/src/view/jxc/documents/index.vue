@@ -6,7 +6,7 @@
       description="采购、销售、退货与红冲都在这里推进到下一步；点单号查看完整明细与账本影响。"
     >
       <template #actions>
-        <el-button @click="load">
+        <el-button @click="refreshAll">
           <svg-icon icon="lucide:refresh-cw" class="mr-1.5 h-3.5 w-3.5" />
           刷新
         </el-button>
@@ -40,35 +40,73 @@
       </template>
 
       <div class="flex h-full min-h-0 flex-col">
-        <div class="flex flex-wrap items-center gap-3 border-b border-border px-4 py-2.5">
-          <div class="w-[260px] shrink-0">
-            <el-input v-model="keyword" class="w-full" placeholder="搜索单号、往来单位、原因" clearable>
-              <template #prefix><svg-icon icon="lucide:search" class="h-3.5 w-3.5" /></template>
-            </el-input>
+        <div class="border-b border-border px-4 py-2.5">
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="w-[260px] shrink-0">
+              <el-input
+                v-model="keyword"
+                class="w-full"
+                placeholder="搜索单号、往来单位、原因"
+                clearable
+                @input="onKeywordInput"
+                @keydown.enter.prevent="onKeywordEnter"
+              >
+                <template #prefix><svg-icon icon="lucide:search" class="h-3.5 w-3.5" /></template>
+              </el-input>
+            </div>
+
+            <div class="w-[150px] shrink-0">
+              <el-select v-model="warehouseId" class="w-full" placeholder="全部仓库" clearable @change="onFilterChange">
+                <el-option v-for="warehouse in warehouses" :key="warehouse.ID" :label="warehouse.name" :value="warehouse.ID" />
+              </el-select>
+            </div>
+
+            <div class="w-[236px] shrink-0">
+              <el-date-picker
+                v-model="dateRange"
+                type="daterange"
+                value-format="YYYY-MM-DD"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                class="!w-full"
+                @change="onFilterChange"
+              />
+            </div>
+
+            <div class="w-[104px] shrink-0">
+              <el-select v-model="dateField" class="w-full" @change="onFilterChange">
+                <el-option label="创建时间" value="created" />
+                <el-option label="过账时间" value="posted" />
+              </el-select>
+            </div>
+
+            <el-button link @click="resetFilters">重置</el-button>
           </div>
 
-          <div v-if="statusOptions.length > 1" class="flex flex-wrap items-center gap-1">
-            <button
-              v-for="option in statusOptions"
-              :key="option.value"
-              type="button"
-              class="flex h-7 items-center gap-1 rounded-md px-2.5 text-[11.5px] transition-colors"
-              :class="status === option.value ? 'bg-muted font-medium text-base-text' : 'text-muted-foreground hover:bg-muted hover:text-base-text'"
-              @click="status = option.value"
-            >
-              {{ option.label }}
-              <span class="tabular-nums text-[10px] text-muted-foreground">{{ option.count }}</span>
-            </button>
-          </div>
-
-          <div class="ml-auto text-[11px] text-muted-foreground">
-            {{ tabMeta.description }}
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <div v-if="statusOptions.length > 1" class="flex flex-wrap items-center gap-1">
+              <button
+                v-for="option in statusOptions"
+                :key="option.value"
+                type="button"
+                class="flex h-7 items-center gap-1 rounded-md px-2.5 text-[11.5px] transition-colors"
+                :class="status === option.value ? 'bg-muted font-medium text-base-text' : 'text-muted-foreground hover:bg-muted hover:text-base-text'"
+                @click="selectStatus(option.value)"
+              >
+                {{ option.label }}
+                <span class="tabular-nums text-[10px] text-muted-foreground">{{ option.count }}</span>
+              </button>
+            </div>
+            <div class="ml-auto text-[11px] text-muted-foreground">
+              {{ tabMeta.description }}
+            </div>
           </div>
         </div>
 
         <div v-loading="loading" class="min-h-0 flex-1 overflow-hidden">
           <el-table
-            :data="pageRows"
+            :data="rows"
             height="100%"
             :class="tab !== 'reversal' ? 'el-table--clickable' : ''"
             @row-click="onRowClick"
@@ -92,7 +130,7 @@
                 <span class="font-mono text-[12px]">{{ row.returnNo }}</span>
               </template>
             </el-table-column>
-            <el-table-column v-if="tab === 'purchaseReturn'" label="退货单号" width="160">
+            <el-table-column v-if="tab === 'purchaseReturn'" label="退货单号" width="150">
               <template #default="{ row }">
                 <el-button link type="primary" class="font-mono text-[12px]" @click.stop="openDetail('purchaseReturn', row)">
                   {{ row.returnNo }}
@@ -126,11 +164,14 @@
             <el-table-column v-if="tab === 'purchase'" prop="remark" label="备注" min-width="160" show-overflow-tooltip>
               <template #default="{ row }"><span class="text-[11.5px] text-muted-foreground">{{ row.remark || '—' }}</span></template>
             </el-table-column>
-            <el-table-column v-if="tab === 'purchaseReturn'" label="原采购单" width="160">
+            <el-table-column v-if="tab === 'purchaseReturn'" label="原采购单" width="150">
               <template #default="{ row }"><span class="font-mono text-[12px]">{{ row.purchaseNo }}</span></template>
             </el-table-column>
-            <el-table-column v-if="tab === 'purchaseReturn'" label="供应商" min-width="90">
-              <template #default="{ row }">{{ partnerName(row.supplierId) }}</template>
+            <el-table-column v-if="tab === 'purchaseReturn'" label="供应商" min-width="100">
+              <template #default="{ row }">
+                <div class="text-[12px]">{{ row.supplierName || partnerName(row.supplierId) }}</div>
+                <div class="mt-0.5 text-[10.5px] text-muted-foreground">{{ row.warehouseName || warehouseName(row.warehouseId) }}</div>
+              </template>
             </el-table-column>
             <el-table-column v-if="tab === 'return'" prop="saleNo" label="原销售单" width="168">
               <template #default="{ row }"><span class="font-mono text-[12px]">{{ row.saleNo }}</span></template>
@@ -159,10 +200,13 @@
             <el-table-column v-if="tab === 'purchase'" label="明细" width="76">
               <template #default="{ row }">{{ row.items?.length || 0 }} 项</template>
             </el-table-column>
-            <el-table-column v-if="tab === 'purchaseReturn'" label="退货金额" width="90" align="right">
-              <template #default="{ row }"><MoneyText :value="row.amount" size="sm" /></template>
+            <el-table-column v-if="tab === 'purchaseReturn'" label="退货金额" width="104" align="right">
+              <template #default="{ row }">
+                <div class="text-right"><MoneyText :value="row.amount" size="sm" /></div>
+                <div class="mt-0.5 text-[10.5px] text-muted-foreground">{{ row.itemCount ?? row.items?.length ?? 0 }} 项</div>
+              </template>
             </el-table-column>
-            <el-table-column v-if="tab === 'purchaseReturn'" prop="reason" label="原因" min-width="130" show-overflow-tooltip>
+            <el-table-column v-if="tab === 'purchaseReturn'" prop="reason" label="原因" min-width="110" show-overflow-tooltip>
               <template #default="{ row }"><span class="text-[11.5px] text-muted-foreground">{{ row.reason || '—' }}</span></template>
             </el-table-column>
             <el-table-column v-if="tab === 'return'" label="退款" width="96" align="right">
@@ -228,25 +272,27 @@
             <template #empty>
               <EmptyState
                 icon="lucide:files"
-                title="没有符合条件单据"
-                :description="tab === 'purchaseReturn'
-                  ? '从「采购单」页签的已入库行点「退货」发起；出库后才扣减库存。'
-                  : '调整状态筛选或搜索词；新开的单据会出现在这里。'"
+                :title="emptyTitle"
+                :description="emptyDescription"
               >
-                <el-button v-if="tab === 'purchaseReturn'" @click="switchTab('purchase')">去采购单发起退货</el-button>
+                <el-button
+                  v-if="!listError && tab === 'purchaseReturn'"
+                  @click="switchTab('purchase')"
+                >去采购单发起退货</el-button>
               </EmptyState>
             </template>
           </el-table>
         </div>
 
         <div class="flex shrink-0 items-center justify-between border-t border-border px-4 py-2.5">
-          <span class="text-[11px] text-muted-foreground">共 {{ activeRows.length }} 条 · 按创建时间倒序</span>
+          <span class="text-[11px] text-muted-foreground">共 {{ total }} 条 · 按创建时间倒序</span>
           <el-pagination
             v-model:current-page="page"
             :page-size="pageSize"
-            :total="activeRows.length"
+            :total="total"
             layout="prev, pager, next"
             background
+            @current-change="loadList"
           />
         </div>
       </div>
@@ -477,7 +523,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PageHeader from '@/components/jxc/PageHeader.vue'
@@ -504,14 +550,23 @@ const keyword = ref('')
 const page = ref(1)
 const pageSize = 20
 
-const sales = ref([])
-const purchases = ref([])
-const purchaseReturns = ref([])
-const returns = ref([])
-const reversals = ref([])
+const rows = ref([])
+const total = ref(0)
+const listError = ref('')
+const counts = ref({})
+const tabTotals = ref({ sale: 0, purchase: 0, purchaseReturn: 0, return: 0, reversal: 0 })
+const warehouses = ref([])
 const warehouseMap = ref({})
 const partnerMap = ref({})
 const skuMap = ref({})
+
+const warehouseId = ref(null)
+const dateRange = ref(null)
+const dateField = ref('created')
+let keywordTimer = null
+let listSeq = 0
+let countSeq = 0
+let totalSeq = 0
 
 const TABS = [
   { key: 'sale', label: '销售单', icon: 'lucide:shopping-cart', description: '开单即预留，出库后计入销售与成本' },
@@ -522,44 +577,15 @@ const TABS = [
 ]
 const TAB_MAP = Object.fromEntries(TABS.map((item) => [item.key, item]))
 const tabMeta = computed(() => TAB_MAP[tab.value] || TABS[0])
-
-const sourceRows = computed(() => {
-  if (tab.value === 'sale') return sales.value
-  if (tab.value === 'purchase') return purchases.value
-  if (tab.value === 'purchaseReturn') return purchaseReturns.value
-  if (tab.value === 'return') return returns.value
-  return reversals.value
-})
-
-const haystack = (row) => [
-  row.orderNo, row.returnNo, row.reversalNo, row.saleNo, row.purchaseNo, row.sourceNo,
-  row.reason, customerName(row.customerId), partnerName(row.supplierId),
-  row.remark, row.sourceType === 'sale' ? '销售单' : row.sourceType === 'purchase' ? '采购单' : ''
-].filter(Boolean).join(' ').toLowerCase()
-
-const tabRows = computed(() => {
-  const k = keyword.value.trim().toLowerCase()
-  if (!k) return sourceRows.value
-  return sourceRows.value.filter((row) => haystack(row).includes(k))
-})
-
-const activeRows = computed(() => {
-  if (!status.value) return tabRows.value
-  return tabRows.value.filter((row) => String(row.status) === status.value)
-})
-
-const pageRows = computed(() => {
-  const start = (page.value - 1) * pageSize
-  return activeRows.value.slice(start, start + pageSize)
-})
-
-const tabCount = (key) => {
-  if (key === 'sale') return sales.value.length
-  if (key === 'purchase') return purchases.value.length
-  if (key === 'purchaseReturn') return purchaseReturns.value.length
-  if (key === 'return') return returns.value.length
-  return reversals.value.length
+const ENDPOINTS = {
+  sale: pageSale,
+  purchase: pagePurchase,
+  purchaseReturn: pagePurchaseReturn,
+  return: pageReturn,
+  reversal: pageReversal
 }
+
+const tabCount = (key) => Number(tabTotals.value[key] || 0)
 
 const STATUS_OPTIONS = {
   sale: [
@@ -590,23 +616,38 @@ const STATUS_OPTIONS = {
   reversal: [{ value: '', label: '全部' }]
 }
 
-const statusOptions = computed(() => {
-  const defs = STATUS_OPTIONS[tab.value] || []
-  const counts = {}
-  for (const row of tabRows.value) {
-    const key = String(row.status ?? '')
-    counts[key] = (counts[key] || 0) + 1
+const statusOptions = computed(() => (STATUS_OPTIONS[tab.value] || []).map((item) => ({
+  ...item,
+  count: Number(counts.value[item.value] || 0)
+})))
+
+const emptyTitle = computed(() => (listError.value ? '无法加载单据' : '没有符合条件单据'))
+const emptyDescription = computed(() => {
+  if (listError.value) return listError.value
+  if (tab.value === 'purchaseReturn' && !keyword.value && !status.value && !warehouseId.value && !dateRange.value) {
+    return '从「采购单」页签的已入库行点「退货」发起；出库后才扣减库存。'
   }
-  return defs.map((item) => ({
-    ...item,
-    count: item.value === '' ? tabRows.value.length : (counts[item.value] || 0)
-  }))
+  return '调整筛选条件；新开的单据会出现在这里。'
 })
 
 const switchTab = (key) => {
+  if (tab.value === key) return
   tab.value = key
   status.value = ''
   page.value = 1
+  counts.value = {}
+  if (keywordTimer) {
+    clearTimeout(keywordTimer)
+    keywordTimer = null
+  }
+  refreshList()
+}
+
+const selectStatus = (value) => {
+  if (status.value === value) return
+  status.value = value
+  page.value = 1
+  loadList()
 }
 
 const partnerName = (id) => (id ? partnerMap.value[String(id)]?.name || '—' : '—')
@@ -616,61 +657,193 @@ const skuInfo = (id) => skuMap.value[String(id)] || { goodsName: '未知规格',
 
 const applyQuery = () => {
   const q = route.query
-  tab.value = typeof q.tab === 'string' && TAB_MAP[q.tab] ? q.tab : 'sale'
+  const tabKey = q.tab === 'purchase-return' ? 'purchaseReturn' : q.tab
+  tab.value = typeof tabKey === 'string' && TAB_MAP[tabKey] ? tabKey : 'sale'
   status.value = typeof q.status === 'string' ? q.status : ''
   keyword.value = typeof q.keyword === 'string' ? q.keyword : ''
+  warehouseId.value = q.warehouseId ? Number(q.warehouseId) || null : null
+  const startAt = typeof q.startAt === 'string' ? q.startAt : ''
+  const endAt = typeof q.endAt === 'string' ? q.endAt : ''
+  dateRange.value = startAt && endAt ? [startAt, endAt] : null
+  dateField.value = q.dateField === 'posted' ? 'posted' : 'created'
+  const p = Number(q.page)
+  page.value = Number.isFinite(p) && p > 0 ? p : 1
+  if (keywordTimer) {
+    clearTimeout(keywordTimer)
+    keywordTimer = null
+  }
+}
+
+const loadMasters = async () => {
+  const [warehouseRes, supplierRes, customerRes, goodsRes] = await Promise.all([
+    listWarehouses(),
+    listPartners('supplier'),
+    listPartners('customer'),
+    listGoods()
+  ])
+
+  if (warehouseRes.code === 0) {
+    warehouses.value = warehouseRes.data || []
+    warehouseMap.value = Object.fromEntries(warehouses.value.map((item) => [String(item.ID), item]))
+  }
+
+  const partners = [
+    ...(supplierRes.code === 0 ? supplierRes.data || [] : []),
+    ...(customerRes.code === 0 ? customerRes.data || [] : [])
+  ]
+  partnerMap.value = Object.fromEntries(partners.map((item) => [String(item.ID), item]))
+
+  if (goodsRes.code === 0) {
+    const map = {}
+    for (const product of goodsRes.data || []) {
+      for (const sku of product.skus || []) {
+        map[String(sku.ID)] = { ...sku, goodsName: product.name, goodsCode: product.code }
+      }
+    }
+    skuMap.value = map
+  }
+}
+
+const filterParams = () => {
+  const params = {}
+  if (keyword.value.trim()) params.keyword = keyword.value.trim()
+  if (warehouseId.value) params.warehouseId = warehouseId.value
+  if (Array.isArray(dateRange.value) && dateRange.value.length === 2) {
+    params.startAt = dateRange.value[0]
+    params.endAt = dateRange.value[1]
+    params.dateField = dateField.value
+  }
+  return params
+}
+
+const listParams = () => {
+  const params = { ...filterParams(), page: page.value, pageSize }
+  if (status.value) params.status = Number(status.value)
+  return params
+}
+
+const countParams = (statusValue) => {
+  const params = { ...filterParams(), page: 1, pageSize: 1 }
+  if (statusValue) params.status = Number(statusValue)
+  return params
+}
+
+const loadList = async () => {
+  const seq = ++listSeq
+  loading.value = true
+  listError.value = ''
+  try {
+    const res = await ENDPOINTS[tab.value](listParams())
+    if (seq !== listSeq) return
+    if (res.code !== 0) {
+      rows.value = []
+      total.value = 0
+      listError.value = res.msg || '加载单据失败'
+      return
+    }
+    rows.value = res.data?.list || []
+    total.value = Number(res.data?.total) || 0
+    const maxPage = Math.max(1, Math.ceil(total.value / pageSize))
+    if (page.value > maxPage) {
+      page.value = maxPage
+      await loadList()
+    }
+  } catch {
+    if (seq !== listSeq) return
+    rows.value = []
+    total.value = 0
+    listError.value = '网络异常，无法加载单据'
+  } finally {
+    if (seq === listSeq) loading.value = false
+  }
+}
+
+const loadCounts = async () => {
+  const seq = ++countSeq
+  const tabKey = tab.value
+  const defs = STATUS_OPTIONS[tabKey] || []
+  const next = {}
+  await Promise.all(defs.map(async (option) => {
+    try {
+      const res = await ENDPOINTS[tabKey](countParams(option.value))
+      next[option.value] = res.code === 0 ? Number(res.data?.total) || 0 : 0
+    } catch {
+      next[option.value] = 0
+    }
+  }))
+  if (seq === countSeq && tabKey === tab.value) counts.value = next
+}
+
+const refreshTabTotals = async () => {
+  const seq = ++totalSeq
+  const next = { ...tabTotals.value }
+  const params = { ...filterParams(), page: 1, pageSize: 1 }
+  await Promise.all(Object.entries(ENDPOINTS).map(async ([key, request]) => {
+    try {
+      const res = await request(params)
+      next[key] = res.code === 0 ? Number(res.data?.total) || 0 : 0
+    } catch {
+      next[key] = 0
+    }
+  }))
+  if (seq === totalSeq) tabTotals.value = next
+}
+
+const refreshList = async () => {
+  await Promise.all([loadList(), loadCounts(), refreshTabTotals()])
+}
+
+const refreshAll = async () => {
+  await refreshList()
+}
+
+const onFilterChange = () => {
+  if (keywordTimer) {
+    clearTimeout(keywordTimer)
+    keywordTimer = null
+  }
+  page.value = 1
+  refreshList()
+}
+
+const onKeywordInput = () => {
+  if (keywordTimer) clearTimeout(keywordTimer)
+  keywordTimer = setTimeout(() => {
+    page.value = 1
+    refreshList()
+    keywordTimer = null
+  }, 300)
+}
+
+const onKeywordEnter = () => {
+  if (keywordTimer) {
+    clearTimeout(keywordTimer)
+    keywordTimer = null
+  }
+  page.value = 1
+  refreshList()
+}
+
+const clearFilters = () => {
+  if (keywordTimer) {
+    clearTimeout(keywordTimer)
+    keywordTimer = null
+  }
+  keyword.value = ''
+  status.value = ''
+  warehouseId.value = null
+  dateRange.value = null
+  dateField.value = 'created'
   page.value = 1
 }
 
-const load = async () => {
-  loading.value = true
-  try {
-    const [saleRes, purchaseRes, purchaseReturnRes, returnRes, reversalRes, warehouseRes, supplierRes, customerRes, goodsRes] = await Promise.all([
-      pageSale({ page: 1, pageSize: 100 }),
-      pagePurchase({ page: 1, pageSize: 100 }),
-      pagePurchaseReturn({ page: 1, pageSize: 100 }),
-      pageReturn({ page: 1, pageSize: 100 }),
-      pageReversal({ page: 1, pageSize: 100 }),
-      listWarehouses(),
-      listPartners('supplier'),
-      listPartners('customer'),
-      listGoods()
-    ])
+const resetFilters = () => {
+  clearFilters()
+  refreshList()
+}
 
-    // 采购退货只对老板/店长开放；店员打开单据页时接口会返回权限错误（code 7），
-    // 不要因此让整页弹「部分单据加载失败」。选项卡仍展示为空，操作时由后端再次拦截。
-    const purchaseReturnBlocked = purchaseReturnRes.code === 7
-    if (saleRes.code !== 0 || purchaseRes.code !== 0 || returnRes.code !== 0 || reversalRes.code !== 0 ||
-      (purchaseReturnRes.code !== 0 && !purchaseReturnBlocked)) {
-      ElMessage.error('部分单据加载失败，请刷新重试')
-    }
-    sales.value = saleRes.code === 0 ? saleRes.data.list || [] : []
-    purchases.value = purchaseRes.code === 0 ? purchaseRes.data.list || [] : []
-    purchaseReturns.value = purchaseReturnRes.code === 0 ? purchaseReturnRes.data.list || [] : []
-    returns.value = returnRes.code === 0 ? returnRes.data.list || [] : []
-    reversals.value = reversalRes.code === 0 ? reversalRes.data.list || [] : []
-
-    if (warehouseRes.code === 0) {
-      warehouseMap.value = Object.fromEntries((warehouseRes.data || []).map((item) => [String(item.ID), item]))
-    }
-    const partners = [
-      ...(supplierRes.code === 0 ? supplierRes.data || [] : []),
-      ...(customerRes.code === 0 ? customerRes.data || [] : [])
-    ]
-    partnerMap.value = Object.fromEntries(partners.map((item) => [String(item.ID), item]))
-
-    if (goodsRes.code === 0) {
-      const map = {}
-      for (const product of goodsRes.data || []) {
-        for (const sku of product.skus || []) {
-          map[String(sku.ID)] = { ...sku, goodsName: product.name, goodsCode: product.code }
-        }
-      }
-      skuMap.value = map
-    }
-  } finally {
-    loading.value = false
-  }
+const loadInitial = async () => {
+  await refreshAll()
 }
 
 // ---------- 详情 ----------
@@ -774,7 +947,7 @@ const onDetailAction = async (key) => {
 // ---------- 列表操作 ----------
 const afterWrite = async (message) => {
   if (message) ElMessage.success(message)
-  await load()
+  await refreshAll()
   await refreshDetail()
 }
 
@@ -850,7 +1023,7 @@ const submitReversal = async () => {
     ElMessage.success(`已红冲 ${res.data.reversalNo}`)
     revDialog.value = false
     detailOpen.value = false
-    await load()
+    await refreshAll()
   } finally {
     saving.value = false
   }
@@ -883,9 +1056,8 @@ const submitReturn = async () => {
     retDialog.value = false
     detailOpen.value = false
     tab.value = 'return'
-    status.value = ''
-    keyword.value = ''
-    await load()
+    clearFilters()
+    await refreshAll()
   } finally {
     saving.value = false
   }
@@ -926,9 +1098,8 @@ const submitPurchaseReturn = async () => {
     ElMessage.success(`已创建采购退货单 ${res.data.returnNo}`)
     prDialog.value = false
     tab.value = 'purchaseReturn'
-    status.value = ''
-    keyword.value = ''
-    await load()
+    clearFilters()
+    await refreshAll()
     await openDetail('purchaseReturn', { ID: res.data.ID })
   } finally {
     saving.value = false
@@ -957,18 +1128,20 @@ const cancelPurchaseReturnRow = async (row) => {
   await afterWrite('已取消')
 }
 
-watch(activeRows, () => {
-  const maxPage = Math.max(1, Math.ceil(activeRows.value.length / pageSize))
-  if (page.value > maxPage) page.value = maxPage
+onMounted(async () => {
+  applyQuery()
+  await loadMasters()
+  await loadInitial()
 })
 
-watch([tab, status, keyword], () => {
-  page.value = 1
-})
-
-applyQuery()
 // 组件被复用时（从工作台待办跳进来、或点导航回「单据」），query 变化必须重新应用筛选。
-watch(() => route.query, applyQuery, { deep: true })
-onMounted(load)
+watch(() => route.query, async () => {
+  applyQuery()
+  await loadInitial()
+}, { deep: true })
+
+onBeforeUnmount(() => {
+  if (keywordTimer) clearTimeout(keywordTimer)
+})
 
 </script>

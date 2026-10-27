@@ -292,7 +292,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/jxc/PageHeader.vue'
@@ -462,11 +462,20 @@ watch(() => route.query.reconcile, (value) => {
   if (value === '1') doReconcile()
 })
 
+const onRunReconcile = () => {
+  doReconcile()
+}
+
 onMounted(async () => {
+  window.addEventListener('jxc:run-reconcile', onRunReconcile)
   const res = await listWarehouses()
   if (res.code === 0) warehouses.value = res.data || []
   await load()
   if (route.query.tab === 'check') tab.value = 'check'
   if (route.query.reconcile === '1') await doReconcile()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('jxc:run-reconcile', onRunReconcile)
 })
 </script>

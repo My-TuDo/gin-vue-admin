@@ -3,7 +3,7 @@
     <PageHeader
       eyebrow="SALES"
       title="开单"
-      description="扫码或搜索商品，点规格直接加入右侧；开单占用预留，出库才写账本。"
+      description="扫码或搜索商品，点规格直接加入右侧；一次提交完成开单、预留与出库，失败全部回滚。"
     >
       <template #actions>
         <div class="flex items-center gap-2 rounded-md border border-border bg-container px-2.5 py-1.5 text-[11px] text-muted-foreground">
@@ -113,7 +113,7 @@
       </SectionCard>
 
       <!-- 右：当前单据 -->
-      <SectionCard :title="orderNo || '新销售单'" description="草稿 · 出库后生成账本" :padded="false" class="min-h-0">
+      <SectionCard :title="orderNo || '新销售单'" description="原子提交 · 失败全回滚" :padded="false" class="min-h-0">
         <template #actions>
           <el-button link :disabled="!lines.length && !lastResult" @click="resetCart">清空</el-button>
         </template>
@@ -275,7 +275,7 @@ import PageHeader from '@/components/jxc/PageHeader.vue'
 import SectionCard from '@/components/jxc/SectionCard.vue'
 import EmptyState from '@/components/jxc/EmptyState.vue'
 import MoneyText from '@/components/jxc/MoneyText.vue'
-import { cancelSale, createSale, getSale, ledgerBalances, listGoods, listPartners, listWarehouses, shipSale } from '@/api/jxc'
+import { checkoutSale, ledgerBalances, listGoods, listPartners, listWarehouses } from '@/api/jxc'
 import { isTypingTarget } from '@/view/jxc/shared/keyboard'
 import { round2 } from '@/view/jxc/shared/format'
 
@@ -470,31 +470,20 @@ const submit = async () => {
 
   saving.value = true
   try {
-    const created = await createSale({
+    // 原子接口：建单、预留、出库同一事务；失败不会留下草稿或占用。
+    const res = await checkoutSale({
       warehouseId: warehouseId.value,
       customerId: customerId.value || null,
       items: lines.value.map((line) => ({ skuId: line.skuId, qty: line.qty }))
     })
-    if (created.code !== 0) return ElMessage.error(created.msg || '开单失败')
+    if (res.code !== 0) return ElMessage.error(res.msg || '开单出库失败')
 
-    const id = created.data.ID
-    orderNo.value = created.data.orderNo
-
-    const shipped = await shipSale(id)
-    if (shipped.code !== 0) {
-      const canceled = await cancelSale(id)
-      const hint = canceled.code === 0
-        ? '草稿单已自动取消并释放预留'
-        : `草稿单 ${orderNo.value} 未能自动取消，请到「单据」里手动取消`
-      return ElMessage.error(`${shipped.msg || '出库失败'}（${hint}）`)
-    }
-
-    const detail = await getSale(id)
-    const order = detail.code === 0 ? detail.data : null
-    const amount = Number(order?.totalAmount ?? total.value)
-    const cost = Number(order?.costAmount ?? 0)
+    const order = res.data || {}
+    const amount = Number(order.totalAmount) || 0
+    const cost = Number(order.costAmount) || 0
+    orderNo.value = order.orderNo || ''
     lastResult.value = {
-      orderNo: order?.orderNo ?? orderNo.value,
+      orderNo: order.orderNo || orderNo.value,
       amount,
       cost,
       gross: round2(amount - cost)

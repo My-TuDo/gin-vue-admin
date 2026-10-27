@@ -133,14 +133,14 @@
           </div>
         </SectionCard>
 
-        <SectionCard title="可售偏低" description="可售 ≤ 10，按可售升序" :padded="false" class="min-h-0 flex-1">
+        <SectionCard title="可售偏低" :description="lowStockDescription" :padded="false" class="min-h-0 flex-1">
           <template #actions>
             <el-button link @click="router.push('/jxc/inventory')">库存</el-button>
           </template>
           <div class="h-full overflow-y-auto">
-            <div v-if="lowStock.length" class="divide-y divide-border">
+            <div v-if="stats.lowStockItems.length" class="divide-y divide-border">
               <button
-                v-for="row in lowStock"
+                v-for="row in stats.lowStockItems"
                 :key="row.warehouseId + '-' + row.skuId"
                 type="button"
                 class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted"
@@ -170,18 +170,18 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import MoneyText from '@/components/jxc/MoneyText.vue'
 import MetricTile from '@/components/jxc/MetricTile.vue'
 import PageHeader from '@/components/jxc/PageHeader.vue'
 import SectionCard from '@/components/jxc/SectionCard.vue'
 import EmptyState from '@/components/jxc/EmptyState.vue'
-import { ledgerBalances, ledgerMoves, pagePurchase, pagePurchaseReturn, pageReturn, pageSale } from '@/api/jxc'
-import { formatPercent, formatShortTime, isToday, marginOf, round2, sourceLabel } from '@/view/jxc/shared/format'
+import { getDashboardSummary, ledgerMoves } from '@/api/jxc'
+import { formatPercent, formatShortTime, marginOf, sourceLabel } from '@/view/jxc/shared/format'
 
 const router = useRouter()
 const loading = ref(false)
 const moves = ref([])
-const balances = ref([])
 
 const stats = reactive({
   stockValue: 0,
@@ -195,11 +195,15 @@ const stats = reactive({
   toApprove: 0,
   toReceive: 0,
   toShip: 0,
-  toPostPurchaseReturn: 0
+  toPostPurchaseReturn: 0,
+  lowStockThreshold: 10,
+  lowStockCount: 0,
+  lowStockItems: []
 })
 
 const grossMargin = computed(() => marginOf(stats.todayGross, stats.todayAmount))
 const grossMarginText = computed(() => (grossMargin.value === null ? '—' : formatPercent(grossMargin.value)))
+const lowStockDescription = computed(() => `可售 ≤ ${stats.lowStockThreshold} · 共 ${stats.lowStockCount} 个`)
 
 const tasks = computed(() => [
   { key: 'approve', label: '待审核采购', hint: '审核后才会进入待入库', count: stats.toApprove, icon: 'lucide:clipboard-check', to: '/jxc/documents?tab=purchase&status=1' },
@@ -208,71 +212,43 @@ const tasks = computed(() => [
   { key: 'purchase-return', label: '待出库采购退货', hint: '草稿退货单，出库才扣库存', count: stats.toPostPurchaseReturn, icon: 'lucide:package-minus', to: '/jxc/documents?tab=purchaseReturn&status=1' }
 ])
 
-const lowStock = computed(() =>
-  balances.value
-    .filter((row) => Number(row.qty) >= 0 && Number(row.available) <= 10)
-    .sort((a, b) => Number(a.available) - Number(b.available) || Number(b.value) - Number(a.value))
-    .slice(0, 5)
-)
-
-const saleTime = (order) => order.postedAt || order.CreatedAt || order.createdAt
 const goInventory = () => router.push('/jxc/inventory')
 
 const load = async () => {
   loading.value = true
   try {
-    const [balanceRes, moveRes, saleRes, purchaseRes, returnRes, purchaseReturnRes] = await Promise.all([
-      ledgerBalances({}),
-      ledgerMoves({ page: 1, pageSize: 10 }),
-      pageSale({ page: 1, pageSize: 100 }),
-      pagePurchase({ page: 1, pageSize: 100 }),
-      pageReturn({ page: 1, pageSize: 100 }),
-      pagePurchaseReturn({ page: 1, pageSize: 100 })
+    const [dashboardRes, moveRes] = await Promise.all([
+      getDashboardSummary(),
+      ledgerMoves({ page: 1, pageSize: 10 })
     ])
 
-    if (balanceRes.code === 0) {
-      balances.value = balanceRes.data || []
-      stats.stockValue = round2(balances.value.reduce((sum, row) => sum + Number(row.value || 0), 0))
-      stats.skuCount = balances.value.filter((row) => Number(row.qty) > 0).length
+    if (dashboardRes.code === 0) {
+      const data = dashboardRes.data || {}
+      const pending = data.pending || {}
+      const lowStock = data.lowStock || {}
+
+      Object.assign(stats, {
+        stockValue: Number(data.stockValue) || 0,
+        skuCount: Number(data.skuCount) || 0,
+        todayAmount: Number(data.todaySalesAmount) || 0,
+        todayOrders: Number(data.todaySalesOrders) || 0,
+        todayGross: Number(data.todayGross) || 0,
+        returnAmount: Number(data.todayReturnAmount) || 0,
+        todayReturns: Number(data.todayReturnOrders) || 0,
+        pending: Number(pending.total) || 0,
+        toApprove: Number(pending.approve) || 0,
+        toReceive: Number(pending.receive) || 0,
+        toShip: Number(pending.ship) || 0,
+        toPostPurchaseReturn: Number(pending.purchaseReturnDraft) || 0,
+        lowStockThreshold: Number(lowStock.threshold) || 10,
+        lowStockCount: Number(lowStock.count) || 0,
+        lowStockItems: Array.isArray(lowStock.items) ? lowStock.items : []
+      })
+    } else {
+      ElMessage.error(dashboardRes.msg || '加载工作台概览失败')
     }
 
     if (moveRes.code === 0) moves.value = moveRes.data.list || []
-
-    if (saleRes.code === 0) {
-      const all = saleRes.data.list || []
-      const todaySales = all.filter((order) => order.status === 2 && !order.reversedAt && isToday(saleTime(order)))
-      stats.todayOrders = todaySales.length
-      const saleAmount = todaySales.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0)
-      const saleCost = todaySales.reduce((sum, order) => sum + Number(order.costAmount || 0), 0)
-      stats.toShip = all.filter((order) => order.status === 1).length
-
-      let returnAmount = 0
-      let returnCost = 0
-      if (returnRes.code === 0) {
-        const postedReturns = (returnRes.data.list || []).filter((row) => row.status === 2 && isToday(row.postedAt))
-        stats.todayReturns = postedReturns.length
-        for (const row of postedReturns) {
-          returnAmount += Number(row.amount || 0)
-          returnCost += Number(row.costAmount || 0)
-        }
-      }
-
-      stats.returnAmount = round2(returnAmount)
-      stats.todayAmount = round2(saleAmount - returnAmount)
-      stats.todayGross = round2(saleAmount - returnAmount - (saleCost - returnCost))
-    }
-
-    if (purchaseRes.code === 0) {
-      const all = purchaseRes.data.list || []
-      stats.toApprove = all.filter((order) => order.status === 1).length
-      stats.toReceive = all.filter((order) => order.status === 2).length
-    }
-
-    if (purchaseReturnRes.code === 0) {
-      stats.toPostPurchaseReturn = (purchaseReturnRes.data.list || []).filter((row) => row.status === 1).length
-    }
-
-    stats.pending = stats.toApprove + stats.toReceive + stats.toShip + stats.toPostPurchaseReturn
   } finally {
     loading.value = false
   }

@@ -72,10 +72,14 @@
           本月还没有已出库销售
         </div>
 
-        <div class="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border bg-border">
+        <div class="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
           <div class="bg-container px-3 py-2.5">
-            <div class="text-[10.5px] text-muted-foreground">采购金额</div>
+            <div class="text-[10.5px] text-muted-foreground">采购金额（净）</div>
             <MoneyText :value="summary.purchaseAmount" size="lg" class="mt-0.5" />
+          </div>
+          <div class="bg-container px-3 py-2.5">
+            <div class="text-[10.5px] text-muted-foreground">采购退货</div>
+            <MoneyText :value="summary.purchaseReturnAmount" size="lg" class="mt-0.5" />
           </div>
           <div class="bg-container px-3 py-2.5">
             <div class="text-[10.5px] text-muted-foreground">销售单</div>
@@ -93,6 +97,7 @@
           <li class="flex gap-2"><span class="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary"></span><span><b class="font-medium text-base-text">销售额</b> = 已出库且未红冲的销售 − 已入库退货</span></li>
           <li class="flex gap-2"><span class="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary"></span><span><b class="font-medium text-base-text">销售成本</b> = 出库时冻结的成本 − 退回货物成本</span></li>
           <li class="flex gap-2"><span class="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary"></span><span><b class="font-medium text-base-text">毛利</b> = 销售额 − 销售成本</span></li>
+          <li class="flex gap-2"><span class="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary"></span><span><b class="font-medium text-base-text">采购金额</b> = 已入库采购 − 采购红冲 − 采购退货；采购退货计入退货发生月</span></li>
           <li class="flex gap-2"><span class="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary"></span><span><b class="font-medium text-base-text">红冲</b>计入红冲发生月，不追溯修改已结账月份</span></li>
         </ul>
       </SectionCard>
@@ -173,7 +178,8 @@ const now = new Date()
 const month = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
 const summary = reactive({
   salesAmount: 0, salesCost: 0, gross: 0, stockValue: 0,
-  salesOrders: 0, returnOrders: 0, returnAmount: 0, returnCost: 0, purchaseAmount: 0
+  salesOrders: 0, returnOrders: 0, returnAmount: 0, returnCost: 0,
+  purchaseAmount: 0, purchaseReturnAmount: 0
 })
 const periods = ref([])
 const closing = ref(false)
@@ -204,7 +210,8 @@ const loadSummary = async () => {
   if (res.code !== 0) return ElMessage.error(res.msg || '加载月报失败')
   Object.assign(summary, {
     salesAmount: 0, salesCost: 0, gross: 0, stockValue: 0,
-    salesOrders: 0, returnOrders: 0, returnAmount: 0, returnCost: 0, purchaseAmount: 0,
+    salesOrders: 0, returnOrders: 0, returnAmount: 0, returnCost: 0,
+    purchaseAmount: 0, purchaseReturnAmount: 0,
     ...(res.data || {})
   })
 }

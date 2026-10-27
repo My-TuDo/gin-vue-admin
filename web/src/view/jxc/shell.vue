@@ -85,7 +85,7 @@
             class="flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium transition-colors"
             :class="recon.className"
             :title="reconDetail"
-            @click="router.push('/jxc/inventory?reconcile=1')"
+            @click="goReconcile"
           >
             <svg-icon :icon="recon.icon" class="h-3.5 w-3.5" :class="{ 'animate-spin': recon.spin }" />
             <span>{{ recon.label }}</span>
@@ -111,7 +111,8 @@ import { useRoute, useRouter } from 'vue-router'
 import CommandPalette from '@/components/jxc/CommandPalette.vue'
 import { useUserStore } from '@/pinia/modules/user'
 import { isTypingTarget } from '@/view/jxc/shared/keyboard'
-import { ledgerReconcile } from '@/api/jxc'
+import { ledgerReconcileLast } from '@/api/jxc'
+import { formatDateTime } from '@/view/jxc/shared/format'
 import './theme.css'
 
 const route = useRoute()
@@ -168,10 +169,14 @@ const dateLabel = computed(() => {
 })
 
 // ---------- 对账状态常驻：账不平是大事，不该藏在二级页面 ----------
+// 首屏只读 /reconcile/last（不触发全仓扫描）；用户点顶栏或库存页按钮时才执行 /reconcile。
 const reconState = ref('checking')
-const reconDetail = ref('正在校验余额与账本累加')
+const reconDetail = ref('正在读取最近一次对账结果')
+let reconTimer = null
 const RECON_META = {
-  checking: { label: '正在核对', icon: 'lucide:loader-circle', className: 'border-border bg-container text-muted-foreground', spin: true },
+  checking: { label: '读取对账', icon: 'lucide:loader-circle', className: 'border-border bg-container text-muted-foreground', spin: true },
+  none: { label: '尚未对账', icon: 'lucide:shield', className: 'border-border bg-container text-muted-foreground', spin: false },
+  stale: { label: '对账已过期', icon: 'lucide:clock', className: 'border-warning-200 bg-warning-50 text-warning-700', spin: false },
   ok: { label: '账实相符', icon: 'lucide:circle-check', className: 'border-success-200 bg-success-50 text-success-700', spin: false },
   bad: { label: '对账异常', icon: 'lucide:alert-triangle', className: 'border-error-200 bg-error-50 text-error-700', spin: false },
   error: { label: '对账不可用', icon: 'lucide:cloud-off', className: 'border-border bg-container text-muted-foreground', spin: false }
@@ -183,26 +188,47 @@ const setRecon = (state, detail) => {
   reconDetail.value = detail || ''
 }
 
-const checkReconcile = async () => {
-  setRecon('checking', '正在校验余额与账本累加')
+const formatScope = (scope) => {
+  if (!scope || scope === 'all') return '全部仓库'
+  if (scope.startsWith('warehouse:')) return `仓库 #${scope.slice('warehouse:'.length)}`
+  return scope
+}
+
+const checkReconcile = async (silent = false) => {
+  if (!silent) setRecon('checking', '正在读取最近一次对账结果')
   try {
-    const res = await ledgerReconcile({})
+    const res = await ledgerReconcileLast({})
     if (res.code !== 0) return setRecon('error', res.msg || '对账接口不可用')
-    if (res.data?.ok) {
-      setRecon('ok', '最近一次校验：余额与账本累加一致')
-    } else {
-      const count = Number(res.data?.count || res.data?.violations?.length || 0)
-      setRecon('bad', `发现 ${count} 处不一致，点击查看明细`)
+    const data = res.data || {}
+    if (!data.checkedAt) {
+      return setRecon('none', '还没有对账记录；点击执行一次检查')
     }
+    const meta = [
+      `范围 ${formatScope(data.scope)}`,
+      `检查于 ${formatDateTime(data.checkedAt)}`,
+      `耗时 ${Number(data.durationMs) || 0}ms`,
+      `${Number(data.checkedSkus) || 0} 个 SKU`
+    ].join(' · ')
+    if (data.stale) return setRecon('stale', `${meta} · 超过 60 秒，点击重新检查`)
+    if (data.ok) return setRecon('ok', meta)
+    setRecon('bad', `${meta} · 发现 ${Number(data.count) || 0} 处不一致，点击查看`)
   } catch {
-    setRecon('error', '网络异常，暂时无法对账')
+    setRecon('error', '网络异常，暂时无法读取对账结果')
   }
 }
 
-const onReconEvent = (event) => {
-  const detail = event.detail || {}
-  if (detail.ok) setRecon('ok', detail.message || '余额与账本累加一致')
-  else setRecon('bad', detail.message || '余额与账本累加不一致')
+// 手动对账完成后库存页会广播；重新读 /last 即可拿到 checkedAt/耗时/SKU 数。
+const onReconEvent = () => {
+  checkReconcile()
+}
+
+// 顶栏对账：不在库存页就跳过去，已经停在库存页则广播让页面直接执行 /reconcile。
+const goReconcile = () => {
+  if (route.path === '/jxc/inventory') {
+    window.dispatchEvent(new CustomEvent('jxc:run-reconcile'))
+    return
+  }
+  router.push('/jxc/inventory?reconcile=1')
 }
 
 // ---------- 全局键盘 ----------
@@ -228,10 +254,13 @@ onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('jxc:reconcile', onReconEvent)
   checkReconcile()
+  // 后端结果 TTL 60s；静默轮询一次，避免页面长时间停留时还挂着过期的“账实相符”。
+  reconTimer = setInterval(() => checkReconcile(true), 60_000)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('jxc:reconcile', onReconEvent)
+  if (reconTimer) clearInterval(reconTimer)
 })
 </script>

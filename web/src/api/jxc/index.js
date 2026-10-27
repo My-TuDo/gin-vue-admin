@@ -37,15 +37,23 @@ export const cancelPurchase = (id) => service({ url: `/jxc/purchase/${id}/cancel
 
 // ---------- 销售 ----------
 export const createSale = (data) => service({ url: '/jxc/sale', method: 'post', data })
+// 原子开单：建单 + 预留 + 出库在一个事务里完成；失败不留草稿/预留。
+export const checkoutSale = (data) => service({ url: '/jxc/sale/checkout', method: 'post', data })
 export const pageSale = (params) => service({ url: '/jxc/sale/page', method: 'get', params })
 export const getSale = (id) => service({ url: `/jxc/sale/${id}`, method: 'get' })
 export const shipSale = (id) => service({ url: `/jxc/sale/${id}/ship`, method: 'post' })
 export const cancelSale = (id) => service({ url: `/jxc/sale/${id}/cancel`, method: 'post' })
 
+// ---------- 工作台 ----------
+// 一次聚合返回 KPI/待办/低库存；替换工作台原先的 5 个 pageSize=100 列表。
+export const getDashboardSummary = (params = {}) => service({ url: '/jxc/dashboard/summary', method: 'get', params })
+
 // ---------- 账本 ----------
 export const ledgerBalances = (params) => service({ url: '/jxc/ledger/balance', method: 'get', params })
 export const ledgerMoves = (params) => service({ url: '/jxc/ledger/moves', method: 'get', params })
 export const ledgerReconcile = (params) => service({ url: '/jxc/ledger/reconcile', method: 'get', params })
+// 只读最近一次对账结果，不触发全仓扫描。
+export const ledgerReconcileLast = (params = {}) => service({ url: '/jxc/ledger/reconcile/last', method: 'get', params })
 
 // ---------- 红冲 ----------
 export const createReversal = (data) => service({ url: '/jxc/reversal', method: 'post', data })
