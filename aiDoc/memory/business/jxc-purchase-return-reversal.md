@@ -3,7 +3,7 @@
 ## 基本信息
 
 - 提出日期：2026-10-27
-- 当前状态：done（后端）；前端红冲按钮待接
+- 当前状态：done（后端 + 前端，2026-10-27）
 - 需求类型：业务出口补齐 / 账务正确性
 - 优先级：P1
 
@@ -17,7 +17,7 @@
 - 数据库：purchase_return.reversed_at（AutoMigrate 加列）
 - 文档：docs/20、docs/25、docs/27、docs/28
 - 测试：server/service/jxc/purchase_return_reversal_test.go、purchase_return_reversal_aggregate_test.go
-- 前端：未改；入口见 docs/28 第十一节
+- 前端：documents/index.vue 已接列表/详情红冲、专用弹窗、红冲记录来源；见 docs/31
 
 ## 已确认约束
 
@@ -36,5 +36,6 @@
 
 ## 后续待办
 
-- 前端采购退货列表/详情加「红冲」按钮，复用原因弹窗；红冲后展示已红冲。
-- 采购退货红冲的 UI 失败路径/权限点触。
+- ~~前端采购退货列表/详情加「红冲」按钮~~：已完成，PR-004/RC-018 验收。
+- 9002/9003/8881 的红冲拒绝由后端 Casbin 保证；UI 失败提示可再做一轮角色点触。
+- 演示数据重置见 docs/32。
