@@ -60,6 +60,14 @@ func (c Cents) Add(o Cents) Cents { return c + o }
 // Sub 相减。
 func (c Cents) Sub(o Cents) Cents { return c - o }
 
+// Abs 取绝对值
+func (c Cents) Abs() Cents {
+	if c < 0 {
+		return -c
+	}
+	return c
+}
+
 // Neg 取负。
 func (c Cents) Neg() Cents { return -c }
 
