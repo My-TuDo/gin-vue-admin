@@ -26,7 +26,11 @@
           >
             <svg-icon :icon="item.icon" class="h-3.5 w-3.5" />
             {{ item.label }}
-            <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] tabular-nums" :class="tab === item.key ? 'bg-primary-100 text-primary-700' : ''">
+            <span
+              v-if="!filterActive"
+              class="rounded bg-muted px-1.5 py-0.5 text-[10px] tabular-nums"
+              :class="tab === item.key ? 'bg-primary-100 text-primary-700' : ''"
+            >
               {{ tabCount(item.key) }}
             </span>
           </button>
@@ -178,7 +182,7 @@
             </el-table-column>
             <el-table-column v-if="tab === 'reversal'" label="来源" width="100">
               <template #default="{ row }">
-                <span class="text-[12px]">{{ row.sourceType === 'sale' ? '销售单' : '采购单' }}</span>
+                <span class="text-[12px]">{{ reversalSourceText(row.sourceType) }}</span>
               </template>
             </el-table-column>
             <el-table-column v-if="tab === 'reversal'" prop="sourceNo" label="原单号" width="168">
@@ -258,7 +262,13 @@
                   <template v-else-if="tab === 'purchaseReturn'">
                     <el-button v-if="row.status === 1" link type="success" @click.stop="postPurchaseReturnRow(row)">出库</el-button>
                     <el-button v-if="row.status === 1" link type="danger" @click.stop="cancelPurchaseReturnRow(row)">取消</el-button>
-                    <span v-if="row.status !== 1" class="text-[11px] text-muted-foreground">已结束</span>
+                    <el-button
+                      v-if="row.status === 2 && !row.reversedAt"
+                      link
+                      type="danger"
+                      @click.stop="openReversal('purchase_return', row)"
+                    >红冲</el-button>
+                    <span v-if="row.status === 3 || row.reversedAt" class="text-[11px] text-muted-foreground">已结束</span>
                   </template>
                   <template v-else-if="tab === 'return'">
                     <el-button v-if="row.status === 1" link type="success" @click.stop="doPostReturn(row)">入库</el-button>
@@ -409,18 +419,28 @@
     </el-drawer>
 
     <!-- 红冲 -->
-    <el-dialog v-model="revDialog" title="整单红冲" width="460px">
+    <el-dialog v-model="revDialog" :title="revIsPurchaseReturn ? '采购退货红冲' : '整单红冲'" width="460px">
       <div class="space-y-3">
         <div class="rounded-lg border border-warning-200 bg-warning-50 px-3 py-2.5 text-[12px] leading-5 text-warning-800">
-          红冲会生成反向账本记录。原单作废但历史保留，操作不可撤销。若只是部分退货，请用「退货」。
+          <template v-if="revIsPurchaseReturn">
+            红冲会把已退给供应商的货按原退货价加回库存；原退货单保留并标记已红冲，可重新退货。操作不可撤销。
+          </template>
+          <template v-else>
+            红冲会生成反向账本记录。原单作废但历史保留，操作不可撤销。若只是部分退货，请用「退货」。
+          </template>
         </div>
         <div class="flex items-center justify-between rounded-lg border border-border px-3 py-2.5 text-[12px]">
-          <span class="text-muted-foreground">单据</span>
+          <span class="text-muted-foreground">{{ revSourceLabel }}</span>
           <span class="font-mono">{{ revTarget?.orderNo || revTarget?.returnNo }}</span>
         </div>
         <label class="block">
           <span class="mb-1.5 block text-[11px] text-muted-foreground">红冲原因（必填）</span>
-          <el-input v-model="revReason" type="textarea" :rows="3" placeholder="例如：供应商发错货 / 单据录错" />
+          <el-input
+            v-model="revReason"
+            type="textarea"
+            :rows="3"
+            :placeholder="revIsPurchaseReturn ? '例如：供应商取消退货 / 退货单录错' : '例如：供应商发错货 / 单据录错'"
+          />
         </label>
       </div>
       <template #footer>
@@ -621,6 +641,12 @@ const statusOptions = computed(() => (STATUS_OPTIONS[tab.value] || []).map((item
   count: Number(counts.value[item.value] || 0)
 })))
 
+const filterActive = computed(() => Boolean(
+  keyword.value.trim() ||
+  status.value ||
+  warehouseId.value ||
+  (Array.isArray(dateRange.value) && dateRange.value.length === 2)
+))
 const emptyTitle = computed(() => (listError.value ? '无法加载单据' : '没有符合条件单据'))
 const emptyDescription = computed(() => {
   if (listError.value) return listError.value
@@ -650,6 +676,11 @@ const selectStatus = (value) => {
   loadList()
 }
 
+const reversalSourceText = (type) => ({
+  sale: '销售单',
+  purchase: '采购单',
+  purchase_return: '采购退货'
+}[type] || type || '—')
 const partnerName = (id) => (id ? partnerMap.value[String(id)]?.name || '—' : '—')
 const customerName = (id) => (id ? partnerName(id) : '散客')
 const warehouseName = (id) => warehouseMap.value[String(id)]?.name || '—'
@@ -777,7 +808,7 @@ const loadCounts = async () => {
 const refreshTabTotals = async () => {
   const seq = ++totalSeq
   const next = { ...tabTotals.value }
-  const params = { ...filterParams(), page: 1, pageSize: 1 }
+  const params = { page: 1, pageSize: 1 }
   await Promise.all(Object.entries(ENDPOINTS).map(async ([key, request]) => {
     try {
       const res = await request(params)
@@ -790,11 +821,11 @@ const refreshTabTotals = async () => {
 }
 
 const refreshList = async () => {
-  await Promise.all([loadList(), loadCounts(), refreshTabTotals()])
+  await Promise.all([loadList(), loadCounts()])
 }
 
 const refreshAll = async () => {
-  await refreshList()
+  await Promise.all([loadList(), loadCounts(), refreshTabTotals()])
 }
 
 const onFilterChange = () => {
@@ -911,10 +942,15 @@ const detailActions = computed(() => {
       { key: 'reversal', label: '整单红冲', type: 'danger' }
     ]
   }
-  if (detailKind.value === 'purchaseReturn' && statusValue === 1) return [
-    { key: 'post-purchase-return', label: '出库', type: 'primary' },
-    { key: 'cancel-purchase-return', label: '取消', type: 'danger' }
-  ]
+  if (detailKind.value === 'purchaseReturn') {
+    if (statusValue === 1) return [
+      { key: 'post-purchase-return', label: '出库', type: 'primary' },
+      { key: 'cancel-purchase-return', label: '取消', type: 'danger' }
+    ]
+    if (statusValue === 2 && !reversed) return [
+      { key: 'reversal', label: '整单红冲', type: 'danger' }
+    ]
+  }
   if (detailKind.value === 'return' && statusValue === 1) return [
     { key: 'post-return', label: '入库', type: 'primary' },
     { key: 'cancel-return', label: '取消', type: 'danger' }
@@ -933,7 +969,7 @@ const onDetailAction = async (key) => {
   if (key === 'ship') return ship(row)
   if (key === 'cancel-sale') return cancelSaleOrder(row)
   if (key === 'return') return openReturn(row)
-  if (key === 'reversal') return openReversal(detailKind.value, row)
+  if (key === 'reversal') return openReversal(detailKind.value === 'purchaseReturn' ? 'purchase_return' : detailKind.value, row)
   if (key === 'purchase-return') return openPurchaseReturn(row)
   if (key === 'post-purchase-return') return postPurchaseReturnRow(row)
   if (key === 'cancel-purchase-return') return cancelPurchaseReturnRow(row)
@@ -1001,10 +1037,16 @@ const revDialog = ref(false)
 const revTarget = ref(null)
 const revSource = ref('sale')
 const revReason = ref('')
+const revSourceLabel = computed(() => ({
+  sale: '销售单',
+  purchase: '采购单',
+  purchase_return: '采购退货单'
+}[revSource.value] || '单据'))
+const revIsPurchaseReturn = computed(() => revSource.value === 'purchase_return')
 
 const openReversal = (source, row) => {
   detailOpen.value = false
-  revSource.value = source
+  revSource.value = source === 'purchaseReturn' ? 'purchase_return' : source
   revTarget.value = row
   revReason.value = ''
   revDialog.value = true
@@ -1137,7 +1179,7 @@ onMounted(async () => {
 // 组件被复用时（从工作台待办跳进来、或点导航回「单据」），query 变化必须重新应用筛选。
 watch(() => route.query, async () => {
   applyQuery()
-  await loadInitial()
+  await (filterActive.value ? refreshList() : loadInitial())
 }, { deep: true })
 
 onBeforeUnmount(() => {

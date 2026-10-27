@@ -148,12 +148,16 @@ const NAV_FLAT = NAV_GROUPS.flatMap((group) => group.items)
 const currentTitle = computed(() => NAV_FLAT.find((item) => isActive(item.path))?.label ?? '工作台')
 const isActive = (path) => route.path.startsWith(path)
 
-const paletteItems = computed(() => [
-  ...NAV_FLAT.map((item) => ({ ...item, to: item.path, shortcut: 'Alt ' + item.hint })),
-  { key: 'quick-sale', path: '/jxc/sale', label: '新建销售单', icon: 'lucide:scan-line', desc: '进入开单台，搜索结果直接加入明细', to: '/jxc/sale', keywords: '快速 开单 扫码' },
-  { key: 'quick-reconcile', path: '/jxc/inventory?reconcile=1', label: '一键对账', icon: 'lucide:shield-check', desc: '校验余额与账本累加是否一致', to: '/jxc/inventory?reconcile=1', keywords: '核对 账实 差异' },
-  { key: 'quick-check', path: '/jxc/inventory?tab=check', label: '发起盘点', icon: 'lucide:clipboard-check', desc: '录入实盘数，差异自动记账', to: '/jxc/inventory?tab=check', keywords: '盘点 实盘 差异' }
-])
+const paletteItems = computed(() => {
+  // 打开面板时生成一次 nonce：已在库存页时也能让 query 变化，触发一次新的对账。
+  const run = paletteOpen.value ? Date.now() : 0
+  return [
+    ...NAV_FLAT.map((item) => ({ ...item, to: item.path, shortcut: 'Alt ' + item.hint })),
+    { key: 'quick-sale', path: '/jxc/sale', label: '新建销售单', icon: 'lucide:scan-line', desc: '进入开单台，搜索结果直接加入明细', to: '/jxc/sale', keywords: '快速 开单 扫码' },
+    { key: 'quick-reconcile', path: '/jxc/inventory?reconcile=1', label: '一键对账', icon: 'lucide:shield-check', desc: '校验余额与账本累加是否一致', to: `/jxc/inventory?reconcile=1&run=${run}`, keywords: '核对 账实 差异' },
+    { key: 'quick-check', path: '/jxc/inventory?tab=check', label: '发起盘点', icon: 'lucide:clipboard-check', desc: '录入实盘数，差异自动记账', to: '/jxc/inventory?tab=check', keywords: '盘点 实盘 差异' }
+  ]
+})
 
 const userName = computed(() => userStore.userInfo.nickName || userStore.userInfo.userName || '管理员')
 const authorityName = computed(() => userStore.userInfo.authority?.authorityName || '工作台用户')
@@ -176,6 +180,7 @@ let reconTimer = null
 const RECON_META = {
   checking: { label: '读取对账', icon: 'lucide:loader-circle', className: 'border-border bg-container text-muted-foreground', spin: true },
   none: { label: '尚未对账', icon: 'lucide:shield', className: 'border-border bg-container text-muted-foreground', spin: false },
+  denied: { label: '无对账权限', icon: 'lucide:shield-off', className: 'border-border bg-container text-muted-foreground', spin: false },
   stale: { label: '对账已过期', icon: 'lucide:clock', className: 'border-warning-200 bg-warning-50 text-warning-700', spin: false },
   ok: { label: '账实相符', icon: 'lucide:circle-check', className: 'border-success-200 bg-success-50 text-success-700', spin: false },
   bad: { label: '对账异常', icon: 'lucide:alert-triangle', className: 'border-error-200 bg-error-50 text-error-700', spin: false },
@@ -198,6 +203,7 @@ const checkReconcile = async (silent = false) => {
   if (!silent) setRecon('checking', '正在读取最近一次对账结果')
   try {
     const res = await ledgerReconcileLast({})
+    if (res.code === 7) return setRecon('denied', '当前角色无对账权限')
     if (res.code !== 0) return setRecon('error', res.msg || '对账接口不可用')
     const data = res.data || {}
     if (!data.checkedAt) {
@@ -224,6 +230,7 @@ const onReconEvent = () => {
 
 // 顶栏对账：不在库存页就跳过去，已经停在库存页则广播让页面直接执行 /reconcile。
 const goReconcile = () => {
+  if (reconState.value === 'denied') return
   if (route.path === '/jxc/inventory') {
     window.dispatchEvent(new CustomEvent('jxc:run-reconcile'))
     return

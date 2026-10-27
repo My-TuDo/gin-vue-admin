@@ -462,6 +462,11 @@ watch(() => route.query.reconcile, (value) => {
   if (value === '1') doReconcile()
 })
 
+// 命令面板的「一键对账」带 run nonce；已在库存页时也能重新触发，而不是被相同 query 吞掉。
+watch(() => route.query.run, (value) => {
+  if (value && route.query.reconcile === '1') doReconcile()
+})
+
 const onRunReconcile = () => {
   doReconcile()
 }

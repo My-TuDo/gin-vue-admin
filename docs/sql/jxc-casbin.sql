@@ -11,6 +11,9 @@
 --   9003 店员         —— 只做开单/退货/盘点录入 + 查询，不能采购入库、不能红冲、不能结账
 --   8881 只读         —— GVA 自带普通用户子角色，这里只授查询
 --
+-- 基础登录/登出：9001/9002/9003 各 3 条（getUserInfo/getMenu/jsonInBlacklist），
+-- 共 9 条；JXC 业务 210 条 + 基础 9 条 = 219 条。
+--
 -- 使用：mysql -u root -p erp_v3 < docs/sql/jxc-casbin.sql
 -- 执行后**必须重启后端**（casbin enforcer 有进程内缓存，不重启会一直报权限不足）。
 
@@ -243,6 +246,24 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
   ('p','8881','/jxc/period/snapshot','GET'),
   ('p','8881','/jxc/period/summary','GET');
 
+-- 9001/9002/9003 基础登录/登出策略（每角色 3 条，共 9 条；不计入 JXC 210）
+-- 没有这三条：前端路由守卫拉不到用户/菜单，登出接口也会 403。
+DELETE FROM casbin_rule
+WHERE ptype = 'p'
+  AND v0 IN ('9001','9002','9003')
+  AND v1 IN ('/user/getUserInfo','/menu/getMenu','/jwt/jsonInBlacklist');
+
+INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
+  ('p','9001','/user/getUserInfo','GET'),
+  ('p','9001','/menu/getMenu','POST'),
+  ('p','9001','/jwt/jsonInBlacklist','POST'),
+  ('p','9002','/user/getUserInfo','GET'),
+  ('p','9002','/menu/getMenu','POST'),
+  ('p','9002','/jwt/jsonInBlacklist','POST'),
+  ('p','9003','/user/getUserInfo','GET'),
+  ('p','9003','/menu/getMenu','POST'),
+  ('p','9003','/jwt/jsonInBlacklist','POST');
+
 -- 业务角色（角色本身由 GVA 的角色管理维护，这里只保证存在，便于直接授人以角色）
 INSERT INTO sys_authorities (authority_id, authority_name, parent_id, created_at, updated_at, deleted_at)
 SELECT 9001, '老板', 0, NOW(), NOW(), NULL FROM DUAL
@@ -255,3 +276,6 @@ SELECT 9003, '店员', 0, NOW(), NOW(), NULL FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM sys_authorities WHERE authority_id = 9003);
 
 SELECT CONCAT('进销存策略条数：', COUNT(*)) AS result FROM casbin_rule WHERE ptype='p' AND v1 LIKE '/jxc/%';
+SELECT CONCAT('9001/9002/9003 基础策略条数：', COUNT(*)) AS result FROM casbin_rule
+WHERE ptype='p' AND v0 IN ('9001','9002','9003')
+  AND v1 IN ('/user/getUserInfo','/menu/getMenu','/jwt/jsonInBlacklist');
