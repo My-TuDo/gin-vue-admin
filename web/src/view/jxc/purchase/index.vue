@@ -86,7 +86,11 @@ const submit = async () => {
 
 
 onMounted(async () => {
-  const [w, s, sp] = await Promise.all([listWarehouses(), listSkus({}), listPartners('supplier')])
+  const [w, s, sp] = await Promise.all([
+    listWarehouses({ active: 1 }),
+    listSkus({ active: 1 }),
+    listPartners('supplier', { active: 1 })
+  ])
   if (w.code === 0) {
     warehouses.value = w.data || []
     if (warehouses.value.length) warehouseId.value = warehouses.value[0].ID

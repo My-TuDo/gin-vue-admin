@@ -15,8 +15,15 @@ func (r *MasterRouter) InitMasterRouter(router *gin.RouterGroup) {
 	{
 		g.GET("warehouses", api.ListWarehouses)
 		g.POST("warehouses", api.CreateWarehouse)
+		g.PUT("warehouses/:id", api.UpdateWarehouse)
+		g.POST("warehouses/:id/status", api.SetWarehouseStatus)
+
 		g.GET("goods", api.ListGoods)
 		g.POST("goods", api.CreateGoods)
+		g.PUT("goods/:id", api.UpdateGoods)
+		g.POST("goods/:id/status", api.SetGoodsStatus)
+
 		g.GET("skus", api.ListSkus)
+		g.POST("skus/:id/status", api.SetSkuStatus)
 	}
 }

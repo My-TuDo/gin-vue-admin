@@ -14,5 +14,7 @@ func (r *PartnerRouter) InitPartnerRouter(router *gin.RouterGroup) {
 	{
 		g.GET("partners", api.ListPartners)
 		g.POST("partners", api.CreatePartner)
+		g.PUT("partners/:id", api.UpdatePartner)
+		g.POST("partners/:id/status", api.SetPartnerStatus)
 	}
 }

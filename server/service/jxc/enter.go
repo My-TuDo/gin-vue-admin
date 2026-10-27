@@ -14,6 +14,7 @@ type ServiceGroup struct {
 	Return   *ReturnService
 	Check    *StockCheckService
 	Period   *PeriodService
+	Master   *MasterService
 }
 
 // ServiceGroupApp 进程级单例。
@@ -27,4 +28,5 @@ var ServiceGroupApp = &ServiceGroup{
 	Return:   NewReturnService(),
 	Check:    NewStockCheckService(),
 	Period:   NewPeriodService(),
+	Master:   new(MasterService),
 }

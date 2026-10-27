@@ -119,9 +119,13 @@ const change = computed(() => Math.round((paid.value - total.value) * 100) / 100
 const loadGoods = async () => {
   loadingGoods.value = true
   try {
-    const res = await listGoods()
-    if (res.code === 0) goods.value = res.data || []
-    else ElMessage.error(res.msg || '加载商品失败')
+    const res = await listGoods({ active: 1 })
+    if (res.code === 0) {
+      // 后端已按 status 过滤；这里再兜一层，避免状态切换后缓存里残留停用规格。
+      goods.value = (res.data || [])
+        .map((g) => ({ ...g, skus: (g.skus || []).filter((s) => s.status === 1) }))
+        .filter((g) => g.skus.length > 0)
+    } else ElMessage.error(res.msg || '加载商品失败')
   } finally {
     loadingGoods.value = false
   }
@@ -256,7 +260,7 @@ const onKeydown = (e) => {
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
   await loadGoods()
-  const res = await listWarehouses()
+  const res = await listWarehouses({ active: 1 })
   if (res.code === 0) {
     warehouses.value = res.data || []
     if (warehouses.value.length && !warehouseId.value) {

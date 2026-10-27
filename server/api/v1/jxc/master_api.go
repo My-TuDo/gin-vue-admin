@@ -5,23 +5,33 @@ import (
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/common/response"
-	jxcmodel "github.com/flipped-aurora/gin-vue-admin/server/model/jxc"
+	jxcReq "github.com/flipped-aurora/gin-vue-admin/server/model/jxc/request"
+	jxcsvc "github.com/flipped-aurora/gin-vue-admin/server/service/jxc"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
-// MasterApi 基础资料：仓库 / 商品 / 规格。
+// MasterApi 基础资料：仓库 / 商品 / 规格 / 往来单位。
 //
-// 刻意保持最小：这是"能开单"所必需的三张表，其余（供应商、客户、品牌、分类）
-// 在真正需要时再加，不提前堆模型。
+// handler 只做解析 → 调 Service → 统一响应；DB 访问与业务校验在
+// service/jxc/master_service.go。入参用 request 包的 DTO，不直接绑定模型，
+// 避免客户端通过多传 ID / status / 时间字段做 mass assignment。
 type MasterApi struct{}
 
 // ---------- 仓库 ----------
 
+// ListWarehouses
+// @Tags      JxcMaster
+// @Summary   仓库列表
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     active  query     int  false  "1=只返回启用"
+// @Success   200     {object}  response.Response{data=[]jxcmodel.Warehouse,msg=string}
+// @Router    /jxc/master/warehouses [get]
 func (a *MasterApi) ListWarehouses(c *gin.Context) {
-	var list []jxcmodel.Warehouse
-	if err := global.GVA_DB.WithContext(c.Request.Context()).Order("id").Find(&list).Error; err != nil {
+	list, err := jxcsvc.ServiceGroupApp.Master.ListWarehouses(c.Request.Context(), c.Query("active") == "1")
+	if err != nil {
 		global.GVA_LOG.Error("获取仓库失败", zap.Error(err))
 		response.FailWithMessage("获取仓库失败", c)
 		return
@@ -29,121 +39,197 @@ func (a *MasterApi) ListWarehouses(c *gin.Context) {
 	response.OkWithData(list, c)
 }
 
+// CreateWarehouse
+// @Tags      JxcMaster
+// @Summary   新建仓库
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     data  body      jxcReq.WarehouseInput  true  "仓库编码与名称"
+// @Success   200   {object}  response.Response{data=jxcmodel.Warehouse,msg=string}
+// @Router    /jxc/master/warehouses [post]
 func (a *MasterApi) CreateWarehouse(c *gin.Context) {
-	var req jxcmodel.Warehouse
+	var req jxcReq.WarehouseInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.FailWithMessage("请求参数错误："+err.Error(), c)
 		return
 	}
-	if req.Code == "" || req.Name == "" {
-		response.FailWithMessage("仓库编码与名称不能为空", c)
+	w, err := jxcsvc.ServiceGroupApp.Master.CreateWarehouse(c.Request.Context(), req)
+	if err != nil {
+		response.FailWithMessage(err.Error(), c)
 		return
 	}
-	if req.Status == 0 {
-		req.Status = 1
-	}
-	if err := global.GVA_DB.WithContext(c.Request.Context()).Create(&req).Error; err != nil {
-		response.FailWithMessage("创建仓库失败："+err.Error(), c)
+	response.OkWithData(w, c)
+}
+
+// UpdateWarehouse
+// @Tags      JxcMaster
+// @Summary   编辑仓库
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     id    path      int                    true  "仓库ID"
+// @Param     data  body      jxcReq.WarehouseInput  true  "仓库编码与名称"
+// @Success   200   {object}  response.Response{data=jxcmodel.Warehouse,msg=string}
+// @Router    /jxc/master/warehouses/{id} [put]
+func (a *MasterApi) UpdateWarehouse(c *gin.Context) {
+	id, ok := parseMasterID(c)
+	if !ok {
 		return
 	}
-	response.OkWithData(req, c)
+	var req jxcReq.WarehouseInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage("请求参数错误："+err.Error(), c)
+		return
+	}
+	w, err := jxcsvc.ServiceGroupApp.Master.UpdateWarehouse(c.Request.Context(), id, req)
+	if err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithData(w, c)
 }
 
-// ---------- 商品（含规格） ----------
-
-// GoodsWithSkus 商品 + 规格，一次返回，前端商品卡片直接可用。
-type GoodsWithSkus struct {
-	jxcmodel.Goods
-	Skus []jxcmodel.GoodsSku `json:"skus"`
+// SetWarehouseStatus
+// @Tags      JxcMaster
+// @Summary   启用/停用仓库
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     id    path      int                true  "仓库ID"
+// @Param     data  body      jxcReq.StatusInput true  "0停用 1启用"
+// @Success   200   {object}  response.Response{msg=string}
+// @Router    /jxc/master/warehouses/{id}/status [post]
+func (a *MasterApi) SetWarehouseStatus(c *gin.Context) {
+	id, ok := parseMasterID(c)
+	if !ok {
+		return
+	}
+	var req jxcReq.StatusInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage("请求参数错误："+err.Error(), c)
+		return
+	}
+	if err := jxcsvc.ServiceGroupApp.Master.SetWarehouseStatus(c.Request.Context(), id, req.Status); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithMessage("状态已更新", c)
 }
 
+// ---------- 商品与规格 ----------
+
+// ListGoods
+// @Tags      JxcMaster
+// @Summary   商品列表（含规格）
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     active  query     int  false  "1=只返回启用"
+// @Success   200     {object}  response.Response{data=[]jxcResp.GoodsWithSkus,msg=string}
+// @Router    /jxc/master/goods [get]
 func (a *MasterApi) ListGoods(c *gin.Context) {
-	db := global.GVA_DB.WithContext(c.Request.Context())
-	var goods []jxcmodel.Goods
-	if err := db.Order("id desc").Limit(500).Find(&goods).Error; err != nil {
+	list, err := jxcsvc.ServiceGroupApp.Master.ListGoods(c.Request.Context(), c.Query("active") == "1")
+	if err != nil {
 		global.GVA_LOG.Error("获取商品失败", zap.Error(err))
 		response.FailWithMessage("获取商品失败", c)
 		return
 	}
-	var skus []jxcmodel.GoodsSku
-	if err := db.Order("id").Find(&skus).Error; err != nil {
-		response.FailWithMessage("获取规格失败", c)
-		return
-	}
-	byGoods := map[uint][]jxcmodel.GoodsSku{}
-	for _, s := range skus {
-		byGoods[s.GoodsID] = append(byGoods[s.GoodsID], s)
-	}
-	out := make([]GoodsWithSkus, 0, len(goods))
-	for _, g := range goods {
-		out = append(out, GoodsWithSkus{Goods: g, Skus: byGoods[g.ID]})
-	}
-	response.OkWithData(out, c)
+	response.OkWithData(list, c)
 }
 
-// CreateGoods 创建商品 + 规格（一次提交，事务内完成）
+// CreateGoods
+// @Tags      JxcMaster
+// @Summary   新建商品（规格一次提交）
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     data  body      jxcReq.GoodsInput  true  "商品与规格"
+// @Success   200   {object}  response.Response{data=jxcResp.GoodsWithSkus,msg=string}
+// @Router    /jxc/master/goods [post]
 func (a *MasterApi) CreateGoods(c *gin.Context) {
-	var req GoodsWithSkus
+	var req jxcReq.GoodsInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.FailWithMessage("请求参数错误："+err.Error(), c)
 		return
 	}
-	if req.Code == "" || req.Name == "" {
-		response.FailWithMessage("商品编码与名称不能为空", c)
-		return
-	}
-	if len(req.Skus) == 0 {
-		response.FailWithMessage("至少需要一个规格（颜色×尺码）", c)
-		return
-	}
-	seen := map[string]bool{}
-	for _, s := range req.Skus {
-		if s.SkuCode == "" {
-			response.FailWithMessage("规格条码不能为空", c)
-			return
-		}
-		key := s.Color + "/" + s.Size
-		if seen[key] {
-			response.FailWithMessage("同一商品下颜色+尺码不能重复："+key, c)
-			return
-		}
-		seen[key] = true
-	}
-	if req.Status == 0 {
-		req.Status = 1
-	}
-
-	err := global.GVA_DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&req.Goods).Error; err != nil {
-			return err
-		}
-		for i := range req.Skus {
-			req.Skus[i].GoodsID = req.Goods.ID
-			if req.Skus[i].Status == 0 {
-				req.Skus[i].Status = 1
-			}
-			if err := tx.Create(&req.Skus[i]).Error; err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	goods, err := jxcsvc.ServiceGroupApp.Master.CreateGoods(c.Request.Context(), req)
 	if err != nil {
-		response.FailWithMessage("创建商品失败："+err.Error(), c)
+		response.FailWithMessage(err.Error(), c)
 		return
 	}
-	response.OkWithData(req, c)
+	response.OkWithData(goods, c)
 }
 
-// ListSkus 规格列表（可按商品过滤）
+// UpdateGoods
+// @Tags      JxcMaster
+// @Summary   编辑商品与规格
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     id    path      int                true  "商品ID"
+// @Param     data  body      jxcReq.GoodsInput  true  "商品与规格（已有规格带 ID，新增规格 ID=0）"
+// @Success   200   {object}  response.Response{data=jxcResp.GoodsWithSkus,msg=string}
+// @Router    /jxc/master/goods/{id} [put]
+func (a *MasterApi) UpdateGoods(c *gin.Context) {
+	id, ok := parseMasterID(c)
+	if !ok {
+		return
+	}
+	var req jxcReq.GoodsInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage("请求参数错误："+err.Error(), c)
+		return
+	}
+	goods, err := jxcsvc.ServiceGroupApp.Master.UpdateGoods(c.Request.Context(), id, req)
+	if err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithData(goods, c)
+}
+
+// SetGoodsStatus
+// @Tags      JxcMaster
+// @Summary   启用/停用商品
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     id    path      int                true  "商品ID"
+// @Param     data  body      jxcReq.StatusInput true  "0停用 1启用"
+// @Success   200   {object}  response.Response{msg=string}
+// @Router    /jxc/master/goods/{id}/status [post]
+func (a *MasterApi) SetGoodsStatus(c *gin.Context) {
+	id, ok := parseMasterID(c)
+	if !ok {
+		return
+	}
+	var req jxcReq.StatusInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage("请求参数错误："+err.Error(), c)
+		return
+	}
+	if err := jxcsvc.ServiceGroupApp.Master.SetGoodsStatus(c.Request.Context(), id, req.Status); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithMessage("状态已更新", c)
+}
+
+// ListSkus
+// @Tags      JxcMaster
+// @Summary   规格列表
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     goodsId  query     int  false  "商品ID"
+// @Param     active   query     int  false  "1=只返回启用"
+// @Success   200      {object}  response.Response{data=[]jxcmodel.GoodsSku,msg=string}
+// @Router    /jxc/master/skus [get]
 func (a *MasterApi) ListSkus(c *gin.Context) {
 	goodsID, _ := strconv.ParseUint(c.DefaultQuery("goodsId", "0"), 10, 64)
-	db := global.GVA_DB.WithContext(c.Request.Context()).Model(&jxcmodel.GoodsSku{})
-	if goodsID > 0 {
-		db = db.Where("goods_id = ?", goodsID)
-	}
-	var list []jxcmodel.GoodsSku
-	if err := db.Order("id").Limit(1000).Find(&list).Error; err != nil {
+	list, err := jxcsvc.ServiceGroupApp.Master.ListSkus(c.Request.Context(), uint(goodsID), c.Query("active") == "1")
+	if err != nil {
 		global.GVA_LOG.Error("获取规格失败", zap.Error(err))
 		response.FailWithMessage("获取规格失败", c)
 		return
@@ -151,45 +237,138 @@ func (a *MasterApi) ListSkus(c *gin.Context) {
 	response.OkWithData(list, c)
 }
 
-// ---------- 往来单位（供应商 / 客户） ----------
-
-// ListPartners 列表，kind 可过滤
-func (a *MasterApi) ListPartners(c *gin.Context) {
-	kind := c.DefaultQuery("kind", "")
-	db := global.GVA_DB.WithContext(c.Request.Context()).Model(&jxcmodel.Partner{})
-	if kind != "" {
-		db = db.Where("kind = ?", kind)
+// SetSkuStatus
+// @Tags      JxcMaster
+// @Summary   启用/停用规格
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     id    path      int                true  "规格ID"
+// @Param     data  body      jxcReq.StatusInput true  "0停用 1启用"
+// @Success   200   {object}  response.Response{msg=string}
+// @Router    /jxc/master/skus/{id}/status [post]
+func (a *MasterApi) SetSkuStatus(c *gin.Context) {
+	id, ok := parseMasterID(c)
+	if !ok {
+		return
 	}
-	var list []jxcmodel.Partner
-	if err := db.Order("id desc").Limit(1000).Find(&list).Error; err != nil {
+	var req jxcReq.StatusInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage("请求参数错误："+err.Error(), c)
+		return
+	}
+	if err := jxcsvc.ServiceGroupApp.Master.SetSkuStatus(c.Request.Context(), id, req.Status); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithMessage("状态已更新", c)
+}
+
+// ---------- 往来单位 ----------
+
+// ListPartners
+// @Tags      JxcMaster
+// @Summary   往来单位列表
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     kind    query     string  false  "supplier/customer"
+// @Param     active  query     int     false  "1=只返回启用"
+// @Success   200     {object}  response.Response{data=[]jxcmodel.Partner,msg=string}
+// @Router    /jxc/master/partners [get]
+func (a *MasterApi) ListPartners(c *gin.Context) {
+	list, err := jxcsvc.ServiceGroupApp.Master.ListPartners(c.Request.Context(), c.Query("kind"), c.Query("active") == "1")
+	if err != nil {
 		global.GVA_LOG.Error("获取往来单位失败", zap.Error(err))
-		response.FailWithMessage("获取往来单位失败", c)
+		response.FailWithMessage(err.Error(), c)
 		return
 	}
 	response.OkWithData(list, c)
 }
 
-// CreatePartner 新建往来单位
+// CreatePartner
+// @Tags      JxcMaster
+// @Summary   新建往来单位
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     data  body      jxcReq.PartnerInput  true  "往来单位"
+// @Success   200   {object}  response.Response{data=jxcmodel.Partner,msg=string}
+// @Router    /jxc/master/partners [post]
 func (a *MasterApi) CreatePartner(c *gin.Context) {
-	var req jxcmodel.Partner
+	var req jxcReq.PartnerInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.FailWithMessage("请求参数错误："+err.Error(), c)
 		return
 	}
-	if req.Kind != jxcmodel.PartnerSupplier && req.Kind != jxcmodel.PartnerCustomer {
-		response.FailWithMessage("类型只能是供应商或客户", c)
+	p, err := jxcsvc.ServiceGroupApp.Master.CreatePartner(c.Request.Context(), req)
+	if err != nil {
+		response.FailWithMessage(err.Error(), c)
 		return
 	}
-	if req.Code == "" || req.Name == "" {
-		response.FailWithMessage("编码与名称不能为空", c)
+	response.OkWithData(p, c)
+}
+
+// UpdatePartner
+// @Tags      JxcMaster
+// @Summary   编辑往来单位
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     id    path      int                  true  "往来单位ID"
+// @Param     data  body      jxcReq.PartnerInput  true  "往来单位（类型不可改）"
+// @Success   200   {object}  response.Response{data=jxcmodel.Partner,msg=string}
+// @Router    /jxc/master/partners/{id} [put]
+func (a *MasterApi) UpdatePartner(c *gin.Context) {
+	id, ok := parseMasterID(c)
+	if !ok {
 		return
 	}
-	if req.Status == 0 {
-		req.Status = 1
-	}
-	if err := global.GVA_DB.WithContext(c.Request.Context()).Create(&req).Error; err != nil {
-		response.FailWithMessage("创建失败："+err.Error(), c)
+	var req jxcReq.PartnerInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage("请求参数错误："+err.Error(), c)
 		return
 	}
-	response.OkWithData(req, c)
+	p, err := jxcsvc.ServiceGroupApp.Master.UpdatePartner(c.Request.Context(), id, req)
+	if err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithData(p, c)
+}
+
+// SetPartnerStatus
+// @Tags      JxcMaster
+// @Summary   启用/停用往来单位
+// @Security  ApiKeyAuth
+// @accept    application/json
+// @Produce   application/json
+// @Param     id    path      int                true  "往来单位ID"
+// @Param     data  body      jxcReq.StatusInput true  "0停用 1启用"
+// @Success   200   {object}  response.Response{msg=string}
+// @Router    /jxc/master/partners/{id}/status [post]
+func (a *MasterApi) SetPartnerStatus(c *gin.Context) {
+	id, ok := parseMasterID(c)
+	if !ok {
+		return
+	}
+	var req jxcReq.StatusInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage("请求参数错误："+err.Error(), c)
+		return
+	}
+	if err := jxcsvc.ServiceGroupApp.Master.SetPartnerStatus(c.Request.Context(), id, req.Status); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.OkWithMessage("状态已更新", c)
+}
+
+func parseMasterID(c *gin.Context) (uint, bool) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		response.FailWithMessage("ID 不合法", c)
+		return 0, false
+	}
+	return uint(id), true
 }

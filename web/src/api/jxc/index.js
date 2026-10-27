@@ -3,13 +3,29 @@ import service from '@/utils/request'
 // 进销存接口封装。约定：所有方法返回 { code, data, msg }，code===0 为成功。
 
 // ---------- 基础资料 ----------
-export const listWarehouses = () => service({ url: '/jxc/master/warehouses', method: 'get' })
+// params.active = 1 时只返回启用项：开单/补货只应看到能用的主数据；
+// 基础资料页不传，才能看到并重新启用已停用的项。
+export const listWarehouses = (params = {}) => service({ url: '/jxc/master/warehouses', method: 'get', params })
 export const createWarehouse = (data) => service({ url: '/jxc/master/warehouses', method: 'post', data })
-export const listGoods = () => service({ url: '/jxc/master/goods', method: 'get' })
+export const updateWarehouse = (id, data) => service({ url: `/jxc/master/warehouses/${id}`, method: 'put', data })
+export const setWarehouseStatus = (id, status) => service({ url: `/jxc/master/warehouses/${id}/status`, method: 'post', data: { status } })
+
+export const listGoods = (params = {}) => service({ url: '/jxc/master/goods', method: 'get', params })
 export const createGoods = (data) => service({ url: '/jxc/master/goods', method: 'post', data })
-export const listSkus = (params) => service({ url: '/jxc/master/skus', method: 'get', params })
-export const listPartners = (kind) => service({ url: '/jxc/master/partners', method: 'get', params: { kind } })
+export const updateGoods = (id, data) => service({ url: `/jxc/master/goods/${id}`, method: 'put', data })
+export const setGoodsStatus = (id, status) => service({ url: `/jxc/master/goods/${id}/status`, method: 'post', data: { status } })
+
+export const listSkus = (params = {}) => service({ url: '/jxc/master/skus', method: 'get', params })
+export const setSkuStatus = (id, status) => service({ url: `/jxc/master/skus/${id}/status`, method: 'post', data: { status } })
+
+export const listPartners = (kind, params = {}) => service({
+  url: '/jxc/master/partners',
+  method: 'get',
+  params: { kind, ...params }
+})
 export const createPartner = (data) => service({ url: '/jxc/master/partners', method: 'post', data })
+export const updatePartner = (id, data) => service({ url: `/jxc/master/partners/${id}`, method: 'put', data })
+export const setPartnerStatus = (id, status) => service({ url: `/jxc/master/partners/${id}/status`, method: 'post', data: { status } })
 
 // ---------- 采购 ----------
 export const createPurchase = (data) => service({ url: '/jxc/purchase', method: 'post', data })

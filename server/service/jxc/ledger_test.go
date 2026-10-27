@@ -64,7 +64,7 @@ func newLedgerTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("连库失败: %v", err)
 	}
 	if err := db.AutoMigrate(
-		&jxc.Warehouse{}, &jxc.Goods{}, &jxc.GoodsSku{},
+		&jxc.Warehouse{}, &jxc.Goods{}, &jxc.GoodsSku{}, &jxc.Partner{},
 		&jxc.StockMove{}, &jxc.StockBalance{}, &jxc.StockReservation{},
 		&jxc.AccountingPeriod{}, &jxc.StockBalanceSnapshot{},
 		&jxc.PurchaseOrder{}, &jxc.PurchaseItem{},
