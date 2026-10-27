@@ -4,7 +4,11 @@
       <!-- 销售单 -->
       <el-tab-pane label="销售单" name="sale">
         <el-table v-loading="loading" :data="sales" size="small">
-          <el-table-column prop="orderNo" label="单号" width="170" />
+          <el-table-column label="单号" width="170">
+            <template #default="{ row }">
+              <el-button link type="primary" class="mono" @click="openDetail('sale', row)">{{ row.orderNo }}</el-button>
+            </template>
+          </el-table-column>
           <el-table-column label="状态" width="100">
             <template #default="{ row }">
               <StatusTag kind="sale" :status="row.status" />
@@ -40,7 +44,11 @@
       <!-- 采购单 -->
       <el-tab-pane label="采购单" name="purchase">
         <el-table v-loading="loading" :data="purchases" size="small">
-          <el-table-column prop="orderNo" label="单号" width="170" />
+          <el-table-column label="单号" width="170">
+            <template #default="{ row }">
+              <el-button link type="primary" class="mono" @click="openDetail('sale', row)">{{ row.orderNo }}</el-button>
+            </template>
+          </el-table-column>
           <el-table-column label="状态" width="110">
             <template #default="{ row }">
               <StatusTag kind="purchase" :status="row.status" />
@@ -115,6 +123,42 @@
       </el-tab-pane>
     </el-tabs>
 
+    <!-- 单据详情 -->
+    <el-drawer v-model="detailDialog" :title="detail?.orderNo || '单据详情'" size="620px">
+      <div v-if="detail" class="detail">
+        <div class="d-row">
+          <span class="d-k">状态</span>
+          <span>
+            <StatusTag v-if="detailKind === 'sale'" kind="sale" :status="detail.status" />
+            <StatusTag v-else kind="purchase" :status="detail.status" />
+            <el-tag v-if="detail.reversedAt" size="small" type="info" effect="plain" class="ml4">已红冲</el-tag>
+          </span>
+        </div>
+        <div class="d-row"><span class="d-k">仓库</span><span>{{ detail.warehouseId }}</span></div>
+        <div class="d-row"><span class="d-k">金额</span><span><MoneyText :value="detail.totalAmount" /></span></div>
+        <div v-if="detailKind === 'sale'" class="d-row">
+          <span class="d-k">成本</span><span><MoneyText :value="detail.costAmount" /></span>
+        </div>
+        <div class="d-row"><span class="d-k">过账时间</span><span>{{ fmt(detail.postedAt) || '—' }}</span></div>
+        <el-table :data="detail.items || []" size="small" style="margin-top: 12px">
+          <el-table-column prop="skuId" label="SKU" width="70" />
+          <el-table-column prop="qty" label="数量" width="80" align="right" />
+          <el-table-column v-if="detailKind === 'sale'" label="售价" width="100" align="right">
+            <template #default="{ row }"><MoneyText :value="row.price" /></template>
+          </el-table-column>
+          <el-table-column v-else label="进价" width="100" align="right">
+            <template #default="{ row }"><MoneyText :value="row.unitCost" /></template>
+          </el-table-column>
+          <el-table-column label="金额" width="110" align="right">
+            <template #default="{ row }"><MoneyText :value="row.amount" /></template>
+          </el-table-column>
+          <el-table-column v-if="detailKind === 'sale'" label="该行成本" min-width="100" align="right">
+            <template #default="{ row }"><MoneyText :value="row.costAmt" /></template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-drawer>
+
     <!-- 红冲：原因必填 -->
     <el-dialog v-model="revDialog" title="整单红冲" width="460px">
       <el-alert type="warning" :closable="false" show-icon
@@ -175,7 +219,7 @@ import MoneyText from '@/components/jxc/MoneyText.vue'
 import StatusTag from '@/components/jxc/StatusTag.vue'
 import {
   approvePurchase, cancelPurchase, cancelSale, createReturn, createReversal,
-  getReturnable, pagePurchase, pageReturn, pageReversal, pageSale,
+  getPurchase, getReturnable, getSale, pagePurchase, pageReturn, pageReversal, pageSale,
   postReturn, cancelReturn, receivePurchase, shipSale
 } from '@/api/jxc'
 
@@ -188,6 +232,9 @@ const purchases = ref([])
 const returns = ref([])
 const reversals = ref([])
 
+const detailDialog = ref(false)
+const detail = ref(null)
+const detailKind = ref('sale')
 const revDialog = ref(false)
 const revTarget = ref(null)
 const revSource = ref('sale')
@@ -229,6 +276,14 @@ const load = async () => {
 }
 
 const onTab = () => load()
+
+const openDetail = async (kind, row) => {
+  detailKind.value = kind
+  const res = kind === 'sale' ? await getSale(row.ID) : await getPurchase(row.ID)
+  if (res.code !== 0) return ElMessage.error(res.msg)
+  detail.value = res.data
+  detailDialog.value = true
+}
 
 const ship = async (row) => {
   const res = await shipSale(row.ID)
@@ -350,5 +405,17 @@ onMounted(load)
 }
 .ret-head {
   font-size: 13px;
+}
+.detail .d-row {
+  display: flex;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--el-border-color-lighter);
+  font-size: 13px;
+}
+.d-k {
+  color: var(--el-text-color-secondary);
+  width: 72px;
+  flex: 0 0 72px;
 }
 </style>

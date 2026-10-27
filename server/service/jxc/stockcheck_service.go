@@ -56,14 +56,28 @@ func (s *StockCheckService) Create(ctx context.Context, warehouseID uint, remark
 			return err
 		}
 
-		var balances []jxc.StockBalance
-		if err := tx.Where("warehouse_id = ?", warehouseID).Find(&balances).Error; err != nil {
+		// 盘点要覆盖**全部在售 SKU**，而不只是有结存的行。
+		// 两个理由：① 期初建账时所有 SKU 结存都是 0，若只取有结存的行，
+		// 根本没有行可录，"盘盈入期初"这条路就断了；
+		// ② 账面为 0 但实际有货（漏记入库）也必须能被盘出来。
+		type row struct {
+			SkuID uint
+			Qty   int
+			Value float64
+		}
+		var rows []row
+		err = tx.Table("goods_sku s").
+			Select("s.id AS sku_id, COALESCE(b.qty,0) AS qty, COALESCE(b.value,0) AS value").
+			Joins("LEFT JOIN stock_balance b ON b.sku_id = s.id AND b.warehouse_id = ?", warehouseID).
+			Where("s.status = 1 AND s.deleted_at IS NULL").
+			Order("s.id").Scan(&rows).Error
+		if err != nil {
 			return err
 		}
-		for _, b := range balances {
-			item := jxc.StockCheckItem{CheckID: check.ID, SkuID: b.SkuID, BookQty: b.Qty}
-			if b.Qty > 0 {
-				item.UnitCost = money.FromYuan(b.Value).Yuan() / float64(b.Qty)
+		for _, r := range rows {
+			item := jxc.StockCheckItem{CheckID: check.ID, SkuID: r.SkuID, BookQty: r.Qty}
+			if r.Qty > 0 {
+				item.UnitCost = money.FromYuan(r.Value).Yuan() / float64(r.Qty)
 				item.UnitCost = money.FromYuan(item.UnitCost).Yuan()
 			}
 			if err := tx.Create(&item).Error; err != nil {
