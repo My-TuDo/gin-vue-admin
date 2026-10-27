@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
@@ -42,31 +43,32 @@ func (s *SaleService) Create(ctx context.Context, order *jxc.SaleOrder) (*jxc.Sa
 	if err != nil {
 		return nil, err
 	}
-	order.TotalAmount = total
+	// 忽略客户端传入的主键/单号/过账字段
+	order.ID = 0
+	order.OrderNo = ""
 	order.Status = jxc.SaleStatusDraft
+	order.TotalAmount = total
+	order.PostedAt = nil
+	order.ReversedAt = nil
+	for i := range order.Items {
+		order.Items[i].ID = 0
+		order.Items[i].SaleID = 0
+	}
 
 	err = db.Transaction(func(tx *gorm.DB) error {
-		for attempt := 0; attempt < 3; attempt++ {
-			no, e := nextOrderNo(tx, "sale_order", "order_no", "SO")
-			if e != nil {
-				return e
-			}
-			order.OrderNo = no
-			e = tx.Create(order).Error
-			if e == nil {
-				break
-			}
-			if !isDuplicateKeyErr(e) {
-				return e
-			}
-			order.ID = 0
-			order.Items = nil
-			if attempt == 2 {
-				return errors.New("单号生成冲突，请重试")
-			}
+		no, e := nextOrderNo(tx, "SO")
+		if e != nil {
+			return e
 		}
-		// 逐行预留：任何一行预留失败都会回滚整单
-		for _, it := range order.Items {
+		order.OrderNo = no
+		if e := tx.Create(order).Error; e != nil {
+			return e
+		}
+		// 逐行预留：任何一行预留失败都会回滚整单。
+		// 按 SKU 排序加锁，和 Ledger.Post 的锁顺序保持一致，避免两单商品顺序相反时死锁。
+		ordered := append([]jxc.SaleItem(nil), order.Items...)
+		sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].SkuID < ordered[j].SkuID })
+		for _, it := range ordered {
 			if err := s.ledger.Reserve(ctx, tx, MoveInput{
 				WarehouseID: order.WarehouseID, SkuID: it.SkuID, Qty: it.Qty,
 				SourceType: jxc.ReserveSourceSaleOrder, SourceID: order.ID, SourceLineID: it.ID,
@@ -218,13 +220,16 @@ func normalizeSaleItems(db *gorm.DB, items []jxc.SaleItem) (float64, error) {
 		if it.Qty <= 0 {
 			return 0, errors.New("销售数量必须大于 0")
 		}
-		if it.Price < 0 {
-			return 0, errors.New("销售单价不能为负")
+		// 单价固定取 SKU 销售价，忽略客户端传值：改价权限尚未开放，
+		// 让前端传 price 等于把"收多少钱"交给浏览器决定（旧版曾专门修过这个洞）。
+		var sku jxc.GoodsSku
+		if err := db.First(&sku, it.SkuID).Error; err != nil {
+			return 0, fmt.Errorf("SKU 不存在：%d", it.SkuID)
 		}
-		if err := ensureSku(db, it.SkuID); err != nil {
-			return 0, err
+		if sku.Status != 1 {
+			return 0, fmt.Errorf("SKU 已停用：%s", sku.SkuCode)
 		}
-		price := money.FromYuan(it.Price)
+		price := money.FromYuan(sku.SalePrice)
 		amount := price.MulQty(it.Qty)
 		it.Price = price.Yuan()
 		it.Amount = amount.Yuan()

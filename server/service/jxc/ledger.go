@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -83,6 +84,9 @@ func (m MoveInput) validate() error {
 		if m.ReversalOf == nil {
 			return errors.New("红冲必须指定被冲销的账本行")
 		}
+		if m.UnitCost < 0 {
+			return errors.New("红冲单价不能为负")
+		}
 	default:
 		return fmt.Errorf("未知的账本来源类型: %s", m.SourceType)
 	}
@@ -121,7 +125,20 @@ func (s *LedgerService) postTx(ctx context.Context, tx *gorm.DB, moves []MoveInp
 		checkedPeriod[ym] = true
 	}
 
-	for _, m := range moves {
+	// 固定加锁顺序：不同单据的同一批 SKU 如果按不同顺序加锁，会互相等成死锁。
+	// 账本行的处理顺序不影响账务语义，按 (仓库, SKU) 排序是零成本的防护。
+	ordered := append([]MoveInput(nil), moves...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		if ordered[i].WarehouseID != ordered[j].WarehouseID {
+			return ordered[i].WarehouseID < ordered[j].WarehouseID
+		}
+		if ordered[i].SkuID != ordered[j].SkuID {
+			return ordered[i].SkuID < ordered[j].SkuID
+		}
+		return ordered[i].SourceLineID < ordered[j].SourceLineID
+	})
+
+	for _, m := range ordered {
 		// 2) 幂等：同一来源行已过账则跳过
 		posted, err := s.alreadyPosted(tx, m)
 		if err != nil {
@@ -142,11 +159,32 @@ func (s *LedgerService) postTx(ctx context.Context, tx *gorm.DB, moves []MoveInp
 		var amount money.Cents
 		var after ledger.Position
 
-		if m.Qty > 0 {
+		switch {
+		case m.SourceType == jxc.MoveSourceReversal:
+			// 红冲必须按原账本行的单价精确反向，不能走当前移动均价。
+			// 单价直接从被冲销的账本行读取，不信任调用方传值——
+			// 否则传 0 就能把库存数量冲掉、金额留在账上。
+			var orig jxc.StockMove
+			if err := tx.First(&orig, *m.ReversalOf).Error; err != nil {
+				return fmt.Errorf("红冲失败：找不到被冲销的账本行 %d", *m.ReversalOf)
+			}
+			if orig.WarehouseID != m.WarehouseID || orig.SkuID != m.SkuID {
+				return errors.New("红冲失败：被冲销账本行的仓库/SKU 与本次不一致")
+			}
+			if orig.Qty != -m.Qty {
+				return errors.New("红冲失败：冲销数量必须与原账本行数量相反")
+			}
+			unitCost = money.FromYuan(orig.UnitCost)
+			after, err = pos.ApplyAtCost(m.Qty, unitCost)
+			if err != nil {
+				return fmt.Errorf("红冲失败：SKU %d %w", m.SkuID, err)
+			}
+			amount = unitCost.MulQty(m.Qty)
+		case m.Qty > 0:
 			unitCost = money.FromYuan(m.UnitCost)
 			amount = unitCost.MulQty(m.Qty)
 			after = pos.ApplyInbound(m.Qty, unitCost)
-		} else {
+		default:
 			cost, next, err := pos.ApplyOutbound(-m.Qty)
 			if err != nil {
 				return fmt.Errorf("出库失败：SKU %d %w", m.SkuID, err)
@@ -312,30 +350,55 @@ func (s *LedgerService) ReleaseReservation(ctx context.Context, db *gorm.DB, sou
 func (s *LedgerService) Reconcile(ctx context.Context, warehouseID uint) ([]ledger.Violation, error) {
 	db := global.GVA_DB.WithContext(ctx)
 
-	var balances []jxc.StockBalance
-	bq := db.Model(&jxc.StockBalance{})
+	// 只把聚合结果读进内存：流水表可能有百万行，直接 Find 全部会 OOM，
+	// 而对账只需要每个 (仓库, SKU) 的 SUM。索引 idx_move_wh_sku_time 支撑这个聚合。
+	type balanceAgg struct {
+		WarehouseID uint
+		SkuID       uint
+		Qty         int
+		Value       float64
+	}
+	var balances []balanceAgg
+	bq := db.Model(&jxc.StockBalance{}).
+		Select("warehouse_id, sku_id, qty, value")
 	if warehouseID > 0 {
 		bq = bq.Where("warehouse_id = ?", warehouseID)
 	}
-	if err := bq.Find(&balances).Error; err != nil {
+	if err := bq.Scan(&balances).Error; err != nil {
 		return nil, err
 	}
 
-	var moves []jxc.StockMove
-	mq := db.Model(&jxc.StockMove{})
+	type moveAgg struct {
+		WarehouseID uint
+		SkuID       uint
+		Qty         int
+		Amount      float64
+	}
+	var moves []moveAgg
+	mq := db.Model(&jxc.StockMove{}).
+		Select("warehouse_id, sku_id, SUM(qty) AS qty, SUM(amount) AS amount").
+		Group("warehouse_id, sku_id")
 	if warehouseID > 0 {
 		mq = mq.Where("warehouse_id = ?", warehouseID)
 	}
-	if err := mq.Find(&moves).Error; err != nil {
+	if err := mq.Scan(&moves).Error; err != nil {
 		return nil, err
 	}
 
-	var reservations []jxc.StockReservation
-	rq := db.Model(&jxc.StockReservation{})
+	type reservationAgg struct {
+		WarehouseID uint
+		SkuID       uint
+		Qty         int
+	}
+	var reservations []reservationAgg
+	rq := db.Model(&jxc.StockReservation{}).
+		Select("warehouse_id, sku_id, SUM(qty) AS qty").
+		Where("status = ?", jxc.ReservationActive).
+		Group("warehouse_id, sku_id")
 	if warehouseID > 0 {
 		rq = rq.Where("warehouse_id = ?", warehouseID)
 	}
-	if err := rq.Find(&reservations).Error; err != nil {
+	if err := rq.Scan(&reservations).Error; err != nil {
 		return nil, err
 	}
 
@@ -349,7 +412,7 @@ func (s *LedgerService) Reconcile(ctx context.Context, warehouseID uint) ([]ledg
 	}
 	rs := make([]ledger.ReservationRow, 0, len(reservations))
 	for _, r := range reservations {
-		rs = append(rs, ledger.ReservationRow{WarehouseID: r.WarehouseID, SkuID: r.SkuID, Qty: r.Qty, Status: r.Status})
+		rs = append(rs, ledger.ReservationRow{WarehouseID: r.WarehouseID, SkuID: r.SkuID, Qty: r.Qty, Status: jxc.ReservationActive})
 	}
 	return ledger.Check(bs, es, rs), nil
 }
@@ -373,9 +436,14 @@ type BalanceRow struct {
 // Balances 结存列表（含预留与可售），供"库存台账"页与对账页使用。
 func (s *LedgerService) Balances(ctx context.Context, warehouseID uint) ([]BalanceRow, error) {
 	db := global.GVA_DB.WithContext(ctx)
+	// 预留量用相关子查询一次带出，避免每个结存行再查一次库（N+1）。
+	// 台账页在 1 万个 SKU 时，旧写法会发 1 万次 SQL。
 	q := db.Table("stock_balance b").
 		Select(`b.warehouse_id, w.name AS warehouse_name, b.sku_id, s.sku_code,
-		        g.name AS goods_name, s.color, s.size, b.qty, b.value`).
+		        g.name AS goods_name, s.color, s.size, b.qty, b.value,
+		        COALESCE((SELECT SUM(r.qty) FROM stock_reservation r
+		                  WHERE r.warehouse_id = b.warehouse_id AND r.sku_id = b.sku_id
+		                    AND r.status = ?), 0) AS reserved`, jxc.ReservationActive).
 		Joins("LEFT JOIN warehouse w ON w.id = b.warehouse_id").
 		Joins("LEFT JOIN goods_sku s ON s.id = b.sku_id").
 		Joins("LEFT JOIN goods g ON g.id = s.goods_id").
@@ -388,15 +456,10 @@ func (s *LedgerService) Balances(ctx context.Context, warehouseID uint) ([]Balan
 		return nil, err
 	}
 	for i := range rows {
-		reserved, err := s.reservedQty(db, rows[i].WarehouseID, rows[i].SkuID)
-		if err != nil {
-			return nil, err
-		}
-		rows[i].Reserved = reserved
-		rows[i].Available = rows[i].Qty - reserved
+		rows[i].Available = rows[i].Qty - rows[i].Reserved
 		if rows[i].Qty > 0 {
-			rows[i].AvgCost = money.FromYuan(rows[i].Value).Yuan() / float64(rows[i].Qty)
-			rows[i].AvgCost = money.FromYuan(rows[i].AvgCost).Yuan()
+			avg := money.FromYuan(rows[i].Value).Yuan() / float64(rows[i].Qty)
+			rows[i].AvgCost = money.FromYuan(avg).Yuan()
 		}
 	}
 	return rows, nil
@@ -430,6 +493,10 @@ type MoveRow struct {
 	OccurredAt time.Time `json:"occurredAt"`
 	Operator   string    `json:"operator"`
 	ReversalOf *uint     `json:"reversalOf"`
+	// BalanceAfter 这笔移动之后的结存数量。
+	// 仅当查询指定了 warehouseId + skuId 时返回；跨 SKU 混排没有"结存"语义。
+	// 由后端计算而不是前端累加：前端只看得到当前这一页，按页累加会算错。
+	BalanceAfter *int `json:"balanceAfter,omitempty"`
 }
 
 // 单据号来源表：把账本行回溯到"人认识的那个单号"
@@ -439,6 +506,10 @@ var sourceNoTable = map[string]struct {
 }{
 	jxc.MoveSourcePurchaseIn: {"purchase_order", "order_no"},
 	jxc.MoveSourceSaleOut:    {"sale_order", "order_no"},
+	jxc.MoveSourceSaleReturn: {"sale_return", "return_no"},
+	jxc.MoveSourceCheckGain:  {"stock_check", "check_no"},
+	jxc.MoveSourceCheckLoss:  {"stock_check", "check_no"},
+	jxc.MoveSourceReversal:   {"stock_reversal", "reversal_no"},
 }
 
 // Moves 账本流水（分页，按发生时间倒序）
@@ -475,8 +546,31 @@ func (s *LedgerService) Moves(ctx context.Context, warehouseID, skuID uint, page
 		return nil, 0, err
 	}
 
+	// 补"这笔之后还剩多少"。余额是按过账顺序（id）累加的，所以：
+	// 本页第一行之后的结存 = 当前结存 - 比本页第一行更新的所有移动。
+	// 这样翻到第 2 页也不会算错（旧前端只拿当前页从 0 累加，超过一页就是错的）。
+	if warehouseID > 0 && skuID > 0 && len(rows) > 0 {
+		var balance jxc.StockBalance
+		if err := db.Where("warehouse_id = ? AND sku_id = ?", warehouseID, skuID).
+			First(&balance).Error; err == nil {
+			var newerQty int64
+			if err := db.Model(&jxc.StockMove{}).
+				Where("warehouse_id = ? AND sku_id = ? AND id > ?", warehouseID, skuID, rows[0].ID).
+				Select("COALESCE(SUM(qty),0)").Scan(&newerQty).Error; err != nil {
+				return nil, 0, err
+			}
+			running := balance.Qty - int(newerQty)
+			for i := range rows {
+				v := running
+				rows[i].BalanceAfter = &v
+				running -= rows[i].Qty
+			}
+		}
+	}
+
 	// 批量补单据号：按来源类型分组查，避免 N+1
 	pairs := map[string]map[uint]string{}
+	columns := map[string]string{}
 	for _, r := range rows {
 		meta, ok := sourceNoTable[r.SourceType]
 		if !ok || r.SourceID == 0 {
@@ -484,6 +578,7 @@ func (s *LedgerService) Moves(ctx context.Context, warehouseID, skuID uint, page
 		}
 		if pairs[meta.table] == nil {
 			pairs[meta.table] = map[uint]string{}
+			columns[meta.table] = meta.column
 		}
 		pairs[meta.table][r.SourceID] = ""
 	}
@@ -497,7 +592,7 @@ func (s *LedgerService) Moves(ctx context.Context, warehouseID, skuID uint, page
 			OrderNo string
 		}
 		var nos []noRow
-		col := "order_no"
+		col := columns[table]
 		if err := db.Table(table).Select("id, "+col+" AS order_no").Where("id IN ?", idList).Scan(&nos).Error; err != nil {
 			return nil, 0, err
 		}

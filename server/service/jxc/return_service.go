@@ -38,6 +38,17 @@ func (s *ReturnService) Create(ctx context.Context, ret *jxc.SaleReturn) (*jxc.S
 		return nil, errors.New("请至少选择一项退货商品")
 	}
 
+	// 忽略客户端传入的主键/单号/状态/时间，避免伪造历史字段
+	ret.ID = 0
+	ret.ReturnNo = ""
+	ret.SaleNo = ""
+	ret.Status = jxc.ReturnStatusDraft
+	ret.PostedAt = nil
+	for i := range ret.Items {
+		ret.Items[i].ID = 0
+		ret.Items[i].ReturnID = 0
+	}
+
 	db := global.GVA_DB.WithContext(ctx)
 	var err error
 	err = db.Transaction(func(tx *gorm.DB) error {
@@ -56,10 +67,7 @@ func (s *ReturnService) Create(ctx context.Context, ret *jxc.SaleReturn) (*jxc.S
 		if err := tx.Where("sale_id = ?", sale.ID).Find(&saleItems).Error; err != nil {
 			return err
 		}
-		bySku := map[uint]jxc.SaleItem{}
-		for _, it := range saleItems {
-			bySku[it.SkuID] = it
-		}
+		sold, bySku := aggregateSaleItems(saleItems)
 		returned, err := s.returnedQty(tx, sale.ID)
 		if err != nil {
 			return err
@@ -75,10 +83,10 @@ func (s *ReturnService) Create(ctx context.Context, ret *jxc.SaleReturn) (*jxc.S
 			if it.Qty <= 0 {
 				return errors.New("退货数量必须大于 0")
 			}
-			canReturn := orig.Qty - returned[it.SkuID]
+			canReturn := sold[it.SkuID] - returned[it.SkuID]
 			if it.Qty > canReturn {
 				return fmt.Errorf("SKU %d 最多可退 %d 件（原单 %d，已退 %d）",
-					it.SkuID, canReturn, orig.Qty, returned[it.SkuID])
+					it.SkuID, canReturn, sold[it.SkuID], returned[it.SkuID])
 			}
 			// 单价与成本都取原单，不接受前端传值
 			it.Price = orig.Price
@@ -91,14 +99,13 @@ func (s *ReturnService) Create(ctx context.Context, ret *jxc.SaleReturn) (*jxc.S
 			cost = cost.Add(money.FromYuan(it.UnitCost).MulQty(it.Qty))
 		}
 
-		no, err := nextOrderNo(tx, "sale_return", "return_no", "RT")
+		no, err := nextOrderNo(tx, "RT")
 		if err != nil {
 			return err
 		}
 		ret.ReturnNo = no
 		ret.SaleNo = sale.OrderNo
 		ret.WarehouseID = sale.WarehouseID
-		ret.Status = jxc.ReturnStatusDraft
 		ret.Amount = amount.Yuan()
 		ret.CostAmount = cost.Yuan()
 		return tx.Create(ret).Error
@@ -130,6 +137,46 @@ func (s *ReturnService) Post(ctx context.Context, id uint, operator string, occu
 			return errors.New("退货单没有明细")
 		}
 
+		// 建单后可能又发生了别的退货（或原单被红冲），入库前必须在同一把锁下重新校验。
+		// 只靠建单时校验，等于允许"先建两张各退全部的草稿，再依次入库"。
+		var sale jxc.SaleOrder
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&sale, ret.SaleID).Error; err != nil {
+			return errors.New("原销售单不存在")
+		}
+		if sale.Status != jxc.SaleStatusShipped {
+			return errors.New("原销售单不是已出库状态，不能退货入库")
+		}
+		if sale.ReversedAt != nil {
+			return errors.New("原销售单已整单红冲，不能退货入库")
+		}
+		var saleItems []jxc.SaleItem
+		if err := tx.Where("sale_id = ?", sale.ID).Find(&saleItems).Error; err != nil {
+			return err
+		}
+		sold, _ := aggregateSaleItems(saleItems)
+		returned, err := s.returnedQty(tx, sale.ID)
+		if err != nil {
+			return err
+		}
+		// 同一张退货单里也可能出现同 SKU 多行，先合并再校验
+		thisQty := map[uint]int{}
+		for _, it := range items {
+			if it.Qty <= 0 {
+				return errors.New("退货数量必须大于 0")
+			}
+			if _, ok := sold[it.SkuID]; !ok {
+				return fmt.Errorf("SKU %d 不在原销售单中", it.SkuID)
+			}
+			thisQty[it.SkuID] += it.Qty
+		}
+		for skuID, qty := range thisQty {
+			canReturn := sold[skuID] - returned[skuID]
+			if qty > canReturn {
+				return fmt.Errorf("SKU %d 最多可退 %d 件（原单 %d，已退 %d），本次退货 %d 件",
+					skuID, canReturn, sold[skuID], returned[skuID], qty)
+			}
+		}
+
 		moves := make([]MoveInput, 0, len(items))
 		for _, it := range items {
 			moves = append(moves, MoveInput{
@@ -143,9 +190,8 @@ func (s *ReturnService) Post(ctx context.Context, id uint, operator string, occu
 			return err
 		}
 
-		now := time.Now()
 		return tx.Model(&jxc.SaleReturn{}).Where("id = ?", id).
-			Updates(map[string]interface{}{"status": jxc.ReturnStatusPosted, "posted_at": now}).Error
+			Updates(map[string]interface{}{"status": jxc.ReturnStatusPosted, "posted_at": occurredAt}).Error
 	})
 }
 
@@ -205,18 +251,33 @@ func (s *ReturnService) Returnable(ctx context.Context, saleID uint) ([]Returnab
 	if err != nil {
 		return nil, err
 	}
+	sold, bySku := aggregateSaleItems(items)
 	out := make([]ReturnableLine, 0, len(items))
 	for _, it := range items {
+		orig := bySku[it.SkuID]
 		var unitCost float64
-		if it.Qty > 0 {
-			unitCost = money.FromYuan(it.CostAmt).Yuan() / float64(it.Qty)
+		if orig.Qty > 0 {
+			unitCost = money.FromYuan(orig.CostAmt).Yuan() / float64(orig.Qty)
 		}
 		out = append(out, ReturnableLine{
-			SkuID: it.SkuID, SoldQty: it.Qty, ReturnedQty: returned[it.SkuID],
-			CanReturn: it.Qty - returned[it.SkuID], Price: it.Price, UnitCost: unitCost,
+			SkuID: it.SkuID, SoldQty: sold[it.SkuID], ReturnedQty: returned[it.SkuID],
+			CanReturn: sold[it.SkuID] - returned[it.SkuID], Price: orig.Price, UnitCost: unitCost,
 		})
 	}
 	return out, nil
+}
+
+// aggregateSaleItems 把同一 SKU 的多行合并成"原售总量"，同时保留一行用于
+// 取价格与成本。销售单正常不会出现同 SKU 多行，但防御性处理可以避免
+// "每行都按单行上限校验"导致超退。
+func aggregateSaleItems(items []jxc.SaleItem) (map[uint]int, map[uint]jxc.SaleItem) {
+	sold := map[uint]int{}
+	bySku := map[uint]jxc.SaleItem{}
+	for _, it := range items {
+		sold[it.SkuID] += it.Qty
+		bySku[it.SkuID] = it
+	}
+	return sold, bySku
 }
 
 // ReturnableLine 可退明细

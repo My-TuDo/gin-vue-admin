@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
@@ -50,27 +51,30 @@ func (s *PurchaseService) Create(ctx context.Context, order *jxc.PurchaseOrder) 
 	if err != nil {
 		return nil, err
 	}
-	order.TotalAmount = total
+	// 忽略客户端传入的主键/单号/过账字段：这些必须由服务端决定
+	order.ID = 0
+	order.OrderNo = ""
 	order.Status = jxc.PurchaseStatusDraft
+	order.PostedAt = nil
+	order.ReversedAt = nil
+	order.TotalAmount = total
+	for i := range order.Items {
+		order.Items[i].ID = 0
+		order.Items[i].PurchaseID = 0
+	}
 
-	// 单号并发/删单重建时可能撞唯一键，重试几次
-	for attempt := 0; attempt < 3; attempt++ {
-		no, err := nextOrderNo(db, "purchase_order", "order_no", "PO")
+	err = db.Transaction(func(tx *gorm.DB) error {
+		no, err := nextOrderNo(tx, "PO")
 		if err != nil {
-			return nil, err
+			return err
 		}
 		order.OrderNo = no
-		err = db.Create(order).Error
-		if err == nil {
-			return order, nil
-		}
-		if !isDuplicateKeyErr(err) {
-			return nil, err
-		}
-		order.ID = 0
-		order.Items = nil
+		return tx.Create(order).Error
+	})
+	if err != nil {
+		return nil, err
 	}
-	return nil, errors.New("单号生成冲突，请重试")
+	return order, nil
 }
 
 // Approve 审核（草稿 → 已审核）。仍不动库存。
@@ -211,20 +215,92 @@ func normalizePurchaseItems(db *gorm.DB, items []jxc.PurchaseItem) (float64, err
 	return total.Yuan(), nil
 }
 
-// nextOrderNo 生成 PO-YYYYMMDD-### 形式的单号（按当日最大序号 +1）
-func nextOrderNo(db *gorm.DB, table, column, prefix string) (string, error) {
+// nextOrderNo 生成 PREFIX-YYYYMMDD-### 形式的单号。
+//
+// 必须传入事务：发号器行锁要一直持有到单据落库提交，否则并发下仍可能拿到同号。
+// 旧实现扫描业务表求 MAX，在并发插入时会互相加间隙锁并死锁（实测 8 个并发开单
+// 有 7 个失败），而且 REPEATABLE READ 下重试读不到对方未提交的行。
+func nextOrderNo(tx *gorm.DB, prefix string) (string, error) {
 	date := time.Now().Format("20060102")
-	like := prefix + "-" + date + "-%"
-	var maxNo string
-	if err := db.Table(table).Where(column+" LIKE ?", like).
-		Order(column+" desc").Limit(1).Pluck(column, &maxNo).Error; err != nil {
+	scope := prefix + "-" + date
+
+	created := tx.Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&jxc.DocSequence{Scope: scope, NextValue: 1})
+	if created.Error != nil {
+		return "", created.Error
+	}
+	// 发号器是本次升级新增的表。老库升级后第一次发号时，表里还没有
+	// (prefix, 日期) 这一行，必须先从历史单号里找到当日最大序号，
+	// 否则会从 001 重新开始，直接撞上历史单号（线上已真实发生）。
+	if created.RowsAffected > 0 {
+		start, err := existingMaxSeq(tx, prefix, date)
+		if err != nil {
+			return "", err
+		}
+		if start > 0 {
+			if err := tx.Model(&jxc.DocSequence{}).Where("scope = ?", scope).
+				Update("next_value", start).Error; err != nil {
+				return "", err
+			}
+		}
+	}
+
+	var seq jxc.DocSequence
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("scope = ?", scope).First(&seq).Error; err != nil {
 		return "", err
 	}
-	seq := 0
-	if l := len(maxNo); l >= 3 {
-		seq, _ = strconv.Atoi(maxNo[l-3:])
+	next := seq.NextValue
+	if next < 1 {
+		next = 1
 	}
-	return fmt.Sprintf("%s-%s-%03d", prefix, date, seq+1), nil
+	if err := tx.Model(&jxc.DocSequence{}).Where("scope = ?", scope).
+		Update("next_value", next+1).Error; err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s-%s-%03d", prefix, date, next), nil
+}
+
+// existingMaxSeq 查历史单号里同前缀、同一天的最大序号 + 1。
+// 用 Unscoped：软删除的单据仍然占着唯一索引，不能把它的号发出去。
+func existingMaxSeq(tx *gorm.DB, prefix, date string) (int, error) {
+	meta, ok := orderNoTables[prefix]
+	if !ok {
+		return 1, nil
+	}
+	like := prefix + "-" + date + "-%"
+	var maxNo string
+	// 先按长度再按字典序：001..999 补齐三位，到 1000 以后长度会多一位，
+	// 单纯按字符串排序会把 999 当成最大。
+	if err := tx.Unscoped().Table(meta.table).
+		Where(meta.column+" LIKE ?", like).
+		Order("LENGTH(" + meta.column + ") DESC, " + meta.column + " DESC").Limit(1).
+		Pluck(meta.column, &maxNo).Error; err != nil {
+		return 0, err
+	}
+	if maxNo == "" {
+		return 1, nil
+	}
+	idx := strings.LastIndex(maxNo, "-")
+	if idx < 0 || idx == len(maxNo)-1 {
+		return 1, nil
+	}
+	n, err := strconv.Atoi(maxNo[idx+1:])
+	if err != nil || n < 0 {
+		return 1, nil
+	}
+	return n + 1, nil
+}
+
+var orderNoTables = map[string]struct {
+	table  string
+	column string
+}{
+	"PO": {"purchase_order", "order_no"},
+	"SO": {"sale_order", "order_no"},
+	"RT": {"sale_return", "return_no"},
+	"PD": {"stock_check", "check_no"},
+	"RC": {"stock_reversal", "reversal_no"},
 }
 
 // advanceDocStatus 条件推进单据状态：并发下只有一个请求能成功。

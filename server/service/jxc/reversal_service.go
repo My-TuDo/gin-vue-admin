@@ -69,6 +69,18 @@ func (s *ReversalService) Reverse(ctx context.Context, sourceType string, source
 			if so.Status != jxc.SaleStatusShipped {
 				return errors.New("只有已出库的销售单可以红冲")
 			}
+			// 已有退货的销售单不能整单红冲：退货已经回补过库存，再红冲会重复回补。
+			// 草稿退货也一并挡住——否则红冲后这张草稿永远无法入库，只能取消，属于埋雷。
+			var retCnt int64
+			if err := tx.Model(&jxc.SaleReturn{}).
+				Where("sale_id = ? AND status IN ?", so.ID,
+					[]int8{jxc.ReturnStatusDraft, jxc.ReturnStatusPosted}).
+				Count(&retCnt).Error; err != nil {
+				return err
+			}
+			if retCnt > 0 {
+				return errors.New("该销售单已存在退货单（草稿或已入库），不能整单红冲；请先取消退货单，或改用退货处理")
+			}
 			docNo, moveSrc, docID = so.OrderNo, jxc.MoveSourceSaleOut, so.ID
 		}
 
@@ -124,7 +136,7 @@ func (s *ReversalService) Reverse(ctx context.Context, sourceType string, source
 			qtySum += absInt(m.Qty)
 			amtSum = amtSum.Add(money.FromYuan(m.Amount).Abs())
 		}
-		no, err := nextOrderNo(tx, "stock_reversal", "reversal_no", "RC")
+		no, err := nextOrderNo(tx, "RC")
 		if err != nil {
 			return err
 		}

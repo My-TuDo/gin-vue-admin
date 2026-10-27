@@ -30,8 +30,10 @@ const (
 type StockReversal struct {
 	global.GVA_MODEL
 	ReversalNo string    `json:"reversalNo" gorm:"column:reversal_no;size:50;not null;uniqueIndex:uk_rev_no"`
-	SourceType string    `json:"sourceType" gorm:"column:source_type;size:20;not null;comment:purchase/sale"`
-	SourceID   uint      `json:"sourceId" gorm:"column:source_id;not null;comment:被冲销的单据ID"`
+	// (source_type, source_id) 唯一：一张单据理论上只能有一张红冲单。
+	// 应用层已经在锁住原单后做了检查，这条唯一索引是最后一道保险。
+	SourceType string `json:"sourceType" gorm:"column:source_type;size:20;not null;uniqueIndex:uk_rev_source,priority:1;comment:purchase/sale"`
+	SourceID   uint   `json:"sourceId" gorm:"column:source_id;not null;uniqueIndex:uk_rev_source,priority:2;comment:被冲销的单据ID"`
 	SourceNo   string    `json:"sourceNo" gorm:"column:source_no;size:50;not null;comment:被冲销的单号（快照，便于查阅）"`
 	Reason     string    `json:"reason" gorm:"column:reason;size:500;not null;comment:红冲原因（必填）"`
 	Amount     float64   `json:"amount" gorm:"column:amount;type:decimal(14,2);not null;default:0;comment:冲销金额（正数表示冲了多少）"`

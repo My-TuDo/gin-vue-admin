@@ -3,6 +3,7 @@ package jxc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
@@ -26,12 +27,30 @@ func NewPeriodService() *PeriodService { return new(PeriodService) }
 
 // Close 结账。幂等：已结账会报错而不是覆盖快照。
 func (s *PeriodService) Close(ctx context.Context, yearMonth, operator string) (*jxc.AccountingPeriod, error) {
-	if _, err := time.Parse("2006-01", yearMonth); err != nil {
+	start, err := time.ParseInLocation("2006-01", yearMonth, time.Local)
+	if err != nil {
 		return nil, errors.New("期间格式应为 YYYY-MM")
 	}
+	// 结未来的账没有意义，还会让所有正常单据被"已结账"挡住
+	nowMonth := time.Now().Format("2006-01")
+	if yearMonth > nowMonth {
+		return nil, fmt.Errorf("不能结未来的账（%s）", yearMonth)
+	}
+	end := start.AddDate(0, 1, 0)
 
 	var period jxc.AccountingPeriod
-	err := global.GVA_DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = global.GVA_DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 不允许跳月结账：10 月没结就结 11 月，会让 10 月的快照永远错位
+		var laterClosed int64
+		if err := tx.Model(&jxc.AccountingPeriod{}).
+			Where("period_month > ? AND status = ?", yearMonth, jxc.PeriodClosed).
+			Count(&laterClosed).Error; err != nil {
+			return err
+		}
+		if laterClosed > 0 {
+			return errors.New("存在更晚的已结账期间，请按月份顺序结账")
+		}
+
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("period_month = ?", yearMonth).First(&period).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			period = jxc.AccountingPeriod{PeriodMonth: yearMonth, Status: jxc.PeriodOpen}
@@ -55,17 +74,28 @@ func (s *PeriodService) Close(ctx context.Context, yearMonth, operator string) (
 			return errors.New("账实不符，禁止结账：请先在「库存 → 对账」中处理差异")
 		}
 
-		var balances []jxc.StockBalance
-		if err := tx.Find(&balances).Error; err != nil {
+		// 快照必须是"截止月末"的余额，而不是"按下结账按钮时"的余额。
+		// 如果 11 月已经发生了业务，而 10 月是 11 月才补结的，直接读 stock_balance
+		// 会把 11 月的出入库算进 10 月快照。从账本按 occurred_at 重算才正确。
+		type balRow struct {
+			WarehouseID uint
+			SkuID       uint
+			Qty         int
+			Value       float64
+		}
+		var rows []balRow
+		if err := tx.Table("stock_move").
+			Select("warehouse_id, sku_id, SUM(qty) AS qty, SUM(amount) AS value").
+			Where("occurred_at < ?", end).
+			Group("warehouse_id, sku_id").
+			Having("SUM(qty) <> 0 OR SUM(amount) <> 0").
+			Scan(&rows).Error; err != nil {
 			return err
 		}
-		for _, b := range balances {
-			if b.Qty == 0 && b.Value == 0 {
-				continue
-			}
+		for _, b := range rows {
 			snap := jxc.StockBalanceSnapshot{
 				PeriodID: period.ID, WarehouseID: b.WarehouseID, SkuID: b.SkuID,
-				Qty: b.Qty, Value: b.Value,
+				Qty: b.Qty, Value: money.FromYuan(b.Value).Yuan(),
 			}
 			if err := tx.Create(&snap).Error; err != nil {
 				return err
@@ -137,11 +167,14 @@ func (s *PeriodService) Summary(ctx context.Context, yearMonth string) (*Monthly
 		Amount float64
 		Cost   float64
 	}
-	var saleAgg, retAgg, purAgg agg
+	var saleAgg, retAgg, purAgg, revSaleAgg, revPurAgg agg
 
+	// 当月发生的销售，不按"现在是否已红冲"过滤。
+	// 9 月卖、10 月红的单，必须仍然算 9 月销售、10 月冲减；
+	// 否则 9 月已结账的数字会被 10 月的操作悄悄改掉。
 	if err := db.Model(&jxc.SaleOrder{}).
 		Select("COUNT(*) AS cnt, COALESCE(SUM(total_amount),0) AS amount, COALESCE(SUM(cost_amount),0) AS cost").
-		Where("status = ? AND reversed_at IS NULL AND posted_at >= ? AND posted_at < ?",
+		Where("status = ? AND posted_at >= ? AND posted_at < ?",
 			jxc.SaleStatusShipped, start, end).
 		Scan(&saleAgg).Error; err != nil {
 		return nil, err
@@ -154,23 +187,44 @@ func (s *PeriodService) Summary(ctx context.Context, yearMonth string) (*Monthly
 	}
 	if err := db.Model(&jxc.PurchaseOrder{}).
 		Select("COUNT(*) AS cnt, COALESCE(SUM(total_amount),0) AS amount").
-		Where("status = ? AND reversed_at IS NULL AND posted_at >= ? AND posted_at < ?",
+		Where("status = ? AND posted_at >= ? AND posted_at < ?",
 			jxc.PurchaseStatusReceived, start, end).
 		Scan(&purAgg).Error; err != nil {
 		return nil, err
 	}
-	if err := db.Model(&jxc.StockBalance{}).
-		Select("COALESCE(SUM(value),0)").Scan(&out.StockValue).Error; err != nil {
+
+	// 红冲作为"负数业务"计入红冲发生的当月，而不是追溯修改原单所在月。
+	if err := db.Table("stock_reversal r").
+		Select("COUNT(*) AS cnt, COALESCE(SUM(so.total_amount),0) AS amount, COALESCE(SUM(so.cost_amount),0) AS cost").
+		Joins("JOIN sale_order so ON so.id = r.source_id").
+		Where("r.source_type = ? AND r.posted_at >= ? AND r.posted_at < ?", jxc.ReversalSourceSale, start, end).
+		Scan(&revSaleAgg).Error; err != nil {
+		return nil, err
+	}
+	if err := db.Table("stock_reversal r").
+		Select("COUNT(*) AS cnt, COALESCE(SUM(po.total_amount),0) AS amount").
+		Joins("JOIN purchase_order po ON po.id = r.source_id").
+		Where("r.source_type = ? AND r.posted_at >= ? AND r.posted_at < ?", jxc.ReversalSourcePurchase, start, end).
+		Scan(&revPurAgg).Error; err != nil {
+		return nil, err
+	}
+
+	// 期末库存金额 = 截止月末的账本累加，不是"当前库存"。
+	// 历史月份（包括已结账月份）必须按 occurred_at 重算，否则数字会随时间漂移。
+	if err := db.Table("stock_move").
+		Select("COALESCE(SUM(amount),0)").
+		Where("occurred_at < ?", end).
+		Scan(&out.StockValue).Error; err != nil {
 		return nil, err
 	}
 
 	out.SalesOrders = saleAgg.Cnt
-	out.SalesAmount = money.FromYuan(saleAgg.Amount - retAgg.Amount).Yuan()
-	out.SalesCost = money.FromYuan(saleAgg.Cost - retAgg.Cost).Yuan()
+	out.SalesAmount = money.FromYuan(saleAgg.Amount - revSaleAgg.Amount - retAgg.Amount).Yuan()
+	out.SalesCost = money.FromYuan(saleAgg.Cost - revSaleAgg.Cost - retAgg.Cost).Yuan()
 	out.ReturnOrders = retAgg.Cnt
 	out.ReturnAmount = money.FromYuan(retAgg.Amount).Yuan()
 	out.ReturnCost = money.FromYuan(retAgg.Cost).Yuan()
 	out.Gross = money.FromYuan(out.SalesAmount).Sub(money.FromYuan(out.SalesCost)).Yuan()
-	out.PurchaseAmount = money.FromYuan(purAgg.Amount).Yuan()
+	out.PurchaseAmount = money.FromYuan(purAgg.Amount - revPurAgg.Amount).Yuan()
 	return out, nil
 }

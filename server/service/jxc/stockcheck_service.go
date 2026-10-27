@@ -3,6 +3,7 @@ package jxc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
@@ -47,7 +48,7 @@ func (s *StockCheckService) Create(ctx context.Context, warehouseID uint, remark
 			return errors.New("该仓库已有进行中的盘点单，请先完成或取消")
 		}
 
-		no, err := nextOrderNo(tx, "stock_check", "check_no", "PD")
+		no, err := nextOrderNo(tx, "PD")
 		if err != nil {
 			return err
 		}
@@ -109,16 +110,25 @@ func (s *StockCheckService) UpdateItems(ctx context.Context, checkID uint, input
 			if in.ActualQty < 0 {
 				return errors.New("实盘数不能为负")
 			}
+			if in.UnitCost != nil && *in.UnitCost < 0 {
+				return errors.New("成本单价不能为负")
+			}
 			var item jxc.StockCheckItem
 			if err := tx.Where("id = ? AND check_id = ?", in.ID, checkID).First(&item).Error; err != nil {
 				return errors.New("盘点明细不存在")
 			}
 			actual := in.ActualQty
+			updates := map[string]interface{}{
+				"actual_qty": actual,
+				"diff":       actual - item.BookQty,
+			}
+			// 期初建账/盘盈时账面成本为 0，必须允许人工指定成本，
+			// 否则库存数量进来了、金额永远是 0，卖出去就是 100% 毛利。
+			if in.UnitCost != nil {
+				updates["unit_cost"] = money.FromYuan(*in.UnitCost).Yuan()
+			}
 			if err := tx.Model(&jxc.StockCheckItem{}).Where("id = ?", item.ID).
-				Updates(map[string]interface{}{
-					"actual_qty": actual,
-					"diff":       actual - item.BookQty,
-				}).Error; err != nil {
+				Updates(updates).Error; err != nil {
 				return err
 			}
 		}
@@ -126,10 +136,12 @@ func (s *StockCheckService) UpdateItems(ctx context.Context, checkID uint, input
 	})
 }
 
-// StockCountInput 一条实盘录入
+// StockCountInput 一条实盘录入。
+// UnitCost 可选：盘盈/期初建账时指定入库成本；不传则沿用建单时的账面均价。
 type StockCountInput struct {
-	ID        uint `json:"id"`
-	ActualQty int  `json:"actualQty"`
+	ID        uint     `json:"id"`
+	ActualQty int      `json:"actualQty"`
+	UnitCost  *float64 `json:"unitCost,omitempty"`
 }
 
 // Post 完成盘点：把差异写进账本（盘盈正数、盘亏负数），然后锁死单据。
@@ -149,6 +161,28 @@ func (s *StockCheckService) Post(ctx context.Context, checkID uint, operator str
 		var items []jxc.StockCheckItem
 		if err := tx.Where("check_id = ?", checkID).Find(&items).Error; err != nil {
 			return err
+		}
+
+		// 盘点建单时快照的账面数，可能在录入期间又被销售/入库改掉了。
+		// 此时按旧 diff 过账会把这段时间的真实变化抹掉，所以先锁住余额并核对。
+		// 加锁顺序按 SKU，与 Ledger.Post 一致。
+		var bals []jxc.StockBalance
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("warehouse_id = ?", check.WarehouseID).Order("sku_id").Find(&bals).Error; err != nil {
+			return err
+		}
+		book := make(map[uint]int, len(bals))
+		for _, b := range bals {
+			book[b.SkuID] = b.Qty
+		}
+		for _, it := range items {
+			if it.ActualQty == nil {
+				continue
+			}
+			if cur := book[it.SkuID]; cur != it.BookQty {
+				return fmt.Errorf("SKU %d 的账面数在建单后已变化（快照 %d，当前 %d），请取消并重新盘点",
+					it.SkuID, it.BookQty, cur)
+			}
 		}
 
 		var moves []MoveInput
@@ -181,14 +215,14 @@ func (s *StockCheckService) Post(ctx context.Context, checkID uint, operator str
 			}
 		}
 
-		now := time.Now()
+		postedAt := occurredAt
 		if err := tx.Model(&jxc.StockCheck{}).Where("id = ?", checkID).
-			Updates(map[string]interface{}{"status": jxc.StockCheckPosted, "posted_at": now}).Error; err != nil {
+			Updates(map[string]interface{}{"status": jxc.StockCheckPosted, "posted_at": postedAt}).Error; err != nil {
 			return err
 		}
 		out = &check
 		out.Status = jxc.StockCheckPosted
-		out.PostedAt = &now
+		out.PostedAt = &postedAt
 		return nil
 	})
 	if err != nil {
