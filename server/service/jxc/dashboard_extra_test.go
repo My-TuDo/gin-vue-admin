@@ -39,8 +39,9 @@ func TestDashboard_ReversalNetsToday(t *testing.T) {
 	}
 	// 当前口径：订单数仍算“当日已出库（含已红冲）”；金额/成本已净额。
 	// 净单数是否需要扣红冲待产品确认，见 docs/30 第八节。
-	if got.TodaySalesOrders != 1 {
-		t.Errorf("当前口径下今日销售单数应为 1，实际 %d", got.TodaySalesOrders)
+	if got.TodaySalesOrders != 1 || got.TodaySalesOrdersReversed != 1 {
+		t.Errorf("当前口径下今日销售单数应为 1（其中红冲 1），实际 %d/%d",
+			got.TodaySalesOrders, got.TodaySalesOrdersReversed)
 	}
 	if got.StockValue != 50 {
 		t.Errorf("红冲后库存金额应回到 50，实际 %.2f", got.StockValue)

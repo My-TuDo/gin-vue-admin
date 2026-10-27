@@ -22,17 +22,18 @@ func NewDashboardService() *DashboardService { return new(DashboardService) }
 
 // DashboardSummary 工作台响应。
 type DashboardSummary struct {
-	Date                string            `json:"date"`
-	StockValue          float64           `json:"stockValue"`
-	SkuCount            int64             `json:"skuCount"`
-	TodaySalesAmount    float64           `json:"todaySalesAmount"`
-	TodaySalesOrders    int64             `json:"todaySalesOrders"`
-	TodayReturnAmount   float64           `json:"todayReturnAmount"`
-	TodayReturnOrders   int64             `json:"todayReturnOrders"`
-	TodayGross          float64           `json:"todayGross"`
-	TodayPurchaseAmount float64           `json:"todayPurchaseAmount"`
-	Pending             DashboardPending  `json:"pending"`
-	LowStock            DashboardLowStock `json:"lowStock"`
+	Date                     string            `json:"date"`
+	StockValue               float64           `json:"stockValue"`
+	SkuCount                 int64             `json:"skuCount"`
+	TodaySalesAmount         float64           `json:"todaySalesAmount"`
+	TodaySalesOrders         int64             `json:"todaySalesOrders"`         // 已出库单数（含后续红冲）
+	TodaySalesOrdersReversed int64             `json:"todaySalesOrdersReversed"` // 其中已红冲的单数，供前端标注
+	TodayReturnAmount        float64           `json:"todayReturnAmount"`
+	TodayReturnOrders        int64             `json:"todayReturnOrders"`
+	TodayGross               float64           `json:"todayGross"`
+	TodayPurchaseAmount      float64           `json:"todayPurchaseAmount"`
+	Pending                  DashboardPending  `json:"pending"`
+	LowStock                 DashboardLowStock `json:"lowStock"`
 }
 
 // DashboardPending 待办计数（不受分页影响）。
@@ -158,17 +159,18 @@ func (s *DashboardService) Summary(ctx context.Context, date string) (*Dashboard
 	salesAmount := money.FromYuan(saleAgg.Amount - revSaleAgg.Amount - retAgg.Amount).Yuan()
 	salesCost := money.FromYuan(saleAgg.Cost - revSaleAgg.Cost - retAgg.Cost).Yuan()
 	return &DashboardSummary{
-		Date:                date,
-		StockValue:          money.FromYuan(stockValue).Yuan(),
-		SkuCount:            skuCount,
-		TodaySalesAmount:    salesAmount,
-		TodaySalesOrders:    saleAgg.Cnt,
-		TodayReturnAmount:   money.FromYuan(retAgg.Amount).Yuan(),
-		TodayReturnOrders:   retAgg.Cnt,
-		TodayGross:          money.FromYuan(salesAmount).Sub(money.FromYuan(salesCost)).Yuan(),
-		TodayPurchaseAmount: money.FromYuan(purAgg.Amount - revPurAgg.Amount - prAgg.Amount).Yuan(),
-		Pending:             pending,
-		LowStock:            lowStock,
+		Date:                     date,
+		StockValue:               money.FromYuan(stockValue).Yuan(),
+		SkuCount:                 skuCount,
+		TodaySalesAmount:         salesAmount,
+		TodaySalesOrders:         saleAgg.Cnt,
+		TodaySalesOrdersReversed: revSaleAgg.Cnt,
+		TodayReturnAmount:        money.FromYuan(retAgg.Amount).Yuan(),
+		TodayReturnOrders:        retAgg.Cnt,
+		TodayGross:               money.FromYuan(salesAmount).Sub(money.FromYuan(salesCost)).Yuan(),
+		TodayPurchaseAmount:      money.FromYuan(purAgg.Amount - revPurAgg.Amount - prAgg.Amount).Yuan(),
+		Pending:                  pending,
+		LowStock:                 lowStock,
 	}, nil
 }
 

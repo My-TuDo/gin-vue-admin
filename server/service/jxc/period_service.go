@@ -135,11 +135,12 @@ func (s *PeriodService) Snapshot(ctx context.Context, periodID uint) ([]jxc.Stoc
 // MonthlySummary 月度经营汇总。
 //
 // 口径说明（写在这里，避免以后每个人算出来的毛利都不一样）：
-//   - 销售额 = 已出库且**未红冲**的销售单金额合计 − 已入库的退货金额
-//   - 销售成本 = 对应单据上冻结的成本合计 − 退回货物按原单成本的金额
+//   - 销售额 = 本月已出库销售金额 − 本月销售红冲 − 本月已入库退货
+//   - 销售成本 = 对应销售成本 − 红冲成本 − 退货成本
 //   - 毛利 = 销售额 − 销售成本
-//   - 采购额 = 已入库且未红冲的采购单金额合计
-//   - 期末库存 = 当前结存金额（若已结账，应等于该期间快照）
+//   - 销售单数 = 本月已出库单数（含后来被红冲的），另给 salesOrdersReversed 标注
+//   - 采购额 = 已入库采购 − 采购红冲 − 已过账且未红冲的采购退货
+//   - 期末库存 = 截止月末的账本累加金额（若已结账，应等于该期间快照）
 type MonthlySummary struct {
 	Month                string  `json:"month"`
 	SalesAmount          float64 `json:"salesAmount"`
@@ -147,7 +148,8 @@ type MonthlySummary struct {
 	ReturnAmount         float64 `json:"returnAmount"`
 	ReturnCost           float64 `json:"returnCost"`
 	Gross                float64 `json:"gross"`
-	SalesOrders          int64   `json:"salesOrders"`
+	SalesOrders          int64   `json:"salesOrders"`         // 已出库单数（含后续红冲）
+	SalesOrdersReversed  int64   `json:"salesOrdersReversed"` // 其中已红冲单数，供前端标注
 	ReturnOrders         int64   `json:"returnOrders"`
 	PurchaseAmount       float64 `json:"purchaseAmount"`       // 净采购额 = 已入库采购 − 采购红冲 − 采购退货
 	PurchaseReturnAmount float64 `json:"purchaseReturnAmount"` // 本月采购退货金额（正数）
@@ -227,6 +229,7 @@ func (s *PeriodService) Summary(ctx context.Context, yearMonth string) (*Monthly
 	}
 
 	out.SalesOrders = saleAgg.Cnt
+	out.SalesOrdersReversed = revSaleAgg.Cnt
 	out.SalesAmount = money.FromYuan(saleAgg.Amount - revSaleAgg.Amount - retAgg.Amount).Yuan()
 	out.SalesCost = money.FromYuan(saleAgg.Cost - revSaleAgg.Cost - retAgg.Cost).Yuan()
 	out.ReturnOrders = retAgg.Cnt
